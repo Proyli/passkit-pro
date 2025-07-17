@@ -32,37 +32,63 @@ const Login = () => {
     user: { email: 'user@demo.com', password: 'user123' }
   };
 
+  const allowedUserEmails = [
+  'linda.perez@alcazaren.com.gt'
+];
+
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    setIsLoading(true);
-
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 800));
-
-    // Validate credentials
     const testCred = testCredentials[credentials.role];
-    if (credentials.email === testCred.email && credentials.password === testCred.password) {
-      // Store session in localStorage (prepare for future backend integration)
-      const sessionData = {
-        email: credentials.email,
-        role: credentials.role,
-        loginTime: new Date().toISOString()
-      };
-      localStorage.setItem('passkit_session', JSON.stringify(sessionData));
 
-      toast({
-        title: "Login successful",
-        description: `Welcome ${credentials.role === 'admin' ? 'Administrator' : 'User'}!`,
-      });
+// Validar usuario estándar por correo
+if (
+  credentials.role === "user" &&
+  allowedUserEmails.includes(credentials.email) &&
+  credentials.password === testCred.password
+) {
+  localStorage.setItem('passkit_session', JSON.stringify({
+    email: credentials.email,
+    role: credentials.role,
+    loginTime: new Date().toISOString()
+  }));
 
-      navigate('/dashboard');
-    } else {
-      setError('Invalid email or password. Please check your credentials.');
-    }
+  toast({
+    title: "Login exitoso",
+    description: `Bienvenido ${credentials.email}`,
+  });
 
-    setIsLoading(false);
-  };
+  navigate('/dashboard');
+  setIsLoading(false);
+  return;
+}
+
+// Validar administrador
+if (
+  credentials.role === "admin" &&
+  credentials.email === testCred.email &&
+  credentials.password === testCred.password
+) {
+  localStorage.setItem('passkit_session', JSON.stringify({
+    email: credentials.email,
+    role: credentials.role,
+    loginTime: new Date().toISOString()
+  }));
+
+  toast({
+    title: "Login exitoso",
+    description: `Bienvenido administrador`,
+  });
+
+  navigate('/dashboard');
+  setIsLoading(false);
+  return;
+}
+
+// Si ninguna validación pasó
+setError("Credenciales inválidas.");
+setIsLoading(false);
+
 
   const handleInputChange = (field: keyof LoginCredentials, value: string) => {
     setCredentials(prev => ({ ...prev, [field]: value }));
