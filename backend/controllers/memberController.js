@@ -10,7 +10,7 @@ exports.getAllMembers = async (req, res) => {
     // 🔁 Traducimos campos del backend en español → frontend en inglés
     const formattedMembers = members.map(member => ({
       id: member.id,
-      externalId: member.external_id || member.idExterno,
+      externalId: member.external_id,
       firstName: member.nombre,
       lastName: member.apellido,
       dateOfBirth: member.fechaNacimiento,
@@ -21,8 +21,9 @@ exports.getAllMembers = async (req, res) => {
       mobile: member.telefono,
       points: member.puntos,
       gender: member.genero,
-      createdAt: member.fechaCreacion,
-      updatedAt: member.fechaExpiracion // o el campo que quieras mostrar
+      createdAt: member.createdAt,
+      updatedAt: member.updatedAt
+
     }));
 
     res.json(formattedMembers);
@@ -35,6 +36,8 @@ exports.getAllMembers = async (req, res) => {
 // Crear un nuevo miembro
 exports.createMember = async (req, res) => {
   try {
+    console.log("🟡 Datos recibidos desde el frontend:", req.body);
+
     const externalId = nanoid(10);
 
     const memberData = {
@@ -49,9 +52,9 @@ exports.createMember = async (req, res) => {
       telefono: req.body.telefono,
       puntos: req.body.puntos,
       genero: req.body.genero,
-      fechaCreacion: new Date().toISOString().slice(0, 19).replace('T', ' '),
-      fechaExpiracion: null, // Puedes ajustarlo si tienes lógica para esto
-      idExterno: externalId,
+      //eatedAt: new Date().toISOString().slice(0, 19).replace('T', ' '),
+      //datedAt: null, // O new Date().toISOString() si prefieres
+
     };
 
     const newMember = await Member.create(memberData);

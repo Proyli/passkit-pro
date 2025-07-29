@@ -20,10 +20,9 @@ module.exports = (sequelize, DataTypes) => {
     telefono: DataTypes.STRING,
     puntos: DataTypes.INTEGER,
     genero: DataTypes.STRING,
-    fechaCreacion: DataTypes.STRING,
-    fechaExpiracion: DataTypes.STRING
+    // ❌ elimina fechaCreacion y fechaExpiracion
   }, {
     tableName: 'members',
-    timestamps: false,
+    timestamps: true, // ✅ Activa los timestamps automáticos
   });
 };

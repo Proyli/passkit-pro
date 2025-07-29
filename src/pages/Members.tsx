@@ -11,9 +11,12 @@ import { User, Edit3, Link, Plus, Upload, Download, Columns3 } from "lucide-reac
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { Trash2 } from "lucide-react";
+import { useLocation } from "react-router-dom"; // 👈 agregar este import
+
 
 const Members = () => {
   const navigate = useNavigate();
+  const location = useLocation(); 
   const { toast } = useToast();
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -36,22 +39,26 @@ const Members = () => {
   });
 
   // Cargar miembros
-  useEffect(() => {
-    fetch("http://localhost:3900/api/members")
-      .then((res) => res.json())
-      .then((data) => {
-        console.log("🟢 Miembros desde backend:", data);
-        if (Array.isArray(data)) {
-          setMembersFromBackend(data);
-        } else {
-          console.error("❌ La respuesta no es un array:", data);
-          setMembersFromBackend([]);
-        }
-      })
-      .catch((error) => {
-        console.error("❌ Error al cargar miembros:", error);
-      });
-  }, []);
+ useEffect(() => {
+  fetch("http://localhost:3900/api/members")
+    .then((res) => res.json())
+    .then((data) => {
+      console.log("🟢 Miembros desde backend:", data);
+      if (Array.isArray(data)) {
+        // ✅ ORDENAR POR ID (número de menor a mayor)
+        const ordenados = [...data].sort((a, b) => a.id - b.id);
+        setMembersFromBackend(ordenados);
+      } else {
+        console.error("❌ La respuesta no es un array:", data);
+        setMembersFromBackend([]);
+      }
+    })
+    .catch((error) => {
+      console.error("❌ Error al cargar miembros:", error);
+    });
+}, [location]);
+
+
 
   const handleAddMember = async () => {
     const { nombre, apellido, email, tipoCliente, telefono } = newMember;
@@ -603,6 +610,20 @@ const Members = () => {
                       <Label className="text-sm text-muted-foreground">Points</Label>
                       <p className="text-sm">{selectedMember.puntos ?? "—"}</p>
                     </div>
+                     <div>
+                       <Label className="text-sm text-muted-foreground">Fecha de Creación</Label>
+                        <p className="text-sm">
+                            {selectedMember.fechaCreacion ? new Date(selectedMember.fechaCreacion).toLocaleDateString() : "—"}
+                        </p>
+                      </div>
+
+                     <div>
+                      <Label className="text-sm text-muted-foreground">Fecha de Expiración</Label>
+                      <p className="text-sm">
+                          {selectedMember.fechaExpiracion ? new Date(selectedMember.fechaExpiracion).toLocaleDateString() : "—"}
+                      </p>
+                      </div>
+
                   </div>
                 </TabsContent>
 

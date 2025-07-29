@@ -17,45 +17,69 @@ const Profile = () => {
     setProfileData(newData);
   };
 
-  const handleGuardar = async () => {
-    const nuevoCliente = {
-      ...formData,
-      puntos: parseInt(formData.puntos) || 0,
-    };
+ const handleGuardar = async () => {
+  // Desestructuramos solo los campos que realmente deben ir al backend
+  const {
+    nombre,
+    apellido,
+    fechaNacimiento,
+    codigoCliente,
+    codigoCampaña,
+    tipoCliente,
+    email,
+    telefono,
+    genero,
+    puntos
+  } = formData;
 
-    try {
-      const res = await fetch("http://localhost:3900/api/members", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(nuevoCliente),
-      });
-
-      const data = await res.json();
-      console.log("✅ Cliente guardado:", data);
-      alert("Cliente guardado en MySQL con éxito");
-
-      // limpiar formulario
-      clearProfileData();
-      setFormData({
-        nombre: "",
-        apellido: "",
-        fechaNacimiento: "",
-        codigoCliente: "",
-        codigoCampaña: "",
-        tipoCliente: "",
-        email: "",
-        telefono: "",
-        genero: "",
-        puntos: "",
-        idExterno: ""
-      });
-
-      navigate("/members");
-    } catch (err) {
-      console.error("❌ Error al guardar:", err);
-      alert("Hubo un error al guardar el cliente");
-    }
+  const nuevoCliente = {
+    nombre,
+    apellido,
+    fechaNacimiento,
+    codigoCliente,
+    codigoCampaña,
+    tipoCliente,
+    email,
+    telefono,
+    genero,
+    puntos: parseInt(puntos) || 0, // Convertir puntos a número entero
   };
+
+  try {
+    const res = await fetch("http://localhost:3900/api/members", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(nuevoCliente),
+    });
+
+    const data = await res.json();
+    console.log("✅ Cliente guardado:", data);
+    alert("Cliente guardado en MySQL con éxito");
+
+    // Limpiar datos del formulario
+    clearProfileData();
+    setFormData({
+      nombre: "",
+      apellido: "",
+      fechaNacimiento: "",
+      codigoCliente: "",
+      codigoCampaña: "",
+      tipoCliente: "",
+      email: "",
+      telefono: "",
+      genero: "",
+      puntos: "",
+      idExterno: "" // Este campo solo se usa para mostrar, no se envía
+    });
+
+    // Redirigir a /members para ver el nuevo registro
+    navigate("/members");
+  } catch (err) {
+    console.error("❌ Error al guardar:", err);
+    alert("Hubo un error al guardar el cliente");
+  }
+};
+
 
   const handleAdvance = () => {
     navigate("/members");
