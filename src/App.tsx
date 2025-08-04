@@ -1,11 +1,18 @@
+//  UI y componentes comunes
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+
+//  React Query
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+
+// Routing
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Index from "./pages/Index";
-import Dashboard from "./pages/Dashboard";
+
+// Pages
 import Login from "./components/Login";
+import Dashboard from "./pages/Dashboard";
+//import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Settings from "./pages/settings";
 import Profile from "./pages/profile";
@@ -30,6 +37,8 @@ const App = () => (
   
 
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/profile" element={<Profile />} />
           <Route path="*" element={<NotFound />} />
       
 

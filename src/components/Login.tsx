@@ -41,6 +41,11 @@ const Login = () => {
     ]
   };
 
+  const allowedUserEmails = [
+  'linda.perez@alcazaren.com.gt'
+];
+
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -86,7 +91,55 @@ localStorage.setItem("passkit_session", JSON.stringify(sessionData));
       setError('Access denied. Only authorized personnel can access this system.');
     }
 
-    setIsLoading(false);
+    const testCred = testCredentials[credentials.role];
+
+// Validar usuario estándar por correo
+if (
+  credentials.role === "user" &&
+  allowedUserEmails.includes(credentials.email) &&
+  credentials.password === testCred.password
+) {
+  localStorage.setItem('passkit_session', JSON.stringify({
+    email: credentials.email,
+    role: credentials.role,
+    loginTime: new Date().toISOString()
+  }));
+
+  toast({
+    title: "Login exitoso",
+    description: `Bienvenido ${credentials.email}`,
+  });
+
+  navigate('/dashboard');
+  setIsLoading(false);
+  return;
+}
+
+// Validar administrador
+if (
+  credentials.role === "admin" &&
+  credentials.email === testCred.email &&
+  credentials.password === testCred.password
+) {
+  localStorage.setItem('passkit_session', JSON.stringify({
+    email: credentials.email,
+    role: credentials.role,
+    loginTime: new Date().toISOString()
+  }));
+
+  toast({
+    title: "Login exitoso",
+    description: `Bienvenido administrador`,
+  });
+
+  navigate('/dashboard');
+  setIsLoading(false);
+  return;
+}
+
+// Si ninguna validación pasó
+setError("Credenciales inválidas.");
+setIsLoading(false);
   };
 
   const handleInputChange = (field: keyof LoginCredentials, value: string) => {
@@ -174,7 +227,7 @@ localStorage.setItem("passkit_session", JSON.stringify(sessionData));
                 <ul className="text-xs ml-2 space-y-0.5">
                   <li>• andrea@alcazaren.com.gt</li>
                   <li>• julio@alcazaren.com.gt</li>
-                  <li>• alberto@alcazaren.com.gt</li>
+                  <li>• linda.perez@alcazaren.com.gt</li>
                 </ul>
               </div>
             </div>
