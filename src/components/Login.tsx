@@ -37,7 +37,7 @@ const Login = () => {
     users: [
       'andrea@alcazaren.com.gt',
       'julio@alcazaren.com.gt', 
-      'alberto@alcazaren.com.gt'
+      'linda.perez@alcazaren.com.gt'
     ]
   };
 

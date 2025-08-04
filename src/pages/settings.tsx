@@ -19,7 +19,10 @@ const Settings = () => {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [showPasswords, setShowPasswords] = useState(false);
+
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const handleChangePassword = async () => {
     if (newPassword !== confirmPassword) {
@@ -47,7 +50,7 @@ const Settings = () => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          userId: user?.id,
+          email: user?.email,
           currentPassword,
           newPassword,
         }),
@@ -84,7 +87,6 @@ const Settings = () => {
   return (
     <div className="min-h-screen bg-background p-6">
       <div className="max-w-4xl mx-auto">
-        {/* Header */}
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-semibold text-foreground">Configuraciones</h1>
           <div className="flex gap-3">
@@ -96,8 +98,6 @@ const Settings = () => {
               <Home className="w-4 h-4" />
               Menú Principal
             </Button>
-
-
           </div>
         </div>
 
@@ -119,12 +119,14 @@ const Settings = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+
+                {/* Contraseña Actual */}
                 <div>
                   <Label htmlFor="currentPassword">Contraseña Actual</Label>
                   <div className="relative">
                     <Input
                       id="currentPassword"
-                      type={showPasswords ? "text" : "password"}
+                      type={showCurrentPassword ? "text" : "password"}
                       value={currentPassword}
                       onChange={(e) => setCurrentPassword(e.target.value)}
                       placeholder="Ingresa tu contraseña actual"
@@ -133,33 +135,55 @@ const Settings = () => {
                       variant="ghost"
                       size="sm"
                       className="absolute right-0 top-0 h-full px-3"
-                      onClick={() => setShowPasswords(!showPasswords)}
+                      onClick={() => setShowCurrentPassword(!showCurrentPassword)}
                     >
-                      {showPasswords ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      {showCurrentPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </Button>
                   </div>
                 </div>
 
+                {/* Nueva Contraseña */}
                 <div>
                   <Label htmlFor="newPassword">Nueva Contraseña</Label>
-                  <Input
-                    id="newPassword"
-                    type={showPasswords ? "text" : "password"}
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="Ingresa tu nueva contraseña"
-                  />
+                  <div className="relative">
+                    <Input
+                      id="newPassword"
+                      type={showNewPassword ? "text" : "password"}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Ingresa tu nueva contraseña"
+                    />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                    >
+                      {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </Button>
+                  </div>
                 </div>
 
+                {/* Confirmar Nueva Contraseña */}
                 <div>
                   <Label htmlFor="confirmPassword">Confirmar Nueva Contraseña</Label>
-                  <Input
-                    id="confirmPassword"
-                    type={showPasswords ? "text" : "password"}
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Confirma tu nueva contraseña"
-                  />
+                  <div className="relative">
+                    <Input
+                      id="confirmPassword"
+                      type={showConfirmPassword ? "text" : "password"}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Confirma tu nueva contraseña"
+                    />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    >
+                      {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </Button>
+                  </div>
                 </div>
 
                 <Button 

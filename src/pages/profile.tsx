@@ -9,7 +9,21 @@ const Profile = () => {
   const navigate = useNavigate();
   const { profileData, setProfileData, clearProfileData } = useProfileStore();
   
-  const [formData, setFormData] = useState(profileData);
+  const [formData, setFormData] = useState({
+  nombre: "",
+  apellido: "",
+  fechaNacimiento: "",
+  codigoCliente: "",
+  codigoCampaña: "",
+  tipoCliente: "",
+  email: "",
+  telefono: "",
+  genero: "",
+  puntos: "",
+  idExterno: "",
+  ...profileData // sobrescribe si ya hay datos guardados
+});
+
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const newData = { ...formData, [e.target.name]: e.target.value };
@@ -73,7 +87,8 @@ const Profile = () => {
     });
 
     // Redirigir a /members para ver el nuevo registro
-    navigate("/members");
+    navigate("/members", { state: { updated: true } });
+
   } catch (err) {
     console.error("❌ Error al guardar:", err);
     alert("Hubo un error al guardar el cliente");
@@ -153,10 +168,17 @@ const Profile = () => {
             <Label>Puntos</Label>
             <Input name="puntos" value={formData.puntos} onChange={handleChange} />
           </div>
-          <div>
-            <Label>ID Externo</Label>
-            <Input name="idExterno" value={formData.idExterno} onChange={handleChange} />
+         <div>
+          <Label>ID Externo</Label>
+          <Input
+             name="idExterno"
+            value={formData.idExterno}
+            onChange={handleChange}
+            readOnly
+            className="bg-gray-100 cursor-not-allowed"
+            />
           </div>
+
         </div>
 
         <div className="flex justify-between pt-4">

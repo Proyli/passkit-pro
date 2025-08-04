@@ -498,14 +498,118 @@ const Members = () => {
           </DialogContent>
         </Dialog>
 
-       <div className="flex gap-3 mb-6">
-  <Button
-    onClick={() => navigate("/profile")}
-    className="bg-[#8B5CF6] hover:bg-[#7C3AED] text-white font-semibold px-4 py-2 rounded-lg"
-  >
-    <Plus className="w-4 h-4 mr-2" />
-    ADD MEMBER
-  </Button>
+        {/* Botones de acción */}
+        <div className="flex gap-3 mb-6">
+          <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-[#7069e3] hover:bg-[#5f58d1] text-white">
+                <Plus className="w-4 h-4 mr-2" />
+                ADD MEMBER
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md mx-auto">
+              <DialogHeader>
+                <DialogTitle>Agregar Miembro</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 mt-4">
+                <div>
+                  <Label>
+                    Tier <span className="text-red-500">*</span>
+                  </Label>
+                  <Select
+                    value={newMember.tipoCliente}
+                    onValueChange={(value) => setNewMember({ ...newMember, tipoCliente: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona tier" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Bronze">Bronze</SelectItem>
+                      <SelectItem value="Silver">Silver</SelectItem>
+                      <SelectItem value="Gold">Gold</SelectItem>
+                      <SelectItem value="Black">Black</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label>Puntos</Label>
+                  <Input
+                    type="number"
+                    value={newMember.puntos}
+                    onChange={(e) => setNewMember({ ...newMember, puntos: e.target.value })}
+                    placeholder="0"
+                  />
+                </div>
+
+                <div>
+                  <Label>
+                    Nombre <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    value={newMember.nombre}
+                    onChange={(e) => setNewMember({ ...newMember, nombre: e.target.value })}
+                    placeholder="Nombre"
+                  />
+                </div>
+
+                <div>
+                  <Label>
+                    Apellido <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    value={newMember.apellido}
+                    onChange={(e) => setNewMember({ ...newMember, apellido: e.target.value })}
+                    placeholder="Apellido"
+                  />
+                </div>
+
+                <div>
+                  <Label>
+                    Email <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    type="email"
+                    value={newMember.email}
+                    onChange={(e) => setNewMember({ ...newMember, email: e.target.value })}
+                    placeholder="Email"
+                  />
+                </div>
+
+                <div>
+                  <Label>
+                    Teléfono <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    value={newMember.telefono}
+                    onChange={(e) => setNewMember({ ...newMember, telefono: e.target.value })}
+                    placeholder="Teléfono"
+                  />
+                </div>
+
+                <div>
+                  <Label>Género</Label>
+                  <Select
+                    value={newMember.genero}
+                    onValueChange={(value) => setNewMember({ ...newMember, genero: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona género" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Male">Male</SelectItem>
+                      <SelectItem value="Female">Female</SelectItem>
+                      <SelectItem value="Other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <Button onClick={handleAddMember} className="w-full bg-[#7069e3] hover:bg-[#5f58d1] text-white">
+                  Add
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
 
           {/* IMPORT CSV */}
           <label htmlFor="importCSV">
@@ -524,49 +628,38 @@ const Members = () => {
             EXPORT CSV
           </Button>
 
-          {/* Botón COLUMNS con DropdownMenu mejorado */}
-<DropdownMenu.Root>
-  <DropdownMenu.Trigger asChild>
-    <Button variant="outline" className="flex items-center gap-2">
-      <Columns3 className="h-4 w-4" />
-      {`COLUMNS (${Object.values(visibleColumns).filter(Boolean).length})`}
-    </Button>
-  </DropdownMenu.Trigger>
+          {/* Botón COLUMNS con DropdownMenu */}
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger asChild>
+              <Button variant="outline" className="flex items-center gap-2">
+                <Columns3 className="h-4 w-4" />
+                COLUMNS
+              </Button>
+            </DropdownMenu.Trigger>
 
-  <DropdownMenu.Content
-    align="start"
-    sideOffset={8}
-    className="bg-white rounded-md shadow-md border p-2 w-52"
-    loop
-  >
-    {Object.entries(visibleColumns).map(([key, value]) => (
-      <DropdownMenu.CheckboxItem
-        key={key}
-        checked={value}
-        onCheckedChange={(checked) =>
-          setVisibleColumns((prev) => ({
-            ...prev,
-            [key]: checked,
-          }))
-        }
-        className={`flex items-center gap-2 px-2 py-1.5 text-sm capitalize rounded-md cursor-pointer ${
-          value
-            ? "bg-blue-100 text-blue-700 font-medium"
-            : "bg-white text-gray-700 hover:bg-gray-100"
-        }`}
-      >
-        <span
-          className={`inline-block w-4 h-4 border rounded-full ${
-            value ? "bg-blue-500 border-blue-500" : "border-gray-400"
-          }`}
-        ></span>
-        {formatLabel(key)}
-      </DropdownMenu.CheckboxItem>
-    ))}
-  </DropdownMenu.Content>
-</DropdownMenu.Root>
-
-
+            <DropdownMenu.Content
+              align="start"
+              sideOffset={8}
+              className="bg-white rounded-md shadow-md border p-2 w-52"
+            >
+              {Object.entries(visibleColumns).map(([key, value]) => (
+                <DropdownMenu.CheckboxItem
+                  key={key}
+                  checked={value}
+                  onCheckedChange={(checked) => {
+                    // prevenir que se cierre al hacer clic
+                    setVisibleColumns((prev) => ({
+                      ...prev,
+                      [key]: checked,
+                    }));
+                  }}
+                  className="flex items-center gap-2 px-2 py-1.5 text-sm capitalize hover:bg-gray-100 rounded-md cursor-pointer"
+                >
+                  {formatLabel(key)}
+                </DropdownMenu.CheckboxItem>
+              ))}
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
         </div>
 
         {/* Tabla de miembros con scroll horizontal y columna sticky */}

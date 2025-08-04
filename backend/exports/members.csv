@@ -1,10 +1,17 @@
 nombre,apellido,fechaNacimiento,email,telefono,genero,puntos,idExterno
-maria,sagastume,1986-10-16,admin@alcazaren.com.gt,32567890,Femenino,50,31y6p
-Juan,Pérez,1993-07-08,juan@alcazaren.com.gt,20201214,Masculino,60,4
-Luisa,Aguilar,1987-02-08,luisa@alcazaren.com.gt,45678021,Femenino,135,10
-Camilo,Dieguez,1988-04-14,camilo@alcazaren.com.gt,24987615,Masculino,124,13
-Antonio,Jimenez,1979-03-12,antony@alcazaren.com.gt,31458971,Masculino,85,13
-Pablo,Franco,1996-06-12,pablo@alcazaren.com.gt,54891771,Masculino,125,8
-Mario,Mencos,1975-07-14,mario@alcazaren.com.gt,14782564,Masculino,100,25
-,,,vanessa@alcazaren.com.gt,,,,RjZQfMh7UL
-,,,fabian@alcazaren.com.gt,,,,YzO6OzwisF
+maria,sagastume,1986-10-16,admin@alcazaren.com.gt,32567890,Femenino,50,
+Luisa,Aguilar,1987-02-08,luisa@alcazaren.com.gt,45678021,Femenino,135,
+Camilo,Dieguez,1988-04-14,camilo@alcazaren.com.gt,24987615,Masculino,124,
+Antonio,Jimenez,1979-03-12,antony@alcazaren.com.gt,31458971,Masculino,85,
+Pedro,Gallardo,1968-05-24,pedrito@alcazaren.com.gt,16548975,Masculino,190,
+Fidel,Russell,1988-06-04,fidel@alcaazaren.com.gt,30562145,Femenino,112,
+Julian,Calderon,1978-09-25,julian@alcazaren.com.gt,51487956,Masculino,124,
+Melissa,Manzanero,1987-09-15,melissa@alcazaren.com.gt,25214780,Femenino,124,
+Fernanda,Dieguez,,fernanda@alcazaren.com.gt,12362145,Female,78,
+Luis,España,1992-12-12,luis@alcazaren.com.gt,55891247,Masculino,112,
+Cristobal,Dorado,1987-02-05,cristobal@alcazaren.com.gt,11456212,Masculino,100,
+Lili,Garcia,1978-05-12,lili@alcazaren.com.gt,11257410,Femenino,185,
+Manuel,Miller,1984-11-12,manu@alcazaren.com.gt,52118753,Masculino,114,
+Alexa,Marshall,1983-10-04,alexa@alcazaren.com.gt,21568712,Femenino,104,
+David,Civil,1978-04-12,david@alcazaren.com.gt,22.416251.,Masculino,200,
+Felipe Andres,Gomez Alvaro ,1987-02-12,felipe@alcazaren.com.gt,54120088,Masculino,101,
