@@ -1,4 +1,4 @@
-
+import axios from "axios"; 
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -75,6 +75,21 @@ const CreatePassForm = () => {
     setPassData(prev => ({ ...prev, [key]: value }));
   };
 
+
+
+const handleCreatePass = async () => {
+  try {
+    const response = await axios.post("http://localhost:3900/api/passes", passData);
+    console.log("Pass creado:", response.data);
+    alert("🎉 Pase creado exitosamente.");
+    // Opcional: limpiar formulario
+  } catch (error) {
+    console.error("Error al crear el pase:", error);
+    alert("❌ Ocurrió un error al guardar el pase.");
+  }
+};
+
+  
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
       <div className="space-y-6">
@@ -209,9 +224,13 @@ const CreatePassForm = () => {
             </Tabs>
 
             <div className="mt-6 flex space-x-3">
-              <Button className="flex-1 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700">
-                Create Pass
+              <Button
+               className="flex-1 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
+              onClick={handleCreatePass}
+              >
+              Create Pass
               </Button>
+
               <Button variant="outline">
                 Save Draft
               </Button>

@@ -4,11 +4,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useProfileStore } from "@/store/profileStore";
+import PassList from "./PassList";
 
 const Profile = () => {
   const navigate = useNavigate();
   const { profileData, setProfileData, clearProfileData } = useProfileStore();
   const [formData, setFormData] = useState(profileData);
+  const [nombre, setNombre] = useState("");
+  const [correo, setCorreo] = useState("");
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const newData = { ...formData, [e.target.name]: e.target.value };

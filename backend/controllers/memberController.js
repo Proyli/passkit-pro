@@ -95,3 +95,30 @@ exports.deleteMember = async (req, res) => {
   }
 };
 
+// Asignar tarjeta a un miembro
+exports.assignCardToMember = async (req, res) => {
+  try {
+    const { clientCode, campaignCode } = req.body;
+
+    if (!clientCode || !campaignCode) {
+      return res.status(400).json({ error: "Faltan campos obligatorios (clientCode o campaignCode)" });
+    }
+
+    // Buscar al miembro por su código de cliente
+    const member = await Member.findOne({ where: { codigoCliente: clientCode } });
+
+    if (!member) {
+      return res.status(404).json({ error: "Miembro no encontrado con ese código de cliente" });
+    }
+
+    // Actualizar el código de campaña
+    member.codigoCampaña = campaignCode;
+    await member.save();
+
+    res.json({ message: "Tarjeta asignada correctamente", member });
+  } catch (error) {
+    console.error("❌ Error al asignar tarjeta:", error);
+    res.status(500).json({ error: "Error al asignar tarjeta al miembro" });
+  }
+};
+

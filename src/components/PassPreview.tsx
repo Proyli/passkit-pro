@@ -94,4 +94,6 @@ const PassPreview = ({ passData }: PassPreviewProps) => {
   );
 };
 
-export default PassPreview;
+export default PassPreview; // ✅ si quieres exportación por defecto
+
+

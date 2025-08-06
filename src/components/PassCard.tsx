@@ -9,6 +9,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
+import { useState } from "react";
+import { PassModal } from "./ui/PassModal";
+
 
 interface PassCardProps {
   pass: {
@@ -21,10 +24,12 @@ interface PassCardProps {
     createdAt: string;
     scans: number;
     status: 'active' | 'inactive' | 'expired';
+     fields: Record<string, string>;
   };
 }
 
 const PassCard = ({ pass }: PassCardProps) => {
+  const [isModalOpen, setModalOpen] = useState(false);
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'active':
@@ -38,7 +43,8 @@ const PassCard = ({ pass }: PassCardProps) => {
     }
   };
 
-  return (
+ return (
+  <>
     <Card className="glass-effect border-white/20 hover:shadow-lg transition-all duration-300 animate-fade-in group">
       <CardContent className="p-6">
         <div className="flex items-start justify-between mb-4">
@@ -55,7 +61,7 @@ const PassCard = ({ pass }: PassCardProps) => {
               <span>Scans: {pass.scans}</span>
             </div>
           </div>
-          
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="sm" className="opacity-0 group-hover:opacity-100 transition-opacity">
@@ -71,7 +77,7 @@ const PassCard = ({ pass }: PassCardProps) => {
                 <Copy className="w-4 h-4 mr-2" />
                 Duplicate
               </DropdownMenuItem>
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setModalOpen(true)}>
                 <QrCode className="w-4 h-4 mr-2" />
                 QR Code
               </DropdownMenuItem>
@@ -82,7 +88,7 @@ const PassCard = ({ pass }: PassCardProps) => {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-        
+
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <div 
@@ -93,7 +99,7 @@ const PassCard = ({ pass }: PassCardProps) => {
               {pass.status}
             </Badge>
           </div>
-          
+
           <div className="flex space-x-2">
             <Button variant="outline" size="sm">
               Apple Wallet
@@ -105,7 +111,13 @@ const PassCard = ({ pass }: PassCardProps) => {
         </div>
       </CardContent>
     </Card>
-  );
+
+    {isModalOpen && (
+      <PassModal open={isModalOpen} onOpenChange={setModalOpen} passData={pass} />
+    )}
+  </>
+);
 };
+
 
 export default PassCard;

@@ -1,7 +1,6 @@
 nombre,apellido,fechaNacimiento,email,telefono,genero,puntos,idExterno
 maria,sagastume,1986-10-16,admin@alcazaren.com.gt,32567890,Femenino,50,
 Luisa,Aguilar,1987-02-08,luisa@alcazaren.com.gt,45678021,Femenino,135,
-Camilo,Dieguez,1988-04-14,camilo@alcazaren.com.gt,24987615,Masculino,124,
 Antonio,Jimenez,1979-03-12,antony@alcazaren.com.gt,31458971,Masculino,85,
 Pedro,Gallardo,1968-05-24,pedrito@alcazaren.com.gt,16548975,Masculino,190,
 Fidel,Russell,1988-06-04,fidel@alcaazaren.com.gt,30562145,Femenino,112,
@@ -15,3 +14,4 @@ Manuel,Miller,1984-11-12,manu@alcazaren.com.gt,52118753,Masculino,114,
 Alexa,Marshall,1983-10-04,alexa@alcazaren.com.gt,21568712,Femenino,104,
 David,Civil,1978-04-12,david@alcazaren.com.gt,22.416251.,Masculino,200,
 Felipe Andres,Gomez Alvaro ,1987-02-12,felipe@alcazaren.com.gt,54120088,Masculino,101,
+Ivan,Barrios,1990-05-12,ivana@alcazaren.com,54673212,Masculino,0,

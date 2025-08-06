@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useNavigate, useLocation } from "react-router-dom"; // Importar useLocation
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
@@ -13,11 +13,17 @@ import { User, Edit3, Link, Plus, Upload, Download, Columns3, Trash2 } from "luc
 // porque estás usando directamente elementos <table>, <thead>, etc.
 import { useToast } from "@/hooks/use-toast";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import axios from "axios";
+//import { toast } from "react-toastify";
+
 
 const Members = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
+
+  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
+  const [memberToAssign, setMemberToAssign] = useState<any>(null);
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
@@ -415,6 +421,40 @@ const Members = () => {
     return map[key] || key.replace(/([A-Z])/g, " $1").replace(/^./, (str) => str.toUpperCase());
   };
 
+  const openAssignModal = (member: any) => {
+  setMemberToAssign(member);
+  setIsAssignModalOpen(true);
+};
+
+ const handleAssignCard = async (member: any) => {
+  try {
+    const response = await axios.post("http://localhost:3900/api/cards", {
+      codigoCliente: member.clientCode,
+      codigoCampaña: member.campaignCode,
+    });
+
+    if (response.data.success) {
+      toast({
+        variant: "success" as const,
+        title: "Tarjeta asignada correctamente",
+      });
+    } else {
+      toast({
+        variant: "destructive",
+        title: "Hubo un problema al asignar la tarjeta",
+      });
+    }
+  } catch (error) {
+    console.error("❌ Error al asignar tarjeta:", error);
+    toast({
+      variant: "destructive",
+      title: "Error al asignar la tarjeta",
+    });
+  }
+};
+
+
+
   return (
     <div className="min-h-screen bg-background p-6">
       <div className="max-w-7xl mx-auto">
@@ -673,13 +713,24 @@ const Members = () => {
                       >
                         <Link className="w-4 h-4 text-muted-foreground" />
                       </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+
+                    {/* 🎫 Botón de asignar tarjeta */}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openAssignModal(member)}
+                        className="h-8 w-8 p-0 hover:bg-muted"
+                      >
+                        <span>🎫</span>
+                      </Button>
+
+                       </div>
+                      </td>
+                     </tr>
+                     ))}
+                  </tbody>
+                  </table>
+                   </div>
 
         {selectedMembers.length > 0 && (
           <div className="w-full flex justify-end mt-4 pr-4 mb-2">
@@ -699,6 +750,55 @@ const Members = () => {
           </div>
         )}
       </div>
+
+          {/* 🎫 Modal de asignar tarjeta */}
+<Dialog open={isAssignModalOpen} onOpenChange={setIsAssignModalOpen}>
+  <DialogContent className="sm:max-w-md">
+    <DialogHeader>
+      <DialogTitle>Asignar tarjeta</DialogTitle>
+      <DialogDescription>
+        Asigna una tarjeta al miembro seleccionado.
+      </DialogDescription>
+    </DialogHeader>
+
+    <div className="grid gap-4 py-4">
+      <div className="grid grid-cols-4 items-center gap-4">
+        <Label htmlFor="clientCode" className="text-right">
+          Código Cliente
+        </Label>
+        <Input
+          id="clientCode"
+          value={memberToAssign?.clientCode || ""}
+          readOnly
+          className="col-span-3"
+        />
+      </div>
+      <div className="grid grid-cols-4 items-center gap-4">
+        <Label htmlFor="campaignCode" className="text-right">
+          Código Campaña
+        </Label>
+        <Input
+          id="campaignCode"
+          value={memberToAssign?.campaignCode || ""}
+          readOnly
+          className="col-span-3"
+        />
+      </div>
+    </div>
+
+    <DialogFooter>
+      <Button
+        onClick={() => {
+          handleAssignCard(memberToAssign);
+          setIsAssignModalOpen(false);
+        }}
+      >
+        Asignar Tarjeta
+      </Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
+
 
       {/* Detalles del miembro */}
       <Dialog open={isDetailsModalOpen} onOpenChange={setIsDetailsModalOpen}>

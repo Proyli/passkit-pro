@@ -7,4 +7,6 @@ router.post("/", controller.createMember);
 router.put("/:id", controller.updateMember);
 router.delete("/:id", controller.deleteMember);
 
+router.post("/assign-card", controller.assignCardToMember);
+
 module.exports = router;

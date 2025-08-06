@@ -21,5 +21,7 @@ db.Sequelize = Sequelize;
 db.sequelize = sequelize;
 
 db.Member = require("./member.js")(sequelize, Sequelize);
+db.Pass = require("./pass")(sequelize, Sequelize);
+
 
 module.exports = db;
