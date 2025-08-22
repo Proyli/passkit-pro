@@ -1,20 +1,61 @@
-import { useState } from "react";
+import React, { useState, Suspense, lazy } from "react";
 import { useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useProfileStore } from "@/store/profileStore";
-import PassList from "./PassList";
 
-const Profile = () => {
+// Carga diferida para que un error en PassList no rompa Profile
+const PassList = lazy(() => import("./PassList"));
+
+// Mantén strings en el formulario para no pelear con inputs controlados
+type FormData = {
+  nombre: string;
+  apellido: string;
+  fechaNacimiento: string;
+  codigoCliente: string;
+  codigoCampana: string;
+  tipoCliente: string;
+  email: string;
+  telefono: string;
+  genero: string;
+  puntos: string;     // string en el form; se convierte a number al guardar
+  idExterno: string;
+};
+
+const EMPTY_FORM: FormData = {
+  nombre: "",
+  apellido: "",
+  fechaNacimiento: "",
+  codigoCliente: "",
+  codigoCampana: "",
+  tipoCliente: "",
+  email: "",
+  telefono: "",
+  genero: "",
+  puntos: "",
+  idExterno: "",
+};
+
+const API_BASE =
+  (import.meta as any).env?.VITE_API_BASE_URL?.replace(/\/$/, "") ||
+  "http://localhost:3900/api";
+
+const Profile: React.FC = () => {
   const navigate = useNavigate();
   const { profileData, setProfileData, clearProfileData } = useProfileStore();
-  const [formData, setFormData] = useState(profileData);
-  const [nombre, setNombre] = useState("");
-  const [correo, setCorreo] = useState("");
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const newData = { ...formData, [e.target.name]: e.target.value };
+  // Inicializa SIEMPRE con un objeto completo
+  const [formData, setFormData] = useState<FormData>({
+    ...EMPTY_FORM,
+    ...(profileData as Partial<FormData> | undefined),
+  });
+
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+  ) => {
+    const { name, value } = e.target;
+    const newData = { ...formData, [name]: value };
     setFormData(newData);
     setProfileData(newData);
   };
@@ -22,35 +63,23 @@ const Profile = () => {
   const handleGuardar = async () => {
     const nuevoCliente = {
       ...formData,
-      puntos: parseInt(formData.puntos) || 0,
+      puntos: parseInt(formData.puntos || "0", 10) || 0,
     };
 
     try {
-      const res = await fetch("http://localhost:3900/api/members", {
+      const res = await fetch(`${API_BASE}/members`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(nuevoCliente),
       });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
       const data = await res.json();
       console.log("✅ Cliente guardado:", data);
       alert("Cliente guardado en MySQL con éxito");
 
       clearProfileData();
-      setFormData({
-        nombre: "",
-        apellido: "",
-        fechaNacimiento: "",
-        codigoCliente: "",
-        codigoCampaña: "",
-        tipoCliente: "",
-        email: "",
-        telefono: "",
-        genero: "",
-        puntos: "",
-        idExterno: ""
-      });
-
+      setFormData(EMPTY_FORM);
       navigate("/members");
     } catch (err) {
       console.error("❌ Error al guardar:", err);
@@ -58,9 +87,7 @@ const Profile = () => {
     }
   };
 
-  const handleAdvance = () => {
-    navigate("/members");
-  };
+  const handleAdvance = () => navigate("/members");
 
   return (
     <div className="flex flex-col items-center py-10 px-4">
@@ -78,15 +105,28 @@ const Profile = () => {
           </div>
           <div>
             <Label>Fecha de nacimiento</Label>
-            <Input type="date" name="fechaNacimiento" value={formData.fechaNacimiento} onChange={handleChange} />
+            <Input
+              type="date"
+              name="fechaNacimiento"
+              value={formData.fechaNacimiento}
+              onChange={handleChange}
+            />
           </div>
           <div>
             <Label>Código del cliente</Label>
-            <Input name="codigoCliente" value={formData.codigoCliente} onChange={handleChange} />
+            <Input
+              name="codigoCliente"
+              value={formData.codigoCliente}
+              onChange={handleChange}
+            />
           </div>
           <div>
             <Label>Código de la campaña</Label>
-            <Input name="codigoCampaña" value={formData.codigoCampaña} onChange={handleChange} />
+            <Input
+              name="codigoCampana"
+              value={formData.codigoCampana}
+              onChange={handleChange}
+            />
           </div>
           <div>
             <Label>Tipo de cliente</Label>
@@ -136,12 +176,21 @@ const Profile = () => {
         </div>
 
         <div className="flex justify-between pt-4">
-          <Button variant="outline" onClick={() => navigate("/dashboard")}>Regresar</Button>
+          <Button variant="outline" onClick={() => navigate("/dashboard")}>
+            Regresar
+          </Button>
           <div className="flex gap-4">
             <Button onClick={handleGuardar}>Guardar</Button>
             <Button onClick={handleAdvance}>Avanzar</Button>
           </div>
         </div>
+
+        <h2 className="text-xl font-semibold mt-8 mb-4">
+          Pases digitales asignados
+        </h2>
+        <Suspense fallback={null}>
+          <PassList />
+        </Suspense>
       </div>
     </div>
   );

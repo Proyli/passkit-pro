@@ -1,0 +1,95 @@
+// backend/controllers/designController.js
+const db = require("../models");
+const Design = db.Design;
+
+// Normaliza el body y deja listo el payload a guardar
+function normalize(body = {}) {
+  const name = body.name || body.templateName || body.title || "Untitled";
+  const title = body.title || "Mi Pase";
+  const tier = body.tier || "base";
+  const backgroundColor = body.backgroundColor || "#0A4A76";
+  const textColor = body.textColor || "#FFFFFF";
+  const data = JSON.stringify(body); // guarda TODO el diseño tal cual
+
+  return { name, title, tier, backgroundColor, textColor, data };
+}
+
+// POST /api/designs
+exports.create = async (req, res) => {
+  try {
+    const payload = normalize(req.body);
+    const row = await Design.create(payload);
+    res.status(201).json({ id: row.id, ...payload, createdAt: row.createdAt });
+  } catch (err) {
+    console.error("create design:", err);
+    res.status(500).json({ error: "Error creando el diseño" });
+  }
+};
+
+// GET /api/designs
+exports.list = async (_req, res) => {
+  try {
+    const rows = await Design.findAll({
+      order: [["updatedAt", "DESC"]],
+      attributes: ["id", "name", "title", "tier", "backgroundColor", "textColor", "updatedAt"],
+    });
+    res.json(rows);
+  } catch (err) {
+    console.error("list designs:", err);
+    res.status(500).json({ error: "Error listando diseños" });
+  }
+};
+
+// GET /api/designs/:id
+exports.get = async (req, res) => {
+  try {
+    const row = await Design.findByPk(req.params.id);
+    if (!row) return res.status(404).json({ error: "No existe" });
+
+    let data = {};
+    try { data = JSON.parse(row.data); } catch { data = {}; }
+
+    res.json({
+      id: row.id,
+      name: row.name,
+      title: row.title,
+      tier: row.tier,
+      backgroundColor: row.backgroundColor,
+      textColor: row.textColor,
+      updatedAt: row.updatedAt,
+      data,
+    });
+  } catch (err) {
+    console.error("get design:", err);
+    res.status(500).json({ error: "Error obteniendo el diseño" });
+  }
+};
+
+// PUT /api/designs/:id
+exports.update = async (req, res) => {
+  try {
+    const row = await Design.findByPk(req.params.id);
+    if (!row) return res.status(404).json({ error: "No existe" });
+
+    const payload = normalize(req.body);
+    await row.update(payload);
+
+    res.json({ ok: true, id: row.id, updatedAt: row.updatedAt });
+  } catch (err) {
+    console.error("update design:", err);
+    res.status(500).json({ error: "Error actualizando el diseño" });
+  }
+};
+
+// DELETE /api/designs/:id
+exports.remove = async (req, res) => {
+  try {
+    const row = await Design.findByPk(req.params.id);
+    if (!row) return res.status(404).json({ error: "No existe" });
+    await row.destroy();
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("delete design:", err);
+    res.status(500).json({ error: "Error eliminando el diseño" });
+  }
+};

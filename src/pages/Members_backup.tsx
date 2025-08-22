@@ -56,7 +56,7 @@ const [visibleColumns, setVisibleColumns] = useState({
   // Cargar miembros
 
 useEffect(() => {
-  fetch("http://localhost:3900/api/members")
+  fetch(`${import.meta.env.VITE_API_BASE_URL}/members`)
     .then((res) => res.json())
     .then((data) => {
       if (Array.isArray(data)) {
@@ -97,7 +97,7 @@ useEffect(() => {
     };
 
     try {
-      const res = await fetch("http://localhost:3900/api/members", {
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/members`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(member),
@@ -198,14 +198,14 @@ useEffect(() => {
   const handleDeleteSelected = async () => {
     try {
       for (const id of selectedMembers) {
-        await fetch(`http://localhost:3900/api/members/${id}`, { method: "DELETE" });
+        await fetch(`${import.meta.env.VITE_API_BASE_URL}/members/${id}`, { method: "DELETE" });
       }
       toast({
         title: "Miembros eliminados",
         description: `${selectedMembers.length} miembro(s) fueron eliminados.`,
       });
       setSelectedMembers([]);
-      const res = await fetch("http://localhost:3900/api/members");
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/members`);
       const updatedMembers = await res.json();
       setMembersFromBackend(Array.isArray(updatedMembers) ? updatedMembers : []);
     } catch (error) {

@@ -1,65 +1,109 @@
 
-import { useState } from 'react';
 import Header from '@/components/Header';
 import StatsCards from '@/components/StatsCards';
 import PassCard from '@/components/PassCard';
 import CreatePassForm from '@/components/CreatePassForm';
+import { DuplicatePassModal } from '@/components/modals/DuplicatePassModal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Search, Filter, Plus, LogIn } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from '@/hooks/use-toast';
+import { Toaster } from '@/components/ui/toaster';
+import type { Pass } from "@/types/pass.types";
+import { useState, useEffect } from "react";
+// src/pages/Designer/DesignerPage.tsx (o index.tsx)
+
+
 
 const Index = () => {
   const navigate = useNavigate();
   const [currentView, setCurrentView] = useState<'dashboard' | 'create'>('dashboard');
+  const [passes, setPasses] = useState<Pass[]>([]);
+  const [duplicateModal, setDuplicateModal] = useState<{ isOpen: boolean; pass: Pass | null }>({
+    isOpen: false,
+    pass: null
+  });
 
-  // Mock data for passes
-  const mockPasses = [
-    {
-      id: '1',
-      title: '20% Off Summer Sale',
-      type: 'coupon',
-      description: 'Save 20% on all summer items. Valid until end of July.',
-      backgroundColor: '#FF6B6B',
-      textColor: '#FFFFFF',
-      createdAt: '2024-01-15',
-      scans: 156,
-      status: 'active' as const
-    },
-    {
-      id: '2',
-      title: 'VIP Loyalty Card',
-      type: 'loyalty',
-      description: 'Exclusive benefits for our VIP customers.',
-      backgroundColor: '#4ECDC4',
-      textColor: '#FFFFFF',
-      createdAt: '2024-01-10',
-      scans: 89,
-      status: 'active' as const
-    },
-    {
-      id: '3',
-      title: 'Concert Ticket - Rock Festival',
-      type: 'event',
-      description: 'Access pass for the annual rock festival.',
-      backgroundColor: '#45B7D1',
-      textColor: '#FFFFFF',
-      createdAt: '2024-01-05',
-      scans: 234,
-      status: 'expired' as const
-    },
-    {
-      id: '4',
-      title: 'Coffee Shop Punch Card',
-      type: 'loyalty',
-      description: 'Buy 9 coffees, get the 10th free!',
-      backgroundColor: '#96CEB4',
-      textColor: '#FFFFFF',
-      createdAt: '2024-01-03',
-      scans: 67,
-      status: 'active' as const
+  // 🔹 Cargar datos desde la API
+  const fetchPasses = async () => {
+    try {
+      // GET
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/passes`);
+
+      if (!res.ok) throw new Error(`Error al cargar pases: ${res.status}`);
+      const data = await res.json();
+
+      const normalized: Pass[] = data.map((p: any) => ({
+        ...p,
+        status: p.status ?? p.estado ?? 'active',
+      }));
+
+      setPasses(normalized);
+    } catch (error) {
+      console.error(error);
+      toast({ title: "No se pudieron cargar los pases", variant: "destructive" });
     }
-  ];
+  };
+
+  useEffect(() => {
+    fetchPasses();
+  }, []);
+
+  // 🔹 Eliminar pase
+  const handleDelete = async (id: string) => {
+    if (!window.confirm("¿Eliminar este pase? Esta acción no se puede deshacer.")) return;
+
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/passes/${id}`, {
+        method: "DELETE",
+        // headers: { Authorization: `Bearer ${token}` }, // Descomenta si tu API pide token
+      });
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error("Error al eliminar pase:", errorText);
+        throw new Error("Delete failed");
+      }
+
+      setPasses(prev => prev.filter(p => p.id !== id));
+      toast({ title: "Pase eliminado" });
+    } catch (error) {
+      console.error(error);
+      toast({ title: "No se pudo eliminar el pase", variant: "destructive" });
+    }
+  };
+
+  const handleDuplicate = (pass: Pass) => {
+    console.log("Duplicate button clicked for pass:", pass);
+    setDuplicateModal({ isOpen: true, pass });
+  };
+
+  const handleSaveDuplicate = (
+  duplicatedPassData: Pick<Pass, "title" | "description" | "status" | "type">
+) => {
+  const base = duplicateModal.pass!;
+
+  const newPass: Pass = {
+    id: Date.now().toString(),
+    title: duplicatedPassData.title,
+    description: duplicatedPassData.description,
+    type: duplicatedPassData.type,
+    createdAt: new Date().toISOString().split("T")[0],
+    scans: 0,
+    status: duplicatedPassData.status ?? base.status ?? "active",
+    backgroundColor: base.backgroundColor,
+    textColor: base.textColor,
+  };
+
+  setPasses((prev) => [...prev, newPass]);
+  setDuplicateModal({ isOpen: false, pass: null });
+  toast({
+    title: "Pase duplicado",
+    description: "El pase ha sido duplicado correctamente",
+  });
+};
+
 
   if (currentView === 'create') {
     return (
@@ -81,12 +125,12 @@ const Index = () => {
     );
   }
 
+
   return (
     <div className="min-h-screen">
       <Header />
-      
+
       <main className="container mx-auto px-6 py-8">
-        {/* Welcome Section */}
         <div className="mb-8 animate-fade-in flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-foreground mb-2">
@@ -102,10 +146,8 @@ const Index = () => {
           </Button>
         </div>
 
-        {/* Stats Cards */}
         <StatsCards />
 
-        {/* Search and Filter Section */}
         <div className="flex flex-col sm:flex-row gap-4 mb-8">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
@@ -129,17 +171,15 @@ const Index = () => {
           </div>
         </div>
 
-        {/* Passes Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {mockPasses.map((pass, index) => (
+          {passes.map((pass, index) => (
             <div key={pass.id} style={{ animationDelay: `${index * 100}ms` }}>
-              <PassCard pass={pass} />
+              <PassCard pass={pass} onDuplicate={handleDuplicate} />
             </div>
           ))}
         </div>
 
-        {/* Empty State for when no passes exist */}
-        {mockPasses.length === 0 && (
+        {passes.length === 0 && (
           <div className="text-center py-12">
             <div className="w-24 h-24 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full mx-auto mb-6 flex items-center justify-center">
               <Plus className="w-12 h-12 text-white" />
@@ -160,6 +200,17 @@ const Index = () => {
             </Button>
           </div>
         )}
+
+        {duplicateModal.pass && (
+          <DuplicatePassModal
+            isOpen={duplicateModal.isOpen}
+            onClose={() => setDuplicateModal({ isOpen: false, pass: null })}
+            passData={duplicateModal.pass}
+            onDuplicate={handleSaveDuplicate}
+          />
+        )}
+
+        <Toaster />
       </main>
     </div>
   );

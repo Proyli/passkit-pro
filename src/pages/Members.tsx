@@ -14,7 +14,181 @@ import { User, Edit3, Link, Plus, Upload, Download, Columns3, Trash2 } from "luc
 import { useToast } from "@/hooks/use-toast";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import axios from "axios";
-//import { toast } from "react-toastify";
+
+import { QrCodeModal } from "@/components/modals/QrCodeModal";
+import { QrCode } from "lucide-react";
+
+// === Config de columnas (4 por defecto) ===
+const COLUMN_KEYS = [
+  "id",
+  "externalId",
+  "firstName",
+  "lastName",
+  "email",
+  "mobile",
+  "tier",
+  "gender",
+  "points",
+  "dateOfBirth",
+  "clientCode",
+  "campaignCode",
+] as const;
+
+type ColumnKey = typeof COLUMN_KEYS[number];
+
+const DEFAULT_VISIBLE: Record<ColumnKey, boolean> = {
+  id: true,
+  externalId: true,
+  firstName: true,
+  lastName: true,
+
+  email: false,
+  mobile: false,
+  tier: false,
+  gender: false,
+  points: false,
+  dateOfBirth: false,
+  clientCode: false,
+  campaignCode: false,
+};
+
+// Si NO tienes ya un formatLabel, añade este:
+const formatLabel = (k: ColumnKey) =>
+  ({
+    id: "Passkit ID",
+    externalId: "External ID",
+    firstName: "First Name",
+    lastName: "Last Name",
+    email: "Email",
+    mobile: "Phone",
+    tier: "Tier",
+    gender: "Gender",
+    points: "Points",
+    dateOfBirth: "Birthdate",
+    clientCode: "Client Code",
+    campaignCode: "Campaign Code",
+  }[k]);
+
+
+// ==== API base unificada ====
+const API_BASE =
+  (import.meta as any).env?.VITE_API_BASE_URL?.replace(/\/$/, "") ||
+  (import.meta as any).env?.VITE_API_URL?.replace(/\/$/, "") ||
+  `http://${location.hostname}:3900/api`;
+
+// ==== Tipos del backend (ES) ====
+type BackendMember = {
+  id: number | string;
+  external_id?: string;
+  externalId?: string;
+  idExterno?: string;
+  nombre?: string;
+  apellido?: string;
+  fechaNacimiento?: string;
+  codigoCliente?: string;
+ // codigoCampaña?: string;   // con tilde
+  codigoCampana?: string;   // sin tilde, por si acaso
+  tipoCliente?: string;
+  email?: string;
+  telefono?: string;
+  genero?: string;
+  puntos?: number | string;
+  fechaCreacion?: string;
+  fechaExpiracion?: string;
+};
+
+// ==== Tipo que usa tu tabla (EN) ====
+type UIMember = {
+  id: number;
+  externalId: string;
+  firstName: string;
+  lastName?: string;
+  email: string;
+  mobile?: string;
+  tier: string;
+  gender?: string;
+  points: number;
+  dateOfBirth?: string;
+  clientCode: string;
+  campaignCode: string;
+  createdAt?: string;
+  expiryDate?: string;
+};
+
+// Utilidad para elegir el primer valor “válido”
+const pick = (...vals: any[]) =>
+  vals.find(v => v !== undefined && v !== null && v !== "") ?? "";
+
+// Adaptador ES/EN → columnas de la tabla
+const adaptMember = (m: any): UIMember => ({
+  id: Number(pick(m.id, m.memberId, m.passkitId, 0)),
+  externalId: pick(m.external_id, m.externalId, m.externalID, m.idExterno, m.external),
+  firstName: pick(m.nombre, m.firstName, m.first_name, m.name, m.givenName),
+  lastName: pick(m.apellido, m.lastName, m.last_name, m.surname, m.familyName),
+  email: pick(m.email, m.correo, m.mail),
+  mobile: pick(m.telefono, m.mobile, m.phone, m.phoneNumber, m.celular, m.cel),
+  tier: pick(m.tipoCliente, m.tier, m.level, m.status),
+  gender: pick(m.genero, m.gender, m.sexo),
+  points: Number(pick(m.puntos, m.points, m.loyaltyPoints, 0)) || 0,
+  dateOfBirth: pick(m.fechaNacimiento, m.birthdate, m.dateOfBirth, m.dob),
+  clientCode: pick(m.codigoCliente, m.clientCode),
+  campaignCode: pick(m.codigoCampana, m.codigoCampana, m.campaignCode),
+  createdAt: pick(m.fechaCreacion, m.createdAt, m.created_at, m.dateCreated),
+  expiryDate: pick(m.fechaExpiracion, m.expiryDate, m.expirationDate, m.expiresAt),
+});
+
+
+//  Normaliza cualquier forma de respuesta a array
+const toArray = (data: any): BackendMember[] => {
+  if (Array.isArray(data)) return data;
+  if (!data || typeof data !== "object") return [];
+  if (Array.isArray((data as any).data)) return (data as any).data;
+  if (Array.isArray((data as any).members)) return (data as any).members;
+  if (Array.isArray((data as any).items)) return (data as any).items;
+  if (Array.isArray((data as any).rows)) return (data as any).rows;
+  if (Array.isArray((data as any).result)) return (data as any).result;
+  return [];
+};
+
+// Autodetección de base + path
+const API_GUESSES = [
+  (import.meta as any).env?.VITE_API_BASE_URL?.replace(/\/$/, ""),
+  (import.meta as any).env?.VITE_API_URL?.replace(/\/$/, ""),
+  `http://${location.hostname}:3900/api`,
+  `http://${location.hostname}:3900`,
+].filter(Boolean) as string[];
+
+type MembersLoadResult = { list: UIMember[]; endpoint: string }; // endpoint termina en /members
+
+async function fetchMembersAuto(): Promise<MembersLoadResult> {
+  const tried: string[] = [];
+  let lastErr: any = null;
+
+  for (const base of API_GUESSES) {
+    for (const path of ["/members", "/api/members"]) {
+      const url =
+        base.endsWith("/api") && path.startsWith("/api")
+          ? base + path.replace("/api", "")
+          : base + path;
+
+      tried.push(url);
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { url, status: res.status });
+        const json = await res.json();
+        const list = toArray(json).map(adaptMember).sort((a, b) => a.id - b.id);
+        console.log("✅ LIST from:", url, "→", list.length, "items");
+        return { list, endpoint: url }; // ← guardamos el endpoint real que funcionó
+      } catch (e) {
+        console.warn("❌ Fail", url, e);
+        lastErr = e;
+      }
+    }
+  }
+  console.error("None worked. Tried:", tried);
+  throw lastErr ?? new Error("Cannot resolve /members endpoint");
+}
+
 
 
 const Members = () => {
@@ -31,22 +205,19 @@ const Members = () => {
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editMember, setEditMember] = useState<any>(null);
-  const [membersFromBackend, setMembersFromBackend] = useState<any[]>([]);
+ // ✅ ahora
+const [membersFromBackend, setMembersFromBackend] = useState<UIMember[]>([]);
 
-  const [visibleColumns, setVisibleColumns] = useState({
-    id: true,
-    externalId: true,
-    firstName: true,
-    lastName: true,
-    email: true,
-    mobile: true,
-    tier: true,
-    gender: true,
-    points: true,
-    dateOfBirth: true,
-    clientCode: true,
-    campaignCode: true,
-  });
+const [qrOpen, setQrOpen] = useState(false);
+const [qrPass, setQrPass] = useState<any>(null);
+const [qrClient, setQrClient] = useState("");     // 👈 existe
+const [qrCampaign, setQrCampaign] = useState(""); 
+
+const [visibleColumns, setVisibleColumns] =
+  useState<Record<ColumnKey, boolean>>(DEFAULT_VISIBLE);
+
+const visibleCount = Object.values(visibleColumns).filter(Boolean).length;
+
 
   // Estado del formulario para agregar un nuevo miembro (en ESPAÑOL)
   const [newMember, setNewMember] = useState({
@@ -59,141 +230,122 @@ const Members = () => {
     genero: "",
   });
 
-  // Cargar miembros
-  useEffect(() => {
-    const fetchMembers = async () => {
-      try {
-        const res = await fetch("http://localhost:3900/api/members");
-        if (!res.ok) throw new Error("Error al cargar miembros");
-        const data = await res.json();
-        if (Array.isArray(data)) {
-          // Normalizar los datos del backend al cargarlos para que coincidan con los nombres de columna en inglés
-          const normalizedData = data.map((member: any) => ({
-            id: member.id,
-            externalId: member.external_id,
-            firstName: member.nombre,
-            lastName: member.apellido,
-            email: member.email,
-            mobile: member.telefono,
-            tier: member.tipoCliente,
-            gender: member.genero,
-            points: member.puntos,
-            dateOfBirth: member.fechaNacimiento,
-            clientCode: member.codigoCliente,
-            campaignCode: member.codigoCampaña,
-            // Mantener otras propiedades si existen
-            ...member,
-          }));
-          const ordenados = [...normalizedData].sort((a, b) => a.id - b.id);
-          setMembersFromBackend(ordenados);
-        } else {
-          setMembersFromBackend([]);
-        }
-      } catch (err) {
-        console.error("❌ Error al cargar miembros:", err);
-        toast({
-          title: "Error de carga",
-          description: "No se pudieron cargar los miembros.",
-          variant: "destructive",
-        });
-      }
-    };
-    fetchMembers();
-  }, [location.key, toast]); // `location.key` para forzar recarga al cambiar de ruta, y `toast` para que no de warning
-
-  const handleAddMember = async () => {
-    const { nombre, apellido, email, tipoCliente, telefono } = newMember;
-
-    if (!nombre || !apellido || !email || !tipoCliente || !telefono) {
-      toast({
-        title: "Campos incompletos",
-        description: "Por favor, completa todos los campos obligatorios.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Objeto en ESPAÑOL para el backend (asegúrate que tu backend espere estos nombres)
-    const memberToSend = {
-      nombre,
-      apellido,
-      email,
-      telefono,
-      tipoCliente,
-      genero: newMember.genero,
-      puntos: parseInt(newMember.puntos) || 0,
-      fechaNacimiento: "", // Si lo agregas en el formulario, usa el valor de newMember
-    };
-
+// Cargar miembros
+useEffect(() => {
+  (async () => {
     try {
-      const res = await fetch("http://localhost:3900/api/members", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(memberToSend),
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || "Error al guardar el miembro.");
-      }
-
+      const { list, endpoint } = await fetchMembersAuto();
+      setMembersFromBackend(list);
+      setMembersEndpoint(endpoint); // ← guardamos el endpoint /members que sí funcionó
+    } catch (err) {
+      console.error("❌ Error al cargar miembros:", err);
+      setMembersFromBackend([]);
       toast({
-        title: "Miembro agregado",
-        description: "El nuevo miembro fue guardado exitosamente.",
-      });
-
-      setIsAddModalOpen(false);
-
-      setNewMember({
-        tipoCliente: "",
-        puntos: "",
-        nombre: "",
-        apellido: "",
-        email: "",
-        telefono: "",
-        genero: "",
-      });
-
-      // Refrescar miembros después de agregar
-      const updatedRes = await fetch("http://localhost:3900/api/members");
-      const updatedData = await updatedRes.json();
-      if (Array.isArray(updatedData)) {
-        const normalizedUpdatedData = updatedData.map((member: any) => ({
-          id: member.id,
-          externalId: member.external_id,
-          firstName: member.nombre,
-          lastName: member.apellido,
-          email: member.email,
-          mobile: member.telefono,
-          tier: member.tipoCliente,
-          gender: member.genero,
-          points: member.puntos,
-          dateOfBirth: member.fechaNacimiento,
-          clientCode: member.codigoCliente,
-          campaignCode: member.codigoCampaña,
-          ...member,
-        }));
-        setMembersFromBackend([...normalizedUpdatedData].sort((a, b) => a.id - b.id));
-      }
-    } catch (error: any) {
-      console.error("❌ Error al guardar:", error.message);
-      toast({
-        title: "Error",
-        description: `No se pudo guardar el nuevo miembro: ${error.message}`,
+        title: "Error de carga",
+        description: "No se pudieron cargar los miembros.",
         variant: "destructive",
       });
     }
+  })();
+}, [location.key, toast]);
+
+const [membersEndpoint, setMembersEndpoint] = useState<string | null>(null);
+
+// Builder que asegura que todas las escrituras usen la MISMA base que el GET
+const api = (path: string) => {
+  const base = (membersEndpoint ?? `${API_BASE}/members`).replace(/\/members$/, "");
+  return `${base}${path}`;
+};
+
+// Helper para leer errores que vienen en HTML sin romper JSON.parse
+const readJsonSafe = async (res: Response) => {
+  const text = await res.text();
+  try { return JSON.parse(text); } catch { return { message: text }; }
+};
+
+const handleAddMember = async () => {
+  const { nombre, apellido, email, tipoCliente, telefono, genero, puntos } = newMember;
+
+  if (!nombre || !apellido || !email || !tipoCliente || !telefono) {
+    toast({
+      title: "Campos incompletos",
+      description: "Por favor, completa todos los campos obligatorios.",
+      variant: "destructive",
+    });
+    return;
+  }
+
+  // Payload que espera tu backend (en español)
+  const memberToSend = {
+    nombre,
+    apellido,
+    email,
+    telefono,
+    tipoCliente,
+    genero: genero || "",
+    puntos: parseInt(puntos, 10) || 0,
+    fechaNacimiento: "", // pon el valor real si lo tienes en el form
   };
 
-  const handleSelectMember = (memberId: string) => {
-    setSelectedMembers((prev) =>
-      prev.includes(memberId) ? prev.filter((id) => id !== memberId) : [...prev, memberId]
-    );
-  };
+  try {
+    // ⬇️ usa la misma base que funcionó en el GET
+    const res = await fetch(api("/members"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(memberToSend),
+    });
 
-  const handleSelectAll = () => {
-    setSelectedMembers(selectedMembers.length === membersFromBackend.length ? [] : membersFromBackend.map((m: any) => m.id));
-  };
+    if (!res.ok) {
+      const errorData = await readJsonSafe(res);
+      throw new Error(errorData.message || "Error al guardar el miembro.");
+    }
+
+    toast({ title: "Miembro agregado", description: "Guardado exitosamente." });
+    setIsAddModalOpen(false);
+
+    // Resetea el form
+    setNewMember({
+      tipoCliente: "",
+      puntos: "",
+      nombre: "",
+      apellido: "",
+      email: "",
+      telefono: "",
+      genero: "",
+    });
+
+    // 🔄 refresca la lista usando el MISMO endpoint
+    const updatedRes = await fetch(api("/members"));
+    const updatedJson = await updatedRes.json();
+    const normalized = toArray(updatedJson).map(adaptMember).sort((a, b) => a.id - b.id);
+    setMembersFromBackend(normalized);
+  } catch (error: any) {
+    console.error("❌ Error al guardar:", error?.message || error);
+    toast({
+      title: "Error",
+      description: `No se pudo guardar el nuevo miembro: ${error?.message || "desconocido"}`,
+      variant: "destructive",
+    });
+  }
+};
+
+
+// const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
+
+const handleSelectMember = (memberId: number | string) => {
+  const id = String(memberId);
+  setSelectedMembers(prev =>
+    prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+  );
+};
+
+const handleSelectAll = () => {
+  const all = membersFromBackend.map(m => String(m.id));
+  setSelectedMembers(
+    selectedMembers.length === membersFromBackend.length ? [] : all
+  );
+};
+
 
   const handleViewDetails = (member: any) => {
     // El miembro ya debería estar normalizado si se carga correctamente del backend
@@ -230,178 +382,118 @@ const Members = () => {
   };
 
   const handleUpdateMember = async () => {
-    if (!editMember) return;
+  if (!editMember) return;
 
-    // Preparar el objeto para enviar al backend, con nombres en español si el backend los espera
-    const memberToUpdate = {
-      nombre: editMember.nombre,
-      apellido: editMember.apellido,
-      email: editMember.email,
-      telefono: editMember.telefono,
-      genero: editMember.genero,
-      tipoCliente: editMember.tipoCliente, // O tier, dependiendo de tu backend
-      puntos: Number(editMember.puntos) || 0,
-      fechaNacimiento: editMember.dateOfBirth, // Si está en el formulario de edición
-      external_id: editMember.externalId, // Asegúrate de enviar el ID externo si tu backend lo necesita para la actualización
-      codigoCliente: editMember.clientCode,
-      codigoCampaña: editMember.campaignCode,
-    };
-
-    try {
-      const res = await fetch(`http://localhost:3900/api/members/${editMember.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(memberToUpdate),
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || "Error al actualizar.");
-      }
-
-      toast({ title: "Actualización exitosa", description: "Los datos del miembro han sido actualizados." });
-      setIsEditModalOpen(false);
-
-      // Refrescar los datos después de la actualización
-      const updatedRes = await fetch("http://localhost:3900/api/members");
-      const updatedData = await updatedRes.json();
-      if (Array.isArray(updatedData)) {
-        const normalizedUpdatedData = updatedData.map((member: any) => ({
-          id: member.id,
-          externalId: member.external_id,
-          firstName: member.nombre,
-          lastName: member.apellido,
-          email: member.email,
-          mobile: member.telefono,
-          tier: member.tipoCliente,
-          gender: member.genero,
-          points: member.puntos,
-          dateOfBirth: member.fechaNacimiento,
-          clientCode: member.codigoCliente,
-          campaignCode: member.codigoCampaña,
-          ...member,
-        }));
-        setMembersFromBackend([...normalizedUpdatedData].sort((a, b) => a.id - b.id));
-      }
-    } catch (error: any) {
-      console.error("❌ Error al actualizar miembro:", error.message);
-      toast({ title: "Error", description: `No se pudo actualizar el miembro: ${error.message}` });
-    }
+  const memberToUpdate = {
+    nombre: editMember.nombre,
+    apellido: editMember.apellido,
+    email: editMember.email,
+    telefono: editMember.telefono,
+    genero: editMember.genero,
+    tipoCliente: editMember.tipoCliente, // si tu form usa 'tier', mapea aquí
+    puntos: Number(editMember.puntos) || 0,
+    fechaNacimiento: editMember.dateOfBirth,
+    external_id: editMember.externalId,
+    codigoCliente: editMember.clientCode,
+    codigoCampana: editMember.campaignCode,
   };
 
-  const handleDeleteSelected = async () => {
-    try {
-      const deletePromises = selectedMembers.map((id) =>
-        fetch(`http://localhost:3900/api/members/${id}`, { method: "DELETE" }).then((res) => {
-          if (!res.ok) throw new Error(`Error al eliminar miembro con ID ${id}`);
-          return res.json();
-        })
-      );
-      await Promise.all(deletePromises);
-
-      toast({
-        title: "Miembros eliminados",
-        description: `${selectedMembers.length} miembro(s) fueron eliminados.`,
-      });
-      setSelectedMembers([]);
-
-      // Refrescar la lista de miembros
-      const res = await fetch("http://localhost:3900/api/members");
-      const updatedMembers = await res.json();
-      if (Array.isArray(updatedMembers)) {
-        const normalizedUpdatedMembers = updatedMembers.map((member: any) => ({
-          id: member.id,
-          externalId: member.external_id,
-          firstName: member.nombre,
-          lastName: member.apellido,
-          email: member.email,
-          mobile: member.telefono,
-          tier: member.tipoCliente,
-          gender: member.genero,
-          points: member.puntos,
-          dateOfBirth: member.fechaNacimiento,
-          clientCode: member.codigoCliente,
-          campaignCode: member.codigoCampaña,
-          ...member,
-        }));
-        setMembersFromBackend([...normalizedUpdatedMembers].sort((a, b) => a.id - b.id));
-      } else {
-        setMembersFromBackend([]);
-      }
-    } catch (error: any) {
-      console.error("❌ Error al eliminar:", error.message);
-      toast({
-        title: "Error",
-        description: `No se pudieron eliminar los miembros: ${error.message}`,
-        variant: "destructive",
-      });
+  try {
+    const res = await fetch(`${API_BASE}/members/${editMember.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(memberToUpdate),
+    });
+    if (!res.ok) {
+      const errorData = await res.json();
+      throw new Error(errorData.message || "Error al actualizar.");
     }
-  };
 
-  const handleExport = async () => {
-    try {
-      const response = await fetch("http://localhost:3900/api/csv/export", { method: "GET" });
-      if (!response.ok) throw new Error("Error al exportar CSV");
-      const blob = await response.blob();
-      const link = document.createElement("a");
-      link.href = window.URL.createObjectURL(blob);
-      link.download = "members.csv";
-      link.click();
-      toast({
-        title: "Exportación exitosa",
-        description: "El archivo CSV se ha descargado.",
-      });
-    } catch (error: any) {
-      console.error("❌ Error al exportar CSV:", error.message);
-      toast({ title: "Error", description: `No se pudo exportar el archivo CSV: ${error.message}` });
-    }
-  };
+    toast({ title: "Actualización exitosa", description: "Datos actualizados." });
+    setIsEditModalOpen(false);
 
-  const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const formData = new FormData();
-    formData.append("csvFile", file);
+    const updatedRes = await fetch(`${API_BASE}/members`);
+    const updated = await updatedRes.json();
+    const normalized = toArray(updated).map(adaptMember).sort((a, b) => a.id - b.id);
+    setMembersFromBackend(normalized);
+  } catch (error: any) {
+    console.error("❌ Error al actualizar miembro:", error.message);
+    toast({ title: "Error", description: `No se pudo actualizar: ${error.message}` });
+  }
+};
 
-    try {
-      const response = await fetch("http://localhost:3900/api/csv/import", {
-        method: "POST",
-        body: formData,
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.message || "Error al importar CSV");
+const handleDeleteSelected = async () => {
+  try {
+    const deletePromises = selectedMembers.map((id) =>
+      fetch(`${API_BASE}/members/${id}`, { method: "DELETE" }).then((res) => {
+        if (!res.ok) throw new Error(`Error al eliminar ID ${id}`);
+        return res.json();
+      })
+    );
+    await Promise.all(deletePromises);
 
-      console.log("✅ Importación completa:", result);
-      toast({ title: "Importación exitosa", description: `${result.message}` });
+    toast({
+      title: "Miembros eliminados",
+      description: `${selectedMembers.length} miembro(s) eliminados.`,
+    });
+    setSelectedMembers([]);
 
-      // refrescar
-      const res = await fetch("http://localhost:3900/api/members");
-      const updated = await res.json();
-      if (Array.isArray(updated)) {
-        const normalizedUpdated = updated.map((member: any) => ({
-          id: member.id,
-          externalId: member.external_id,
-          firstName: member.nombre,
-          lastName: member.apellido,
-          email: member.email,
-          mobile: member.telefono,
-          tier: member.tipoCliente,
-          gender: member.genero,
-          points: member.puntos,
-          dateOfBirth: member.fechaNacimiento,
-          clientCode: member.codigoCliente,
-          campaignCode: member.codigoCampaña,
-          ...member,
-        }));
-        setMembersFromBackend([...normalizedUpdated].sort((a, b) => a.id - b.id));
-      } else {
-        setMembersFromBackend([]);
-      }
-    } catch (error: any) {
-      console.error("❌ Error al importar CSV:", error.message);
-      toast({ title: "Error", description: `No se pudo importar el archivo: ${error.message}` });
-    }
-  };
+    const res = await fetch(`${API_BASE}/members`);
+    const updated = await res.json();
+    const normalized = toArray(updated).map(adaptMember).sort((a, b) => a.id - b.id);
+    setMembersFromBackend(normalized);
+  } catch (error: any) {
+    console.error("❌ Error al eliminar:", error.message);
+    toast({
+      title: "Error",
+      description: `No se pudieron eliminar: ${error.message}`,
+      variant: "destructive",
+    });
+  }
+};
+
+
+ const handleExport = async () => {
+  try {
+    const response = await fetch(`${API_BASE}/csv/export`, { method: "GET" });
+    if (!response.ok) throw new Error("Error al exportar CSV");
+    const blob = await response.blob();
+    const link = document.createElement("a");
+    link.href = window.URL.createObjectURL(blob);
+    link.download = "members.csv";
+    link.click();
+    toast({ title: "Exportación exitosa", description: "CSV descargado." });
+  } catch (error: any) {
+    console.error("❌ Error al exportar CSV:", error.message);
+    toast({ title: "Error", description: `No se pudo exportar: ${error.message}` });
+  }
+};
+
+const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  const formData = new FormData();
+  formData.append("csvFile", file);
+
+  try {
+    const response = await fetch(`${API_BASE}/csv/import`, {
+      method: "POST",
+      body: formData,
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "Error al importar CSV");
+
+    toast({ title: "Importación exitosa", description: `${result.message}` });
+
+    const res = await fetch(`${API_BASE}/members`);
+    const updated = await res.json();
+    const normalized = toArray(updated).map(adaptMember).sort((a, b) => a.id - b.id);
+    setMembersFromBackend(normalized);
+  } catch (error: any) {
+    console.error("❌ Error al importar CSV:", error.message);
+    toast({ title: "Error", description: `No se pudo importar: ${error.message}` });
+  }
+};
 
   const formatLabel = (key: string) => {
     const map: Record<string, string> = {
@@ -426,33 +518,23 @@ const Members = () => {
   setIsAssignModalOpen(true);
 };
 
- const handleAssignCard = async (member: any) => {
+const handleAssignCard = async (member: any) => {
   try {
-    const response = await axios.post("http://localhost:3900/api/cards", {
+    const response = await axios.post(`${API_BASE}/cards`, {
       codigoCliente: member.clientCode,
-      codigoCampaña: member.campaignCode,
+      codigoCampana: member.campaignCode,
     });
 
-    if (response.data.success) {
-      toast({
-        variant: "success" as const,
-        title: "Tarjeta asignada correctamente",
-      });
+    if ((response.data as any)?.success) {
+      toast({ title: "Tarjeta asignada correctamente" });
     } else {
-      toast({
-        variant: "destructive",
-        title: "Hubo un problema al asignar la tarjeta",
-      });
+      toast({ variant: "destructive", title: "Hubo un problema al asignar la tarjeta" });
     }
   } catch (error) {
     console.error("❌ Error al asignar tarjeta:", error);
-    toast({
-      variant: "destructive",
-      title: "Error al asignar la tarjeta",
-    });
+    toast({ variant: "destructive", title: "Error al asignar la tarjeta" });
   }
 };
-
 
 
   return (
@@ -568,42 +650,75 @@ const Members = () => {
 <DropdownMenu.Root>
   <DropdownMenu.Trigger asChild>
     <Button variant="outline" className="flex items-center gap-2">
-      <Columns3 className="h-4 w-4" />
-      {`COLUMNS (${Object.values(visibleColumns).filter(Boolean).length})`}
-    </Button>
+  <Columns3 className="h-4 w-4" />
+  {`COLUMNS (${visibleCount})`}
+</Button>
+
+
   </DropdownMenu.Trigger>
 
-  <DropdownMenu.Content
-    align="start"
-    sideOffset={8}
-    className="bg-white rounded-md shadow-md border p-2 w-52"
-    loop
+ <DropdownMenu.Content
+  align="start"
+  sideOffset={8}
+  className="bg-white rounded-md shadow-md border p-2 w-56"
+  loop
+>
+  <div className="px-2 pb-2 text-xs text-muted-foreground">
+    Mostrar/ocultar columnas
+  </div>
+
+  {COLUMN_KEYS.map((key) => (
+    <DropdownMenu.CheckboxItem
+      key={key}
+      checked={visibleColumns[key]}
+      onCheckedChange={(checked) =>
+        setVisibleColumns((prev) => ({ ...prev, [key]: !!checked }))
+      }
+      className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-md cursor-pointer hover:bg-gray-100 data-[state=checked]:bg-blue-100 data-[state=checked]:text-blue-700"
+    >
+      {formatLabel(key)}
+    </DropdownMenu.CheckboxItem>
+  ))}
+
+  <DropdownMenu.Separator />
+
+  <DropdownMenu.Item
+    className="px-2 py-1.5 text-sm cursor-pointer hover:bg-gray-100"
+    onClick={() => setVisibleColumns(DEFAULT_VISIBLE)}
   >
-    {Object.entries(visibleColumns).map(([key, value]) => (
-      <DropdownMenu.CheckboxItem
-        key={key}
-        checked={value}
-        onCheckedChange={(checked) =>
-          setVisibleColumns((prev) => ({
-            ...prev,
-            [key]: checked,
-          }))
-        }
-        className={`flex items-center gap-2 px-2 py-1.5 text-sm capitalize rounded-md cursor-pointer ${
-          value
-            ? "bg-blue-100 text-blue-700 font-medium"
-            : "bg-white text-gray-700 hover:bg-gray-100"
-        }`}
-      >
-        <span
-          className={`inline-block w-4 h-4 border rounded-full ${
-            value ? "bg-blue-500 border-blue-500" : "border-gray-400"
-          }`}
-        ></span>
-        {formatLabel(key)}
-      </DropdownMenu.CheckboxItem>
-    ))}
-  </DropdownMenu.Content>
+    Reset a 4 columnas
+  </DropdownMenu.Item>
+
+  <DropdownMenu.Item
+    className="px-2 py-1.5 text-sm cursor-pointer hover:bg-gray-100"
+    onClick={() =>
+      setVisibleColumns(
+        Object.fromEntries(COLUMN_KEYS.map((k) => [k, true])) as Record<
+          ColumnKey,
+          boolean
+        >
+      )
+    }
+  >
+    Mostrar todas
+  </DropdownMenu.Item>
+
+  <DropdownMenu.Item
+    className="px-2 py-1.5 text-sm cursor-pointer hover:bg-gray-100"
+    onClick={() =>
+      setVisibleColumns(
+        Object.fromEntries(COLUMN_KEYS.map((k) => [k, false])) as Record<
+          ColumnKey,
+          boolean
+        >
+      )
+    }
+  >
+    Ocultar todas
+  </DropdownMenu.Item>
+</DropdownMenu.Content>
+
+
 </DropdownMenu.Root>
 
 
@@ -664,7 +779,10 @@ const Members = () => {
               {membersFromBackend.map((member: any) => (
                 <tr key={member.id} className="border-b hover:bg-muted/50">
                   <td className="py-2">
-                    <Checkbox checked={selectedMembers.includes(member.id)} onCheckedChange={() => handleSelectMember(member.id)} />
+                    <Checkbox
+                    checked={selectedMembers.includes(String(member.id))}
+                    onCheckedChange={() => handleSelectMember(member.id)}
+                  />
                   </td>
 
                   {visibleColumns.id && <td className="font-mono text-sm py-2">{member.id}</td>}
@@ -723,6 +841,35 @@ const Members = () => {
                       >
                         <span>🎫</span>
                       </Button>
+
+                     <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      // "pass" mínimo para el modal (solo lo usamos para título/ids)
+                      setQrPass({
+                        id: String(member.id),
+                        title:
+                          `${member.firstName ?? ""} ${member.lastName ?? ""}`.trim() ||
+                          member.email ||
+                          "Member",
+                        description: member.externalId || "",
+                        createdAt: new Date().toISOString(),
+                        estado: "active",
+                        type: "loyalty",
+                      });
+
+                      // Códigos reales de la fila
+                      setQrClient(member.clientCode || "");
+                      setQrCampaign(member.campaignCode || "");
+
+                      setQrOpen(true);
+                    }}
+                    className="h-8 w-8 p-0 hover:bg-muted"
+                    title="Mostrar código"
+                  >
+                    <QrCode className="w-4 h-4 text-muted-foreground" />
+                  </Button>
 
                        </div>
                       </td>
@@ -807,9 +954,7 @@ const Members = () => {
             <div className="flex justify-between items-center">
               <DialogTitle>Member Details</DialogTitle>
               <div className="flex gap-2">
-                <Button size="sm" className="bg-[#7069e3] hover:bg-[#5f58d1] text-white">
-                  Update
-                </Button>
+               
                 <Button size="sm" variant="outline">
                   Resend Welcome Email
                 </Button>
@@ -909,6 +1054,19 @@ const Members = () => {
           )}
         </DialogContent>
       </Dialog>
+
+        {/* QR / Code128 modal */}
+  {qrPass && (
+    <QrCodeModal
+      isOpen={qrOpen}
+      onClose={() => setQrOpen(false)}
+      passData={qrPass}
+      clientCode={qrClient}
+      campaignCode={qrCampaign}
+      defaultMode="code128"
+    />
+  )}
+
     </div>
   );
 };

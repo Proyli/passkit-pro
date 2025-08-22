@@ -15,7 +15,7 @@ exports.getAllMembers = async (req, res) => {
       lastName: member.apellido,
       dateOfBirth: member.fechaNacimiento,
       clientCode: member.codigoCliente,
-      campaignCode: member.codigoCampaña,
+      campaignCode: member.codigoCampana,
       tier: member.tipoCliente,
       email: member.email,
       mobile: member.telefono,
@@ -46,7 +46,7 @@ exports.createMember = async (req, res) => {
       apellido: req.body.apellido,
       fechaNacimiento: req.body.fechaNacimiento || null,
       codigoCliente: req.body.codigoCliente || null,
-      codigoCampaña: req.body.codigoCampaña || null,
+      codigoCampana: req.body.codigoCampana || null,
       tipoCliente: req.body.tipoCliente,
       email: req.body.email,
       telefono: req.body.telefono,
@@ -112,7 +112,7 @@ exports.assignCardToMember = async (req, res) => {
     }
 
     // Actualizar el código de campaña
-    member.codigoCampaña = campaignCode;
+    member.codigoCampana = campaignCode;
     await member.save();
 
     res.json({ message: "Tarjeta asignada correctamente", member });

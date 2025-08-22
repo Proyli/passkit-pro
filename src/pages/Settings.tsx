@@ -41,7 +41,7 @@ const Settings = () => {
     }
 
     try {
-      const response = await fetch("http://localhost:3900/api/auth/change-password", {
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/auth/change-password`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

@@ -6,7 +6,7 @@ export interface ProfileData {
   apellido: string;
   fechaNacimiento: string;
   codigoCliente: string;
-  codigoCampaña: string;
+  codigoCampana: string;
   tipoCliente: string;
   email: string;
   telefono: string;
@@ -26,7 +26,7 @@ const initialProfileData: ProfileData = {
   apellido: "",
   fechaNacimiento: "",
   codigoCliente: "",
-  codigoCampaña: "",
+  codigoCampana: "",
   tipoCliente: "",
   email: "",
   telefono: "",

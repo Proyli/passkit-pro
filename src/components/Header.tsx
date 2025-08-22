@@ -1,8 +1,10 @@
 import { Plus, User, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 const Header = () => {
+  const navigate = useNavigate();
+
   return (
     <header className="glass-effect sticky top-0 z-50 border-b border-white/20">
       <div className="container mx-auto px-6 py-4">
@@ -32,7 +34,10 @@ const Header = () => {
                 Profile
               </Button>
             </Link>
-            <Button className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700">
+            <Button
+              onClick={() => navigate('/designer')}
+              className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
+            >
               <Plus className="w-4 h-4 mr-2" />
               New Pass
             </Button>

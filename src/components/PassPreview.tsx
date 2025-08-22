@@ -49,10 +49,11 @@ const PassPreview = ({ passData }: PassPreviewProps) => {
                 {/* Pass preview */}
                 <div 
                   className="rounded-xl p-4 shadow-lg transform -rotate-1 hover:rotate-0 transition-transform duration-300"
-                  style={{ 
-                    backgroundColor: passData.backgroundColor || '#007AFF',
-                    color: passData.textColor || '#FFFFFF'
-                  }}
+                  style={{
+                      backgroundColor: passData.backgroundColor || "#007AFF",
+                      color: passData.textColor || "#FFFFFF",
+                    }}
+
                 >
                   <div className="flex justify-between items-start mb-3">
                     <div>

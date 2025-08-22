@@ -7,10 +7,10 @@ interface PassModalProps {
   passData: {
     title: string;
     description: string;
-    backgroundColor: string;
-    textColor: string;
+    backgroundColor?: string;
+    textColor?: string;
     type: string;
-    fields: Record<string, string>;
+    fields?: Record<string, string>;
   };
 }
 

@@ -1,5 +1,5 @@
 const { Sequelize } = require("sequelize");
-require("dotenv").config({ path: __dirname + "/../.env" });
+require("dotenv").config({ path: __dirname + "/../../.env" });
 
 const sequelize = new Sequelize(
   process.env.DB_NAME,
@@ -20,8 +20,10 @@ const db = {};
 db.Sequelize = Sequelize;
 db.sequelize = sequelize;
 
-db.Member = require("./member.js")(sequelize, Sequelize);
-db.Pass = require("./pass")(sequelize, Sequelize);
+db.Member  = require("./member.js")(sequelize, Sequelize);
+db.Pass    = require("./pass")(sequelize, Sequelize);
 
+// 👇 REGISTRA AQUÍ EL MODELO DESIGN (ajusta el nombre del archivo si usas design.js)
+db.Design  = require("./Design")(sequelize, Sequelize);
 
 module.exports = db;

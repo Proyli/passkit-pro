@@ -75,21 +75,47 @@ const CreatePassForm = () => {
     setPassData(prev => ({ ...prev, [key]: value }));
   };
 
+const setHex = (key: "backgroundColor" | "textColor") => (e: any) => {
+  let v = String(e.target.value).trim().toUpperCase();
+  if (!v.startsWith("#")) v = "#" + v;
+  if (v.length > 7) v = v.slice(0, 7);
+  setPassData(prev => ({ ...prev, [key]: v }));
+};
+
+const setPick = (key: "backgroundColor" | "textColor") => (e: any) => {
+  // el color picker ya viene con '#'
+  setPassData(prev => ({ ...prev, [key]: e.target.value.toUpperCase() }));
+};
 
 
 const handleCreatePass = async () => {
   try {
-    const response = await axios.post("http://localhost:3900/api/passes", passData);
+    const body = {
+      title: passData.title,
+      description: passData.description,
+      type: passData.type || "coupon",
+      status: "active",
+
+      // 👇 MANDAR COLORES Y FIELDS
+      backgroundColor: passData.backgroundColor,
+      textColor: passData.textColor,
+      fields: passData.fields,
+    };
+
+    const API_BASE =
+      import.meta.env?.VITE_API_BASE ??
+      `${window.location.protocol}//${window.location.hostname}:3900`;
+
+    const response = await axios.post(`${API_BASE}/api/passes`, body);
     console.log("Pass creado:", response.data);
     alert("🎉 Pase creado exitosamente.");
-    // Opcional: limpiar formulario
   } catch (error) {
     console.error("Error al crear el pase:", error);
     alert("❌ Ocurrió un error al guardar el pase.");
   }
 };
 
-  
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
       <div className="space-y-6">
@@ -145,6 +171,7 @@ const handleCreatePass = async () => {
 
               <TabsContent value="design" className="space-y-4 mt-6">
                 <div className="grid grid-cols-2 gap-4">
+                  {/* Background */}
                   <div className="space-y-2">
                     <Label htmlFor="bgColor">Background Color</Label>
                     <div className="flex space-x-2">
@@ -152,17 +179,18 @@ const handleCreatePass = async () => {
                         id="bgColor"
                         type="color"
                         value={passData.backgroundColor}
-                        onChange={(e) => updatePassData('backgroundColor', e.target.value)}
+                        onChange={setPick("backgroundColor")}
                         className="w-16 h-10 p-1 rounded-md"
                       />
                       <Input
                         placeholder="#007AFF"
                         value={passData.backgroundColor}
-                        onChange={(e) => updatePassData('backgroundColor', e.target.value)}
+                        onChange={setHex("backgroundColor")}
                       />
                     </div>
                   </div>
 
+                  {/* Text */}
                   <div className="space-y-2">
                     <Label htmlFor="textColor">Text Color</Label>
                     <div className="flex space-x-2">
@@ -170,18 +198,19 @@ const handleCreatePass = async () => {
                         id="textColor"
                         type="color"
                         value={passData.textColor}
-                        onChange={(e) => updatePassData('textColor', e.target.value)}
+                        onChange={setPick("textColor")}
                         className="w-16 h-10 p-1 rounded-md"
                       />
                       <Input
                         placeholder="#FFFFFF"
                         value={passData.textColor}
-                        onChange={(e) => updatePassData('textColor', e.target.value)}
+                        onChange={setHex("textColor")}
                       />
                     </div>
                   </div>
                 </div>
               </TabsContent>
+
 
               <TabsContent value="fields" className="space-y-4 mt-6">
                 <div className="space-y-4">
