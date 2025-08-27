@@ -3,12 +3,20 @@ const express = require("express");
 const jwt = require("jsonwebtoken");
 const { pool } = require("../db"); // ajusta si tu db está en otro sitio
 const { GoogleAuth } = require("google-auth-library");
-
+const nodemailer = require("nodemailer");
 const fs = require("fs");
 const sanitize = (s) => String(s).replace(/[^\w.-]/g, "_");
 
 const SA_EMAIL  = process.env.GOOGLE_SA_EMAIL;                  // wallet-svc@...iam.gserviceaccount.com
 const KEY_PATH  = process.env.GOOGLE_WALLET_KEY_PATH || "./keys/wallet-sa.json";
+
+// SMTP (usa tus credenciales .env)
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: Number(process.env.SMTP_PORT || 587),
+  secure: false,
+  auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+});
 
 let PRIVATE_KEY = null;
 try {
@@ -77,7 +85,7 @@ router.get("/wallet/resolve", async (req, res) => {
       ? `${base}/api/wallet/ios/${token}`
       : `${base}/api/wallet/google/${token}`;
 
-    // 👇👇👇  REGISTRO DEL ESCANEO (ANTES DE REDIRIGIR)  👇👇👇
+    // REGISTRO DEL ESCANEO (ANTES DE REDIRIGIR)  
     const sourceQ = String(req.query.source || "qr").toLowerCase(); // 'qr' | 'barcode' | 'link'
     const source = sourceQ === "barcode" ? "barcode" : sourceQ === "link" ? "link" : "qr";
 
@@ -518,6 +526,130 @@ router.get("/wallet/codes", (req, res) => {
     // Arranca mostrando QR (puedes cambiar a 'bar')
     show('bar'); // si prefieres abrir en barras, deja 'bar'
   </script>`);
+});
+
+/* =========================
+   TELEMETRY: registrar instalación
+   ========================= */
+router.post("/telemetry/install", async (req, res) => {
+  try {
+    const b = req.body || {};
+    const memberId = b.member_id ?? null;
+    const passId   = b.pass_id ?? null;
+
+    // platform por body (opcional) o deducida del user-agent
+    let p = String(b.platform || "").toLowerCase();
+    let platform =
+      p === "ios" || p === "apple" ? "apple" :
+      p === "google" || p === "android" ? "google" :
+      platformForTelemetry(req); // apple|google|unknown
+
+    // source por body/query (default: 'link')
+    const sourceRaw = String(b.source || req.query.source || "link").toLowerCase();
+    const source =
+      sourceRaw === "qr" ? "qr" :
+      sourceRaw === "barcode" ? "barcode" : "link";
+
+    await pool.query(
+      `INSERT INTO telemetry_events
+         (member_id, pass_id, platform, source, event_type, user_agent, ip_address)
+       VALUES (?, ?, ?, ?, 'install', ?, ?)`,
+      [
+        memberId,
+        passId,
+        platform,
+        source,
+        req.headers["user-agent"] || null,
+        req.headers["x-forwarded-for"] || req.ip || null,
+      ]
+    );
+
+    return res.status(201).json({ ok: true });
+  } catch (e) {
+    console.error("telemetry install error:", e?.message || e);
+    return res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
+
+/* =========================
+   ANALYTICS: /analytics/overview
+   - Soporta ?from=YYYY-MM-DD&to=YYYY-MM-DD
+   - Si no mandas fechas: últimos 30 días
+   ========================= */
+
+
+/* ============ ENVIAR POR EMAIL: /api/wallet/send ============ */
+router.post("/wallet/send", async (req, res) => {
+  try {
+    const { client, campaign, email, platform = "google" } = req.body || {};
+    if (!client || !campaign || !email) {
+      return res.status(400).json({ ok:false, error:"client, campaign y email son requeridos" });
+    }
+
+    // Verificar que exista el miembro (mismo query que /wallet/resolve)
+    const [rows] = await pool.query(
+      `
+      SELECT id
+      FROM members
+      WHERE codigoCliente = ?
+        AND \`codigoCampana\` = ?
+      LIMIT 1
+      `,
+      [client, campaign]
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ ok:false, error:"Miembro no encontrado" });
+    }
+    const memberId = rows[0].id;
+
+    // Token corto (15 min) para /wallet/ios|google/:token
+    const token = jwt.sign({ id: memberId, client, campaign }, SECRET, { expiresIn: "15m" });
+
+    // URLs absolutas (usa PUBLIC_BASE_URL en prod)
+    const base = process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get("host")}`;
+    const appleUrl  = `${base}/api/wallet/ios/${token}`;
+    const googleUrl = `${base}/api/wallet/google/${token}`;
+
+    // Enviar correo
+    await transporter.sendMail({
+      from: process.env.MAIL_FROM || '"PassForge" <no-reply@passforge.local>',
+      to: email,
+      subject: "Tu pase digital",
+      html: `
+        <div style="font-family:Inter,Arial,sans-serif">
+          <h2>Tu pase digital</h2>
+          <p>Haz clic para guardarlo en tu billetera:</p>
+          <p>
+            <a href="${appleUrl}" style="padding:10px 16px;border-radius:8px;border:1px solid #111;text-decoration:none">Add to Apple Wallet</a>
+            &nbsp;
+            <a href="${googleUrl}" style="padding:10px 16px;border-radius:8px;background:#1a73e8;color:#fff;text-decoration:none">Add to Google Wallet</a>
+          </p>
+          <p style="color:#6b7280">El enlace expira en 15 minutos.</p>
+        </div>
+      `,
+    });
+
+    // Telemetría (queda como "enviado por email")
+    await pool.query(
+      `INSERT INTO telemetry_events
+       (member_id, pass_id, platform, source, event_type, user_agent, ip_address, createdAt)
+       VALUES (?, ?, ?, ?, 'install', ?, ?, NOW())`,
+      [
+        memberId,
+        null, // si enlazas el pase, pon aquí su id
+        platform === "apple" ? "apple" : "google",
+        "email",
+        "mailer",
+        null,
+      ]
+    );
+
+    return res.json({ ok:true });
+  } catch (e) {
+    console.error("wallet/send error:", e);
+    return res.status(500).json({ ok:false, error: e.message });
+  }
 });
 
 module.exports = router;

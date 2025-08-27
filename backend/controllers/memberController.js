@@ -2,28 +2,29 @@ const { nanoid } = require("nanoid");
 const db = require("../models");
 const Member = db.Member;
 
+// importa el servicio de correo
+const { sendWelcomeEmail } = require("../services/distribution");
+
 // Obtener todos los miembros
-exports.getAllMembers = async (req, res) => {
+exports.getAllMembers = async (_req, res) => {
   try {
     const members = await Member.findAll({ order: [["id", "ASC"]] });
 
-    // 🔁 Traducimos campos del backend en español → frontend en inglés
-    const formattedMembers = members.map(member => ({
-      id: member.id,
-      externalId: member.external_id,
-      firstName: member.nombre,
-      lastName: member.apellido,
-      dateOfBirth: member.fechaNacimiento,
-      clientCode: member.codigoCliente,
-      campaignCode: member.codigoCampana,
-      tier: member.tipoCliente,
-      email: member.email,
-      mobile: member.telefono,
-      points: member.puntos,
-      gender: member.genero,
-      createdAt: member.createdAt,
-      updatedAt: member.updatedAt
-
+    const formattedMembers = members.map((m) => ({
+      id: m.id,
+      externalId: m.external_id,
+      firstName: m.nombre,
+      lastName: m.apellido,
+      dateOfBirth: m.fechaNacimiento,
+      clientCode: m.codigoCliente,
+      campaignCode: m.codigoCampana,
+      tier: m.tipoCliente,
+      email: m.email,
+      mobile: m.telefono,
+      points: m.puntos,
+      gender: m.genero,
+      createdAt: m.createdAt,
+      updatedAt: m.updatedAt,
     }));
 
     res.json(formattedMembers);
@@ -47,34 +48,48 @@ exports.createMember = async (req, res) => {
       fechaNacimiento: req.body.fechaNacimiento || null,
       codigoCliente: req.body.codigoCliente || null,
       codigoCampana: req.body.codigoCampana || null,
-      tipoCliente: req.body.tipoCliente,
-      email: req.body.email,
-      telefono: req.body.telefono,
-      puntos: req.body.puntos,
-      genero: req.body.genero,
-      //eatedAt: new Date().toISOString().slice(0, 19).replace('T', ' '),
-      //datedAt: null, // O new Date().toISOString() si prefieres
-
+      tipoCliente: req.body.tipoCliente || null,
+      email: req.body.email || null,
+      telefono: req.body.telefono || null,
+      puntos: req.body.puntos || 0,
+      genero: req.body.genero || null,
     };
 
     const newMember = await Member.create(memberData);
 
-    res.json({
+    // Respondemos rápido al frontend
+    res.status(201).json({
       message: "Miembro creado exitosamente",
       member: newMember,
-      externalId
+      externalId,
     });
+
+    // 🚀 Dispara el email en background (no bloqueante)
+    // Pasa todo el objeto o solo el id; el servicio acepta ambos.
+    if (newMember.email) {
+      setImmediate(() =>
+        sendWelcomeEmail({
+          id: newMember.id,
+          codigoCliente: newMember.codigoCliente,
+          codigoCampana: newMember.codigoCampana,
+          nombre: newMember.nombre,
+          apellido: newMember.apellido,
+          email: newMember.email,
+        }).catch((err) =>
+          console.error("sendWelcomeEmail error:", err?.message || err)
+        )
+      );
+    }
   } catch (error) {
     console.error("❌ Error al crear el miembro:", error);
     res.status(500).json({ error: "Error al crear el miembro" });
   }
 };
+
 // Actualizar un miembro
 exports.updateMember = async (req, res) => {
   try {
-    await Member.update(req.body, {
-      where: { id: req.params.id }
-    });
+    await Member.update(req.body, { where: { id: req.params.id } });
     res.json({ message: "Miembro actualizado correctamente" });
   } catch (error) {
     console.error("❌ Error al actualizar el miembro:", error);
@@ -85,9 +100,7 @@ exports.updateMember = async (req, res) => {
 // Eliminar un miembro
 exports.deleteMember = async (req, res) => {
   try {
-    await Member.destroy({
-      where: { id: req.params.id }
-    });
+    await Member.destroy({ where: { id: req.params.id } });
     res.json({ message: "Miembro eliminado correctamente" });
   } catch (error) {
     console.error("❌ Error al eliminar el miembro:", error);
@@ -99,19 +112,17 @@ exports.deleteMember = async (req, res) => {
 exports.assignCardToMember = async (req, res) => {
   try {
     const { clientCode, campaignCode } = req.body;
-
     if (!clientCode || !campaignCode) {
-      return res.status(400).json({ error: "Faltan campos obligatorios (clientCode o campaignCode)" });
+      return res
+        .status(400)
+        .json({ error: "Faltan campos obligatorios (clientCode o campaignCode)" });
     }
 
-    // Buscar al miembro por su código de cliente
     const member = await Member.findOne({ where: { codigoCliente: clientCode } });
-
     if (!member) {
       return res.status(404).json({ error: "Miembro no encontrado con ese código de cliente" });
     }
 
-    // Actualizar el código de campaña
     member.codigoCampana = campaignCode;
     await member.save();
 
@@ -121,4 +132,3 @@ exports.assignCardToMember = async (req, res) => {
     res.status(500).json({ error: "Error al asignar tarjeta al miembro" });
   }
 };
-

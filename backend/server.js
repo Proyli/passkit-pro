@@ -14,6 +14,7 @@ const designRoutes  = require("./routes/designRoutes"); // 👈 diseños
 // wallet vive en backend/src/routes/wallet.js
 const walletRoutes  = require(path.join(__dirname, "src", "routes", "wallet"));
 const analyticsRoutes = require("./src/routes/analytics");
+const { router: distributionRouter } = require("./routes/distribution");
 
 const db = require("./models");
 db.sequelize.sync({ alter: true }).then(() => {
@@ -37,6 +38,7 @@ app.use("/api/designs", designRoutes);   // 👈 diseños
 app.use("/api",         walletRoutes);   // /api/wallet/...
 app.use("/api",         barcodeRouter);  // /api/barcode/...
 app.use("/api", analyticsRoutes);
+app.use("/api", distributionRouter);
 
 app.get('/health', (req, res) => res.status(200).send('OK'));
 

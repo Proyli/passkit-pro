@@ -1,9 +1,11 @@
-import { Plus, User, Settings } from 'lucide-react';
+// src/components/Header.tsx
+import { Plus, User, Settings, Share2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 
 const Header = () => {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
 
   return (
     <header className="glass-effect sticky top-0 z-50 border-b border-white/20">
@@ -23,17 +25,39 @@ const Header = () => {
 
           <div className="flex items-center space-x-3">
             <Link to="/settings">
-              <Button variant="outline" size="sm">
+              <Button
+                variant="outline"
+                size="sm"
+                className={pathname === '/settings' ? 'ring-2 ring-blue-500' : ''}
+              >
                 <Settings className="w-4 h-4 mr-2" />
                 Settings
               </Button>
             </Link>
+
+            {/* NUEVO: Distribution */}
+            <Link to="/distribution">
+              <Button
+                variant="outline"
+                size="sm"
+                className={pathname === '/distribution' ? 'ring-2 ring-blue-500' : ''}
+              >
+                <Share2 className="w-4 h-4 mr-2" />
+                Distribution
+              </Button>
+            </Link>
+
             <Link to="/profile">
-              <Button variant="outline" size="sm">
+              <Button
+                variant="outline"
+                size="sm"
+                className={pathname === '/profile' ? 'ring-2 ring-blue-500' : ''}
+              >
                 <User className="w-4 h-4 mr-2" />
                 Profile
               </Button>
             </Link>
+
             <Button
               onClick={() => navigate('/designer')}
               className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"

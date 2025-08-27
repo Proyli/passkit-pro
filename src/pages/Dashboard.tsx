@@ -11,14 +11,14 @@ import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 import { DuplicatePassModal } from '@/components/modals/DuplicatePassModal';
 import type { Pass } from '@/types/pass.types';
+import { API } from '@/config/api';
 
-// Charts
+// Gráficos
 import {
-  PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Legend
+  ResponsiveContainer,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  PieChart, Pie, Cell
 } from 'recharts';
-
-const API = import.meta.env.VITE_API_BASE_URL || "http://localhost:3900/api";
 
 interface SessionData {
   email: string;
@@ -29,9 +29,9 @@ interface SessionData {
 type Overview = {
   ok: boolean;
   range: { from: string; to: string };
-  totals: { scans: number; installs: number; uninstalls: number; deleted: number };
-  byPlatform: { platform: "apple" | "google" | "unknown"; c: number }[];
-  series: { d: string; scans: number; installs: number; uninstalls: number; deleted: number }[];
+  totals?: { scans?: number; installs?: number; uninstalls?: number; deleted?: number };
+  byPlatform?: { platform: 'apple' | 'google' | 'unknown'; c: number }[];
+  series?: { d: string; scans?: number; installs?: number; uninstalls?: number; deleted?: number }[];
 };
 
 const Dashboard = () => {
@@ -50,8 +50,7 @@ const Dashboard = () => {
     try {
       const parsedSession = JSON.parse(session);
       setSessionData(parsedSession);
-    } catch (error) {
-      console.error('Invalid session data:', error);
+    } catch {
       localStorage.removeItem('passkit_session');
       navigate('/login');
     }
@@ -59,7 +58,7 @@ const Dashboard = () => {
 
   const handleLogout = () => {
     localStorage.removeItem('passkit_session');
-    toast({ title: "Logged out", description: "You have been successfully logged out." });
+    toast({ title: 'Logged out', description: 'You have been successfully logged out.' });
     navigate('/login');
   };
 
@@ -75,25 +74,29 @@ const Dashboard = () => {
       const res = await fetch(`${API}/passes`);
       if (!res.ok) throw new Error(`GET /passes ${res.status}`);
       const data = await res.json();
-      const normalized: Pass[] = data.map((p: any) => ({
+      const list: any[] = Array.isArray(data) ? data : [];
+      const normalized: Pass[] = list.map((p: any) => ({
         ...p,
         id: String(p.id),
-        status: p.status ?? p.estado ?? "active",
+        status: p.status ?? p.estado ?? 'active',
       }));
       setPasses(normalized);
     } catch (e) {
       console.error(e);
-      toast({ title: "No se pudieron cargar los pases", variant: "destructive" });
+      toast({ title: 'No se pudieron cargar los pases', variant: 'destructive' });
     }
   };
-  useEffect(() => { fetchPasses(); }, []);
+  useEffect(() => {
+    fetchPasses();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleDuplicate = (pass: Pass) => {
     setDuplicateModal({ isOpen: true, pass });
   };
 
   const handleSaveDuplicate = async (
-    payload: Pick<Pass, "title" | "description" | "status" | "type">
+    payload: Pick<Pass, 'title' | 'description' | 'status' | 'type'>
   ) => {
     if (!duplicateModal.pass) return;
     const base = duplicateModal.pass;
@@ -102,34 +105,32 @@ const Dashboard = () => {
       title: payload.title,
       description: payload.description,
       type: payload.type,
-      status: payload.status ?? base.status ?? "active",
+      status: payload.status ?? base.status ?? 'active',
       backgroundColor: base.backgroundColor,
       textColor: base.textColor,
-      scans: 0,
-      createdAt: new Date().toISOString().split("T")[0],
     };
 
     try {
       const res = await fetch(`${API}/passes`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      if (!res.ok) throw new Error("Create failed");
+      if (!res.ok) throw new Error('Create failed');
 
       const created = await res.json();
       const newPass: Pass = {
         ...created,
         id: String(created.id),
-        status: created.status ?? created.estado ?? "active",
+        status: created.status ?? created.estado ?? 'active',
       };
 
-      setPasses(prev => [...prev, newPass]);
+      setPasses((prev) => [...prev, newPass]);
       setDuplicateModal({ isOpen: false, pass: null });
-      toast({ title: "Pase duplicado", description: "Guardado correctamente" });
+      toast({ title: 'Pase duplicado', description: 'Guardado correctamente' });
     } catch (err) {
       console.error(err);
-      toast({ title: "No se pudo guardar el duplicado", variant: "destructive" });
+      toast({ title: 'No se pudo guardar el duplicado', variant: 'destructive' });
     }
   };
 
@@ -138,7 +139,7 @@ const Dashboard = () => {
     try {
       const res = await fetch(`${API}/passes/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Delete failed');
-      setPasses(prev => prev.filter(p => p.id !== id));
+      setPasses((prev) => prev.filter((p) => p.id !== id));
       toast({ title: 'Pase eliminado' });
     } catch (err) {
       console.error(err);
@@ -146,41 +147,70 @@ const Dashboard = () => {
     }
   };
 
-  // ========= ANALYTICS (nuevo) =========
-  const [from, setFrom] = useState<string>(""); // YYYY-MM-DD
-  const [to, setTo] = useState<string>("");
+  // ========= ANALYTICS =========
+  const [from, setFrom] = useState<string>(''); // YYYY-MM-DD
+  const [to, setTo] = useState<string>('');
   const [overview, setOverview] = useState<Overview | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams();
-    if (from) params.set("from", from);
-    if (to) params.set("to", to);
+    if (from) params.set('from', from);
+    if (to) params.set('to', to);
     fetch(`${API}/analytics/overview?${params.toString()}`)
-      .then(r => r.json())
-      .then(setOverview)
-      .catch(err => {
+      .then((r) => r.json())
+      .then((json) => setOverview(json as Overview))
+      .catch((err) => {
         console.error(err);
-        toast({ title: "No se pudo cargar analytics", variant: "destructive" });
+        toast({ title: 'No se pudo cargar analytics', variant: 'destructive' });
       });
   }, [from, to, toast]);
 
-  const pieData = useMemo(() => {
-    const map: Record<string, number> = { apple: 0, google: 0, unknown: 0 };
-    (overview?.byPlatform || []).forEach(r => map[r.platform] = r.c);
-    return [
-      { name: "Apple Wallet", value: map.apple },
-      { name: "Google Pay", value: map.google },
-      { name: "Other Wallet", value: map.unknown },
-    ];
+  // Conteos por plataforma derivados
+  const wallets = useMemo(() => {
+    const agg = { apple: 0, google: 0, unknown: 0 as number };
+    (overview?.byPlatform ?? []).forEach((r) => {
+      agg[r.platform] = r.c;
+    });
+    return agg;
   }, [overview]);
 
   const conversionRate = useMemo(() => {
-    if (!overview) return 0;
-    const scans = overview.totals.scans || 1;
-    return Math.round(((overview.totals.installs || 0) / scans) * 100);
+    const scans = overview?.totals?.scans ?? 0;
+    const installs = overview?.totals?.installs ?? 0;
+    if (scans <= 0) return 0;
+    return Math.round((installs / scans) * 100);
   }, [overview]);
 
-  if (!sessionData) return null;
+  // Datos para los gráficos
+  const lineData = useMemo(
+    () =>
+      (overview?.series ?? []).map((r) => ({
+        d: r.d,
+        scans: r.scans ?? 0,
+        installs: r.installs ?? 0,
+        uninstalls: r.uninstalls ?? 0,
+        deleted: r.deleted ?? 0,
+      })),
+    [overview]
+  );
+
+  const pieData = useMemo(
+    () => [
+      { name: 'Apple Wallet', value: wallets.apple },
+      { name: 'Google Pay', value: wallets.google },
+      // Intencionalmente dejamos fuera "unknown" del pie
+    ],
+    [wallets]
+  );
+
+  // Si aún no hay sesión, renderea algo para no dejar blanco
+  if (!sessionData) {
+    return (
+      <div className="min-h-screen grid place-items-center">
+        <span className="text-muted-foreground">Verificando sesión…</span>
+      </div>
+    );
+  }
 
   if (currentView === 'create') {
     return (
@@ -207,6 +237,7 @@ const Dashboard = () => {
     );
   }
 
+
   return (
     <div className="min-h-screen">
       <Header />
@@ -218,7 +249,9 @@ const Dashboard = () => {
             <h1 className="text-3xl font-bold text-foreground mb-2">
               Welcome back, {sessionData.role === 'admin' ? 'Administrator' : 'User'}! 👋
             </h1>
-            <p className="text-lg text-muted-foreground">Manage your digital passes and track their performance.</p>
+            <p className="text-lg text-muted-foreground">
+              Manage your digital passes and track their performance.
+            </p>
             <p className="text-sm text-muted-foreground mt-1">Logged in as: {sessionData.email}</p>
           </div>
           <Button variant="outline" onClick={handleLogout}>
@@ -227,38 +260,63 @@ const Dashboard = () => {
           </Button>
         </div>
 
-        {/* KPIs — ahora alimentados por overview */}
+        {/* KPIs */}
         <StatsCards
           totalPasses={passes.length}
-          qrScans={overview?.totals.scans ?? 0}
-          installs={overview?.totals.installs ?? 0}
+          qrScans={overview?.totals?.scans ?? 0}
+          installs={overview?.totals?.installs ?? 0}
           conversionRate={conversionRate}
         />
 
         {/* Filtros + acciones */}
-        <div className="flex flex-col lg:flex-row gap-4 mb-8">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-            <Input placeholder="Search passes..." className="pl-10 glass-effect border-white/20" />
+        <div className="grid grid-cols-12 gap-3 mb-8 items-end">
+          {/* Search */}
+          <div className="col-span-12 lg:col-span-6">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
+              <Input placeholder="Search passes..." className="h-12 pl-10 rounded-2xl" />
+            </div>
           </div>
 
-          {/* Rango de fechas */}
-          <div className="flex items-end gap-2">
-            <div>
-              <label className="block text-xs text-muted-foreground">From</label>
-              <Input type="date" value={from} onChange={(e)=>setFrom(e.target.value)} />
-            </div>
-            <div>
-              <label className="block text-xs text-muted-foreground">To</label>
-              <Input type="date" value={to} onChange={(e)=>setTo(e.target.value)} />
-            </div>
-            <Button variant="outline" className="glass-effect border-white/20">
+          {/* From */}
+          <div className="col-span-6 sm:col-span-3">
+            <Input
+              type="date"
+              className="h-12 rounded-2xl"
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+            />
+          </div>
+
+          {/* To */}
+          <div className="col-span-6 sm:col-span-3">
+            <Input
+              type="date"
+              className="h-12 rounded-2xl"
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+            />
+          </div>
+
+          {/* Filter */}
+          <div className="col-span-6 sm:col-span-2">
+            <Button
+              variant="outline"
+              className="h-12 w-full rounded-2xl"
+              onClick={() => {
+                // opcional: refetch manual
+              }}
+            >
               <Filter className="w-4 h-4 mr-2" />
               Filter
             </Button>
+          </div>
+
+          {/* Create */}
+          <div className="col-span-6 sm:col-span-2">
             <Button
               onClick={() => setCurrentView('create')}
-              className="bg-gradient-to-r from-primary to-secondary hover:from-primary/90 hover:to-secondary/90"
+              className="h-12 w-full rounded-2xl bg-gradient-to-r from-primary to-secondary hover:from-primary/90 hover:to-secondary/90"
             >
               <Plus className="w-4 h-4 mr-2" />
               Create Pass
@@ -266,44 +324,80 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Gráficas: serie + pie */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">
-          <div className="lg:col-span-2 bg-white rounded-2xl shadow p-4">
-            <h3 className="font-semibold mb-2">Program Performance</h3>
-            <div className="h-64">
-              <ResponsiveContainer>
-                <LineChart data={overview?.series || []}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="d" />
-                  <YAxis allowDecimals={false} />
-                  <Tooltip />
-                  <Legend />
-                  <Line type="monotone" dataKey="scans" />
-                  <Line type="monotone" dataKey="installs" />
-                  <Line type="monotone" dataKey="uninstalls" />
-                  <Line type="monotone" dataKey="deleted" />
-                </LineChart>
-              </ResponsiveContainer>
+        {/* Analíticas */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          {/* Program Performance */}
+          <div className="col-span-1 lg:col-span-2">
+            <div className="bg-white rounded-2xl shadow p-5 h-full">
+              <h3 className="text-lg font-semibold mb-4">Program Performance</h3>
+              <div className="h-[360px]">
+                {lineData.length === 0 ? (
+                  <div className="h-full border-2 border-dashed border-gray-200 rounded-xl flex items-center justify-center">
+                    <span className="text-sm text-muted-foreground">No data</span>
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={lineData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis
+                        dataKey="d"
+                        tickFormatter={(v) => new Date(v).toLocaleDateString()}
+                      />
+                      <YAxis allowDecimals={false} />
+                      <Tooltip
+                        labelFormatter={(v) => new Date(v).toLocaleDateString()}
+                      />
+                      <Legend />
+                      <Line type="monotone" dataKey="scans" stroke="#0ea5e9" name="Scans" />
+                      <Line type="monotone" dataKey="installs" stroke="#22c55e" name="Installs" />
+                      {/* Puedes añadir:
+                          <Line type="monotone" dataKey="uninstalls" stroke="#f59e0b" name="Uninstalls" />
+                          <Line type="monotone" dataKey="deleted" stroke="#ef4444" name="Deleted" />
+                      */}
+                    </LineChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl shadow p-4">
-            <h3 className="font-semibold mb-2">Installed Wallets</h3>
-            <div className="h-64">
-              <ResponsiveContainer>
-                <PieChart>
-                  <Pie dataKey="value" data={pieData} label>
-                    {pieData.map((_, i) => <Cell key={i} />)}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="text-sm mt-2 space-y-1">
-                {pieData.map(p => (
-                  <div key={p.name} className="flex justify-between">
-                    <span>{p.name}</span><span>{p.value}</span>
+          {/* Installed Wallets */}
+          <div className="col-span-1">
+            <div className="bg-white rounded-2xl shadow p-5 h-full">
+              <h3 className="text-lg font-semibold mb-4">Installed Wallets</h3>
+              <div className="h-[360px]">
+                {pieData.every((p) => p.value === 0) ? (
+                  <div className="h-full flex items-center justify-center">
+                    <span className="text-sm text-muted-foreground">No data</span>
                   </div>
-                ))}
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={pieData}
+                        dataKey="value"
+                        nameKey="name"
+                        innerRadius={70}
+                        outerRadius={110}
+                        label
+                      >
+                        <Cell fill="#111827" /> {/* Apple */}
+                        <Cell fill="#1a73e8" /> {/* Google */}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+              <div className="mt-3 space-y-2 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Apple Wallet</span>
+                  <span className="font-semibold">{wallets.apple}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Google Pay</span>
+                  <span className="font-semibold">{wallets.google}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -331,7 +425,7 @@ const Dashboard = () => {
             <Button
               onClick={() => setCurrentView('create')}
               size="lg"
-              className="bg-gradient-to-r from-primary to secondary hover:from-primary/90 hover:to-secondary/90"
+              className="bg-gradient-to-r from-primary to-secondary hover:from-primary/90 hover:to-secondary/90"
             >
               <Plus className="w-5 h-5 mr-2" />
               Create Your First Pass
@@ -344,7 +438,6 @@ const Dashboard = () => {
           const p = duplicateModal.pass as any;
           const { estado, ...rest } = p;
           const passClean: Pass = { ...rest, status: p.status ?? estado ?? 'active' };
-
           return (
             <DuplicatePassModal
               isOpen={duplicateModal.isOpen}

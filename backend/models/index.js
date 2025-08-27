@@ -1,5 +1,7 @@
+// backend/models/index.js
+const path = require("path");
 const { Sequelize } = require("sequelize");
-require("dotenv").config({ path: __dirname + "/../../.env" });
+require("dotenv").config({ path: path.join(__dirname, "..", "..", ".env") });
 
 const sequelize = new Sequelize(
   process.env.DB_NAME,
@@ -12,7 +14,9 @@ const sequelize = new Sequelize(
   }
 );
 
-sequelize.authenticate()
+// Probar conexión (opcional)
+sequelize
+  .authenticate()
   .then(() => console.log("✅ Conectado a MySQL"))
   .catch((err) => console.error("❌ Error en conexión:", err));
 
@@ -20,10 +24,14 @@ const db = {};
 db.Sequelize = Sequelize;
 db.sequelize = sequelize;
 
-db.Member  = require("./member.js")(sequelize, Sequelize);
-db.Pass    = require("./pass")(sequelize, Sequelize);
+// ---- Cargar modelos ----
+db.Member = require("./member")(sequelize, Sequelize);
+db.Pass   = require("./pass")(sequelize, Sequelize);
+// Ajusta el nombre del archivo según tu proyecto: "Design.js" o "design.js"
+db.Design = require("./Design")(sequelize, Sequelize);
 
-// 👇 REGISTRA AQUÍ EL MODELO DESIGN (ajusta el nombre del archivo si usas design.js)
-db.Design  = require("./Design")(sequelize, Sequelize);
+// ---- Ejecutar asociaciones (si el modelo las define) ----
+Object.values(db).forEach((m) => m && m.associate && m.associate(db));
 
+// Exporta el contenedor de modelos
 module.exports = db;

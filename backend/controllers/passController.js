@@ -1,78 +1,128 @@
 // backend/controllers/passController.js
-const db = require("../models");
+const db = require("../models"); // { sequelize, Sequelize, Pass, Member }
 const Pass = db.Pass;
+const Member = db.Member;
 
-// POST /api/passes
+/**
+ * POST /api/passes
+ * Crea un pass. Puedes enviar member_id para relacionarlo al miembro.
+ */
+// backend/controllers/passController.js (createPass)
 exports.createPass = async (req, res) => {
   try {
-    // normaliza status (acepta "estado" o "status")
     const status = req.body.status ?? req.body.estado ?? "active";
-
-    // mapea etiquetas visibles a códigos que guarda la BD
     const TYPE_MAP = { "Loyalty Card": "loyalty", "Coupon": "coupon", "Event Ticket": "event" };
     const type = TYPE_MAP[req.body.type] ?? req.body.type ?? "loyalty";
 
-    const newPass = await Pass.create({
+    const body = {
       title: req.body.title,
       description: req.body.description,
       type,
       status,
-      // si añadiste estas columnas en la tabla:
       backgroundColor: req.body.backgroundColor ?? "#007AFF",
       textColor: req.body.textColor ?? "#FFFFFF",
-      // 👇 fields se guarda como string (TEXT)
       fields: req.body.fields ? JSON.stringify(req.body.fields) : null,
-      scans: req.body.scans ?? 0,
+    };
+
+    // 👇 solo añade member_id si el modelo/columna existe y vino en el body
+    if (db.Pass?.rawAttributes?.member_id && req.body.member_id != null) {
+      body.member_id = req.body.member_id;
+    }
+
+    if (!body.title || !body.description || !body.type) {
+      return res.status(400).json({ ok: false, error: "title, description y type son requeridos" });
+    }
+
+    const created = await db.Pass.create(body);
+
+    const passWithMember = await db.Pass.findByPk(created.id, {
+      include: [{ model: db.Member, as: "member", attributes: ["id", "codigoCliente", "codigoCampana"] }],
     });
 
-    // responde con fields parseado a objeto
-    const out = newPass.toJSON();
+    const out = passWithMember.toJSON();
     if (typeof out.fields === "string") {
       try { out.fields = JSON.parse(out.fields); } catch { out.fields = {}; }
     }
-    res.status(201).json(out);
+
+    return res.status(201).json(out);
   } catch (error) {
     console.error("Error creating pass:", error);
-    res.status(400).json({ error: error.message });
+    // 🔎 devuelve detalle para verlo en Network → Response
+    return res.status(500).json({
+      ok: false,
+      error: error?.original?.sqlMessage || error?.message || String(error),
+    });
   }
 };
 
-// GET /api/passes
+
+/**
+ * GET /api/passes
+ * Lista todos los passes con su member (id, codigoCliente, codigoCampana).
+ */
 exports.getAllPasses = async (_req, res) => {
   try {
-    const rows = await Pass.findAll({ order: [["id", "ASC"]] });
-    const data = rows.map(r => {
+    const rows = await Pass.findAll({
+      order: [["id", "ASC"]],
+      include: [{ model: Member, as: "member", attributes: ["id", "codigoCliente", "codigoCampana"] }],
+    });
+
+    const data = rows.map((r) => {
       const j = r.toJSON();
       if (typeof j.fields === "string") {
         try { j.fields = JSON.parse(j.fields); } catch { j.fields = {}; }
       }
-      // por compatibilidad si aún llega "estado" en algunos registros antiguos
       j.status = j.status ?? j.estado ?? "active";
       return j;
     });
-    res.status(200).json(data);
+
+    return res.json(data);
   } catch (error) {
-    console.error("Error al obtener los pases:", error);
-    res.status(500).json({ error: "Error al obtener los pases" });
+    console.error("getAllPasses error:", error);
+    return res.status(500).json({ ok: false, error: "Error al obtener los pases" });
   }
 };
 
-
+/**
+ * DELETE /api/passes/:id
+ */
 exports.deletePass = async (req, res) => {
   try {
     const { id } = req.params;
-
-    // Buscar el pase
-    const pass = await Pass.findByPk(id);
-    if (!pass) {
-      return res.status(404).json({ message: "Pase no encontrado" });
-    }
-
-    // Eliminar
-    await pass.destroy();
-    res.status(200).json({ message: "Pase eliminado correctamente" });
+    const n = await Pass.destroy({ where: { id } });
+    if (!n) return res.status(404).json({ ok: false, error: "Pass no encontrado" });
+    return res.json({ ok: true });
   } catch (error) {
-    console.error("Error al eliminar pase:", error);
-    res.status(500).json({ error: "Error al eliminar pase" });
+    console.error("deletePass error:", error);
+    return res.status(500).json({ ok: false, error: "Error al eliminar pase" });
+  }
+};
+
+/**
+ * (Opcional) PUT /api/passes/:id/assign-member
+ * Vincula un pass a un member.
+ */
+exports.assignMember = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { member_id } = req.body;
+
+    if (!member_id) return res.status(400).json({ ok: false, error: "member_id es requerido" });
+
+    const pass = await Pass.findByPk(id);
+    if (!pass) return res.status(404).json({ ok: false, error: "Pass no encontrado" });
+
+    const member = await Member.findByPk(member_id);
+    if (!member) return res.status(404).json({ ok: false, error: "Member no encontrado" });
+
+    await pass.update({ member_id });
+
+    const out = await Pass.findByPk(id, {
+      include: [{ model: Member, as: "member", attributes: ["id", "codigoCliente", "codigoCampana"] }],
+    });
+    return res.json(out);
+  } catch (e) {
+    console.error("assignMember error:", e);
+    return res.status(500).json({ ok: false, error: e.message });
   }
 };

@@ -1,68 +1,79 @@
-import React, { useState } from "react";
-import { Button } from "@/components/ui/button";
+// src/components/wallet/AddToWalletButton.tsx
+import { useMemo, useState } from "react";
 
 const API = import.meta.env.VITE_API_BASE_URL || "/api";
 
 type Props = {
-  // 'google' o 'apple' (solo para el label/analytics si quieres mostrar distinto)
-  platform: "google" | "apple";
-
-  // IDs para la telemetría (usa los que tengas; si no, manda null)
-  memberId?: number | string | null;
-  passId?: number | string | null;
-
-  /**
-   * URL final a la que quieres llevar al usuario para añadir a wallet.
-   * Puedes usar directamente tu resolver:
-   *   `${API}/wallet/resolve?client=${client}&campaign=${campaign}`
-   * Tu backend internamente redirige a /wallet/google/:token o /wallet/ios/:token
-   * y de ahí al "saveUrl".
-   */
+  /** /api/wallet/resolve?client=...&campaign=...  (sin platform/source si quieres) */
   resolveUrl: string;
-
-  // (Opcional) text del botón
-  children?: React.ReactNode;
+  memberId?: string | number | null;
+  passId?: string | number | null;
+  className?: string;
 };
 
 export default function AddToWalletButton({
-  platform,
+  resolveUrl,
   memberId = null,
   passId = null,
-  resolveUrl,
-  children,
+  className = "",
 }: Props) {
   const [loading, setLoading] = useState(false);
 
-  const handleClick = async () => {
-    if (loading) return;
+  const env = useMemo(() => {
+    const ua = (typeof navigator !== "undefined" && navigator.userAgent) || "";
+    const isIOS = /iPhone|iPad|iPod/i.test(ua);
+    const isAndroid = /Android/i.test(ua);
+    const platform = isIOS ? "apple" : isAndroid ? "google" : "unknown";
+    const label = isIOS
+      ? "Add to Apple Wallet"
+      : isAndroid
+      ? "Add to Google Wallet"
+      : "Save to Wallet";
+    return { ua, isIOS, isAndroid, platform, label };
+  }, []);
+
+  const onClick = async () => {
+    if (!resolveUrl || loading) return;
     setLoading(true);
     try {
-      // 1) Registrar la "install" antes de salir
-      await fetch(`${API}/telemetry/install`, {
+      // 1) Telemetría (no bloquea)
+      fetch(`${API}/telemetry/install`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        keepalive: true, // intenta completar aunque redirijamos
         body: JSON.stringify({
           member_id: memberId ?? null,
           pass_id: passId ?? null,
+          platform: env.platform, // apple|google|unknown
           source: "link",
         }),
-      });
-    } catch (e) {
-      // no bloquees la redirección si falla la telemetría
-      console.error("telemetry install error:", e);
+      }).catch(() => {});
+
+      // 2) Resolver destino: añadimos platform y source si faltan
+      const url = new URL(resolveUrl, window.location.origin);
+      if (!url.searchParams.get("platform")) {
+        const p = env.platform === "unknown" ? "google" : env.platform; // fallback útil en desktop
+        url.searchParams.set("platform", p === "apple" ? "apple" : "google");
+      }
+      if (!url.searchParams.get("source")) {
+        url.searchParams.set("source", "link");
+      }
+
+      window.location.assign(url.toString());
     } finally {
-      // 2) Ir a la URL que resuelve el pase (tu backend hará el redirect a Google/Apple)
-      window.location.href = resolveUrl;
+      setLoading(false);
     }
   };
 
-  const label =
-    children ??
-    (platform === "google" ? "Add to Google Wallet" : "Add to Apple Wallet");
-
   return (
-    <Button onClick={handleClick} disabled={loading}>
-      {loading ? "Processing..." : label}
-    </Button>
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!resolveUrl || loading}
+      className={`px-4 py-2 rounded-xl border text-sm hover:bg-gray-50 disabled:opacity-60 ${className}`}
+      title={env.label}
+    >
+      {loading ? "Saving…" : env.label}
+    </button>
   );
 }

@@ -18,6 +18,8 @@ import Settings from "./pages/Settings";
 import Profile from "./pages/Profile";
 import Members from "./pages/Members";
 import DesignerPage from "./pages/DesignerPage";
+import Distribution from '@/pages/Distribution';
+import PublicRegister from "@/pages/PublicRegister";
 
 // Designer Subpáginas
 // Páginas Designer (usa rutas relativas)
@@ -96,6 +98,11 @@ const App = () => {
                   </PrivateRoute>
                 }
               />
+              <Route path="/register/:slug" 
+              element={
+              <PublicRegister />
+              } 
+              />
               <Route
                 path="/designer-page"
                 element={
@@ -114,12 +121,22 @@ const App = () => {
                   </PrivateRoute>
                 }
               >
+
                 <Route index element={<DesignerGoogle />} />
                 <Route path="apple" element={<DesignerApple />} />
                 <Route path="register" element={<DesignerRegister />} />
                 <Route path="data-fields" element={<DesignerDataFields />} />
                 <Route path="settings" element={<DesignerSettings />} />
               </Route>
+
+                     <Route
+              path="/distribution"
+              element={
+                <PrivateRoute>
+                  <Distribution />
+                </PrivateRoute>
+              }
+            />
 
               {/* Ruta para no encontrados */}
               <Route path="*" element={<NotFound />} />

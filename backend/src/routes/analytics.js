@@ -1,130 +1,93 @@
 // backend/src/routes/analytics.js
 const express = require("express");
+const { pool } = require("../db");
 const router = express.Router();
-const db = require("../../models"); // { sequelize, Sequelize }
 
-function detectPlatform(req) {
-  const q = String(req.query.platform || "").toLowerCase();
-  if (q === "apple" || q === "ios") return "apple";
-  if (q === "google" || q === "android") return "google";
-  const ua = (req.headers["user-agent"] || "").toLowerCase();
-  if (/iphone|ipad|ipod|ios/.test(ua)) return "apple";
-  if (/android|google/.test(ua)) return "google";
-  return "unknown";
-}
+// helpers
+const pad = (n) => (n < 10 ? "0" + n : "" + n);
+const toDateStart = (d) =>
+  `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} 00:00:00`;
+const toDateEnd = (d) =>
+  `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} 23:59:59`;
 
-// POST /api/telemetry/scan
-router.post("/telemetry/scan", async (req, res) => {
-  try {
-    const platform = detectPlatform(req);
-    const { member_id = null, pass_id = null, source = "qr" } = req.body || {};
-    await db.sequelize.query(
-      `INSERT INTO telemetry_events
-         (member_id, pass_id, platform, source, event_type, user_agent, ip_address, createdAt)
-       VALUES (?, ?, ?, ?, 'scan', ?, ?, NOW())`,
-      {
-        replacements: [
-          member_id,
-          pass_id,
-          platform,
-          source,
-          req.headers["user-agent"] || null,
-          req.headers["x-forwarded-for"] || req.ip || null,
-        ],
-        type: db.Sequelize.QueryTypes.INSERT,
-      }
-    );
-    res.json({ ok: true });
-  } catch (e) {
-    console.error("telemetry scan error:", e);
-    res.status(500).json({ ok: false, error: e.message });
-  }
-});
+const parseDateOnly = (s) => {
+  if (!s) return null;
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+};
 
-// POST /api/telemetry/install
-router.post("/telemetry/install", async (req, res) => {
-  try {
-    const platform = detectPlatform(req);
-    const { member_id = null, pass_id = null, source = "link" } = req.body || {};
-    await db.sequelize.query(
-      `INSERT INTO telemetry_events
-         (member_id, pass_id, platform, source, event_type, user_agent, ip_address, createdAt)
-       VALUES (?, ?, ?, ?, 'install', ?, ?, NOW())`,
-      {
-        replacements: [
-          member_id,
-          pass_id,
-          platform,
-          source,
-          req.headers["user-agent"] || null,
-          req.headers["x-forwarded-for"] || req.ip || null,
-        ],
-        type: db.Sequelize.QueryTypes.INSERT,
-      }
-    );
-    res.json({ ok: true });
-  } catch (e) {
-    console.error("telemetry install error:", e);
-    res.status(500).json({ ok: false, error: e.message });
-  }
-});
-
-// GET /api/analytics/overview?from=YYYY-MM-DD&to=YYYY-MM-DD
 router.get("/analytics/overview", async (req, res) => {
-  const from = req.query.from || new Date().toISOString().slice(0, 10);
-  const to = req.query.to || new Date().toISOString().slice(0, 10);
-
-  const qTotals = `
-    SELECT
-      SUM(event_type='scan')      AS scans,
-      SUM(event_type='install')   AS installs,
-      SUM(event_type='uninstall') AS uninstalls,
-      SUM(event_type='delete')    AS deleted
-    FROM telemetry_events
-    WHERE DATE(createdAt) BETWEEN ? AND ?;
-  `;
-  const qPie = `
-    SELECT platform, COUNT(*) AS c
-    FROM telemetry_events
-    WHERE event_type='scan' AND DATE(createdAt) BETWEEN ? AND ?
-    GROUP BY platform;
-  `;
-  const qSeries = `
-    SELECT DATE(createdAt) AS d,
-           SUM(event_type='scan')      AS scans,
-           SUM(event_type='install')   AS installs,
-           SUM(event_type='uninstall') AS uninstalls,
-           SUM(event_type='delete')    AS deleted
-    FROM telemetry_events
-    WHERE DATE(createdAt) BETWEEN ? AND ?
-    GROUP BY DATE(createdAt)
-    ORDER BY d ASC;
-  `;
-
   try {
-    const [totals] = await db.sequelize.query(qTotals, {
-      replacements: [from, to],
-      type: db.Sequelize.QueryTypes.SELECT,
-    });
-    const pie = await db.sequelize.query(qPie, {
-      replacements: [from, to],
-      type: db.Sequelize.QueryTypes.SELECT,
-    });
-    const series = await db.sequelize.query(qSeries, {
-      replacements: [from, to],
-      type: db.Sequelize.QueryTypes.SELECT,
-    });
+    // rango: últimos 30 días si no mandan ?from&?to (YYYY-MM-DD)
+    const qFrom = parseDateOnly(req.query.from);
+    const qTo   = parseDateOnly(req.query.to);
+    const today = new Date();
+
+    const from = qFrom ?? new Date(today.getFullYear(), today.getMonth(), today.getDate() - 29);
+    const to   = qTo   ?? today;
+
+    const fromSQL = toDateStart(from);
+    const toSQL   = toDateEnd(to);
+
+    // --- CONSULTAS (OJO: createdAt, no created_at) ---
+    const totalsSql = `
+      SELECT
+        SUM(event_type='scan')      AS scans,
+        SUM(event_type='install')   AS installs,
+        SUM(event_type='uninstall') AS uninstalls,
+        SUM(event_type='delete')    AS deleted
+      FROM telemetry_events
+      WHERE createdAt BETWEEN ? AND ?;
+    `;
+
+    const pieSql = `
+      SELECT platform, COUNT(*) AS c
+      FROM telemetry_events
+      WHERE event_type='install'
+        AND createdAt BETWEEN ? AND ?
+      GROUP BY platform;
+    `;
+
+    const seriesSql = `
+      SELECT DATE(createdAt) AS d,
+             SUM(event_type='scan')      AS scans,
+             SUM(event_type='install')   AS installs,
+             SUM(event_type='uninstall') AS uninstalls,
+             SUM(event_type='delete')    AS deleted
+      FROM telemetry_events
+      WHERE createdAt BETWEEN ? AND ?
+      GROUP BY DATE(createdAt)
+      ORDER BY d ASC;
+    `;
+
+    // ejecuta SIEMPRE con parámetros (evita errores de comillas / sintaxis)
+    const [totalsRows] = await pool.query(totalsSql, [fromSQL, toSQL]);
+    const totals = totalsRows?.[0] || { scans: 0, installs: 0, uninstalls: 0, deleted: 0 };
+
+    const [platRows] = await pool.query(pieSql, [fromSQL, toSQL]);
+    const wallets = { apple: 0, google: 0, unknown: 0 };
+    for (const r of platRows || []) wallets[r.platform || "unknown"] = Number(r.c) || 0;
+
+    const [seriesRows] = await pool.query(seriesSql, [fromSQL, toSQL]);
+    const series = (seriesRows || []).map((r) => ({
+      d: r.d,
+      scans: Number(r.scans) || 0,
+      installs: Number(r.installs) || 0,
+      uninstalls: Number(r.uninstalls) || 0,
+      deleted: Number(r.deleted) || 0,
+    }));
 
     res.json({
       ok: true,
-      range: { from, to },
-      totals: totals || { scans: 0, installs: 0, uninstalls: 0, deleted: 0 },
-      byPlatform: pie,
+      range: { from: fromSQL.slice(0, 10), to: toSQL.slice(0, 10) },
+      totals,
+      wallets,
+      byPlatform: (platRows || []).map((r) => ({ platform: r.platform || "unknown", c: Number(r.c) || 0 })),
       series,
     });
   } catch (e) {
-    console.error("overview error:", e);
-    res.status(500).json({ ok: false, error: e.message });
+    console.error("analytics/overview error:", e?.message || e);
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
 });
 

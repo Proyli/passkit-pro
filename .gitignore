@@ -25,6 +25,11 @@ dist-ssr
 
 # Secretos de Google Wallet (cuenta de servicio)
 backend/keys/
-!backend/keys/.keep
+#!backend/keys/.keep
 .env
 .env.*
+
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
