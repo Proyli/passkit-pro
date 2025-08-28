@@ -91,62 +91,54 @@ function platformForTelemetry(req) {
    - Registra evento 'scan' en telemetry_events
    ================================================================ */
 router.get("/wallet/resolve", async (req, res) => {
-  const client   = String(req.query.client || "").trim();
+  const client = String(req.query.client || "").trim();
   const campaign = String(req.query.campaign || "").trim();
-  if (!client || !campaign) {
-    return res.status(400).json({ message: "client & campaign requeridos" });
-  }
+  if (!client || !campaign) return res.status(400).json({ message: "client & campaign requeridos" });
 
   try {
-    const [rows] = await pool.query(
-      `SELECT * FROM members WHERE codigoCliente = ? AND \`codigoCampana\` = ? LIMIT 1`,
-      [client, campaign]
-    );
-    const member = Array.isArray(rows) ? rows[0] : null;
-    if (!member) return res.status(404).json({ message: "Miembro no encontrado" });
+    let member = null;
 
-    const token = jwt.sign(
-      { sub: String(member.id ?? member.memberId ?? client), client, campaign },
-      SECRET,
-      { expiresIn: "15m" }
-    );
+    if (!SKIP_DB) {
+      const [rows] = await pool.query(
+        `SELECT * FROM members WHERE codigoCliente = ? AND \`codigoCampana\` = ? LIMIT 1`,
+        [client, campaign]
+      );
+      member = Array.isArray(rows) ? rows[0] : null;
+      if (!member) return res.status(404).json({ message: "Miembro no encontrado" });
+    } else {
+      member = { id: null }; // modo sin DB
+    }
 
-    const platformUX = pickPlatform(req);         // 'ios' | 'google'
-    const platformDB = platformForTelemetry(req); // 'apple' | 'google' | 'unknown'
+    const token = jwt.sign({ sub: String(member?.id ?? client), client, campaign }, SECRET, { expiresIn: "15m" });
+
+    const platformUX = pickPlatform(req);
+    const platformDB = platformForTelemetry(req);
     const dest = platformUX === "ios"
       ? `${baseUrl(req)}/api/wallet/ios/${token}`
       : `${baseUrl(req)}/api/wallet/google/${token}`;
 
-    // Telemetría: scan
-    const sourceRaw = String(req.query.source || "qr").toLowerCase();
-    const source = sourceRaw === "barcode" ? "barcode" : sourceRaw === "link" ? "link" : "qr";
-    try {
-      await pool.query(
-        `INSERT INTO telemetry_events
-           (member_id, pass_id, platform, source, event_type, user_agent, ip_address)
-         VALUES (?, ?, ?, ?, 'scan', ?, ?)`,
-        [
-          member.id ?? null,
-          null,
-          platformDB,
-          source,
-          req.headers["user-agent"] || null,
-          req.headers["x-forwarded-for"] || req.ip || null,
-        ]
-      );
-    } catch (e) {
-      console.error("telemetry scan insert error:", e.message || e);
+    // Telemetría sólo si hay DB
+    if (!SKIP_DB) {
+      const source = /^(barcode|link)$/i.test(req.query.source) ? req.query.source.toLowerCase() : "qr";
+      try {
+        await pool.query(
+          `INSERT INTO telemetry_events (member_id, pass_id, platform, source, event_type, user_agent, ip_address)
+           VALUES (?, ?, ?, ?, 'scan', ?, ?)`,
+          [member?.id ?? null, null, platformDB, source, req.headers["user-agent"] || null, req.headers["x-forwarded-for"] || req.ip || null]
+        );
+      } catch (e) {
+        console.error("telemetry scan insert error:", e.message || e);
+      }
     }
 
-    if (req.query.dry === "1") {
-      return res.json({ next: dest, platformUX, platformDB, memberId: member?.id || null });
-    }
+    if (req.query.dry === "1") return res.json({ next: dest, platformUX, platformDB, memberId: member?.id || null });
     return res.redirect(302, dest);
   } catch (e) {
     console.error("resolve error:", e);
     return res.status(500).json({ message: "Error interno" });
   }
 });
+
 
 /* -------------------- Placeholder iOS (.pkpass más adelante) -------------------- */
 router.get("/wallet/ios/:token", (req, res) => {
