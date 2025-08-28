@@ -179,6 +179,22 @@ router.get("/wallet/barcode/full", (req, res) => {
   `);
 });
 
+// --- arriba del handler /wallet/google/:token ---
+// --- elegir la CLASS de Google Wallet según la campaña/tier ---
+function pickClassIdByCampaign(campaign) {
+  const c = String(campaign || "").toLowerCase();
+
+  // Ajusta estas condiciones a tus nombres reales
+  if (c.includes("gold") || c.includes("15")) {
+    return process.env.GOOGLE_WALLET_CLASS_ID_GOLD || process.env.GOOGLE_WALLET_CLASS_ID;
+  }
+  if (c.includes("blue") || c.includes("5")) {
+    return process.env.GOOGLE_WALLET_CLASS_ID_BLUE || process.env.GOOGLE_WALLET_CLASS_ID;
+  }
+  return process.env.GOOGLE_WALLET_CLASS_ID; // fallback
+}
+
+
 /* =================================================================
    GET /wallet/google/:token
    - Genera Save URL firmado (JWT RS256) y redirige a Google Wallet
@@ -189,7 +205,7 @@ router.get("/wallet/google/:token", async (req, res) => {
     const { client, campaign } = payload;
 
     const issuer = process.env.GOOGLE_WALLET_ISSUER_ID;
-    const klass  = process.env.GOOGLE_WALLET_CLASS_ID;
+    const klass  = pickClassIdByCampaign(campaign); // <-- usa la class según campaña
     if (!issuer || !klass) {
       return res.status(500).json({ message: "Faltan GOOGLE_WALLET_ISSUER_ID o GOOGLE_WALLET_CLASS_ID" });
     }
@@ -206,6 +222,25 @@ router.get("/wallet/google/:token", async (req, res) => {
     const barcodeFullUrl = `${BASE}/api/wallet/barcode/full?value=${encodeURIComponent(codeValue)}`;
     const codesUrl       = `${BASE}/api/wallet/codes?client=${encodeURIComponent(client)}&campaign=${encodeURIComponent(campaign)}`;
 
+    // (opcional) intenta leer el nombre desde DB para mostrarlo dentro del pase
+    let displayName = "";
+    try {
+      if (!SKIP_DB) {
+        const [rows] = await pool.query(
+          `SELECT nombre, apellido, first_name, last_name
+             FROM members
+            WHERE codigoCliente=? AND \`codigoCampana\`=? LIMIT 1`,
+          [client, campaign]
+        );
+        if (Array.isArray(rows) && rows[0]) {
+          const r = rows[0];
+          const fn = r.nombre || r.first_name || "";
+          const ln = r.apellido || r.last_name || "";
+          displayName = `${fn} ${ln}`.trim();
+        }
+      }
+    } catch {}
+
     const loyaltyObject = {
       id: objectId,
       classId: classRef,
@@ -213,6 +248,8 @@ router.get("/wallet/google/:token", async (req, res) => {
       accountId: client,
       accountName: client,
       barcode: { type: "QR_CODE", value: codeValue, alternateText: codeValue },
+
+      // muestra una imagen (tu código de barras alojado en tu backend)
       imageModulesData: [
         {
           id: "barcode_img",
@@ -222,6 +259,13 @@ router.get("/wallet/google/:token", async (req, res) => {
           }
         }
       ],
+
+      // texto visible dentro del pase (aquí el nombre del miembro si lo tenemos)
+      textModulesData: displayName ? [
+        { header: "Nombre", body: displayName }
+      ] : [],
+
+      // enlaces útiles
       linksModuleData: {
         uris: [
           { id: "codes_ui", description: "Mostrar mi código", uri: codesUrl },
@@ -253,6 +297,7 @@ router.get("/wallet/google/:token", async (req, res) => {
     return res.status(status).json({ message: "Token inválido/vencido o error en Google Wallet", details });
   }
 });
+
 
 /* -------------------- Leer/crear objeto directamente (debug/dev) -------------------- */
 router.get("/wallet/debug/object", async (req, res) => {
