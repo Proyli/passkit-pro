@@ -40,7 +40,7 @@ async function ensureTable() {
        (id, enabled, subject, from_name, button_text, light_bg, dark_bg, body_color_light, body_color_dark, html_body)
        VALUES (1, 1, 'Tu tarjeta de lealtad', 'Distribuidora Alcazarén, S. A.', 'Guardar en el móvil',
                '#143c5c', '#0f2b40', '#c69667', '#0f2b40',
-               '<p><strong>Estimado cliente,</strong></p><p>Es un honor darle la bienvenida a nuestro exclusivo programa <em>Lealtad Alcazaren</em>…</p><p>Acá está tu nueva tarjeta digital. Toca en <strong>{{BUTTON_TEXT}}</strong> y guárdala en tu billetera móvil.</p><p>Saludos cordiales.<br><strong>Distribuidora Alcazarén</strong></p>')`
+               '<p><strong>Estimado/a {{NAME}},</strong></p><p>Bienvenido a nuestro programa <em>Lealtad Alcazarén</em>. A partir de hoy podrás guardar tu tarjeta digital en tu billetera móvil (Apple Wallet o Google Wallet) y disfrutar de tus beneficios en tienda.</p><p>Toca el botón para continuar:</p><p><strong>{{BUTTON_TEXT}}</strong></p><p>Saludos cordiales.<br><strong>Distribuidora Alcazarén</strong></p>')`
     );
   }
 
@@ -67,22 +67,29 @@ function buildResolveUrl(member) {
   const campaign = member.codigoCampana || member.campaignCode;
   if (!client || !campaign) return "";
   const base = API_BASE;
-  return `${base}/api/wallet/resolve?client=${encodeURIComponent(client)}&campaign=${encodeURIComponent(campaign)}&source=email`;
+  // Usa source=link (compatible con tu enum)
+  return `${base}/api/wallet/resolve?client=${encodeURIComponent(client)}&campaign=${encodeURIComponent(campaign)}&source=link`;
 }
 
-function emailHTML(settings, resolveUrl) {
-  const safeBody = String(settings.html_body || "").replaceAll("{{BUTTON_TEXT}}", settings.button_text || "Guardar en el móvil");
+function emailHTML(settings, resolveUrl, member) {
+  const fullName = [member?.nombre, member?.apellido].filter(Boolean).join(" ").trim();
+  const safeBody = String(settings.html_body || "")
+    .replaceAll("{{BUTTON_TEXT}}", settings.button_text || "Guardar en el móvil")
+    .replaceAll("{{NAME}}", fullName || "cliente")
+    .replaceAll("{{CLIENT}}", member?.codigoCliente || "")
+    .replaceAll("{{CAMPAIGN}}", member?.codigoCampana || "");
+
   return `
 <meta name="color-scheme" content="light dark">
 <style>
-  :root{ color-scheme: light dark; }
-  body{ margin:0; padding:0; background:${settings.light_bg}; font:16px system-ui,-apple-system,Segoe UI,Roboto; color:#fff; }
-  .wrap{ max-width:760px; margin:0 auto; padding:24px; }
-  .card{ background:${settings.body_color_light}; padding:24px; border-radius:12px; }
-  .btn{ display:inline-block; padding:12px 18px; background:#8b173c; color:#fff; border-radius:8px; text-decoration:none; font-weight:600; }
+  :root { color-scheme: light dark; }
+  body { margin:0; padding:0; background:${settings.light_bg}; font:16px system-ui,-apple-system,Segoe UI,Roboto; color:#fff; }
+  .wrap { max-width:720px; margin:0 auto; padding:24px; }
+  .card { background:${settings.body_color_light}; padding:28px; border-radius:16px; line-height:1.45; }
+  .btn { display:inline-block; padding:12px 18px; background:#8b173c; color:#fff; border-radius:8px; text-decoration:none; font-weight:600; }
   @media (prefers-color-scheme: dark){
-    body{ background:${settings.dark_bg}; }
-    .card{ background:${settings.body_color_dark}; }
+    body { background:${settings.dark_bg}; }
+    .card { background:${settings.body_color_dark}; }
   }
 </style>
 <div class="wrap">
@@ -179,7 +186,7 @@ async function sendWelcomeEmail(memberId) {
   const resolveUrl = buildResolveUrl(m);
   if (!resolveUrl) return;
 
-  const html = emailHTML(settings, resolveUrl);
+  const html = emailHTML(settings, resolveUrl, m);
   await transporter.sendMail({
     from: process.env.MAIL_FROM || `"${settings.from_name}" <no-reply@passforge.local>`,
     to: m.email,

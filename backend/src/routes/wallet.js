@@ -1,7 +1,7 @@
-// backend/routes/wallet.js
+// backend/src/routes/wallet.js
 const express = require("express");
 const jwt = require("jsonwebtoken");
-const { pool } = require("../db"); // ajusta si tu db está en otro sitio
+const { pool } = require("../db");
 const { GoogleAuth } = require("google-auth-library");
 const nodemailer = require("nodemailer");
 const fs = require("fs");
@@ -13,11 +13,10 @@ function baseUrl(req) {
   return process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get("host")}`;
 }
 
-
 // -------- ENV --------
 const SA_EMAIL = process.env.GOOGLE_SA_EMAIL; // wallet-svc@...iam.gserviceaccount.com
 const SECRET   = process.env.WALLET_TOKEN_SECRET || "changeme";
-const SKIP_DB  = process.env.SKIP_DB === "true";  
+const SKIP_DB  = process.env.SKIP_DB === "true";
 
 // SMTP
 const transporter = nodemailer.createTransport({
@@ -27,7 +26,7 @@ const transporter = nodemailer.createTransport({
   auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
 });
 
-// -------- Carga de PRIVATE_KEY: contenido (GOOGLE_WALLET_PRIVATE_KEY) o archivo (GOOGLE_WALLET_KEY_PATH) --------
+// -------- Carga de PRIVATE_KEY: contenido o archivo --------
 const DEFAULT_KEY_PATH = "./keys/wallet-sa.json";
 const KEY_PATH = process.env.GOOGLE_WALLET_KEY_PATH || DEFAULT_KEY_PATH;
 
@@ -84,11 +83,18 @@ function platformForTelemetry(req) {
   if (p === "google") return "google";
   return "unknown";
 }
+function getDisplayName(row) {
+  if (!row) return null;
+  const f = row.firstname ?? row.first_name ?? row.nombre ?? row.name ?? "";
+  const l = row.lastname ?? row.last_name ?? row.apellido ?? "";
+  const full = `${String(f||"").trim()} ${String(l||"").trim()}`.trim();
+  return full || null;
+}
 
 /* =================================================================
    GET /wallet/resolve?client=L0003&campaign=C3214[&platform=ios|google][&source=qr|barcode|link][&dry=1]
    - Busca al miembro (members.codigoCliente & members.codigoCampana)
-   - Firma token corto (15m)
+   - Firma token (sin expiración)
    - Redirige a /wallet/ios/:token o /wallet/google/:token
    - Registra evento 'scan' en telemetry_events
    ================================================================ */
@@ -111,7 +117,8 @@ router.get("/wallet/resolve", async (req, res) => {
       member = { id: null }; // modo sin DB
     }
 
-    const token = jwt.sign({ sub: String(member?.id ?? client), client, campaign }, SECRET, { expiresIn: "15m" });
+    // Token sin expiración
+    const token = jwt.sign({ sub: String(member?.id ?? client), client, campaign }, SECRET);
 
     const platformUX = pickPlatform(req);
     const platformDB = platformForTelemetry(req);
@@ -119,7 +126,7 @@ router.get("/wallet/resolve", async (req, res) => {
       ? `${baseUrl(req)}/api/wallet/ios/${token}`
       : `${baseUrl(req)}/api/wallet/google/${token}`;
 
-    // Telemetría sólo si hay DB
+    // Telemetría (solo si hay DB)
     if (!SKIP_DB) {
       const source = /^(barcode|link)$/i.test(req.query.source) ? req.query.source.toLowerCase() : "qr";
       try {
@@ -140,7 +147,6 @@ router.get("/wallet/resolve", async (req, res) => {
     return res.status(500).json({ message: "Error interno" });
   }
 });
-
 
 /* -------------------- Placeholder iOS (.pkpass más adelante) -------------------- */
 router.get("/wallet/ios/:token", (req, res) => {
@@ -356,7 +362,8 @@ router.get("/wallet/dev-insert", async (req, res) => {
 router.get("/wallet/patch-image", async (req, res) => {
   try {
     const client   = String(req.query.client || "");
-    const campaign = String(req.query.campaign || "");
+    the_campaign = String(req.query.campaign || "");
+    const campaign = the_campaign; // (para evitar linter)
     if (!client || !campaign) return res.status(400).json({ message: "client & campaign requeridos" });
 
     const issuer   = process.env.GOOGLE_WALLET_ISSUER_ID;
@@ -511,7 +518,7 @@ router.get("/wallet/codes", (req, res) => {
     const goFS = () => document.documentElement.requestFullscreen && document.documentElement.requestFullscreen().catch(()=>{});
     btnFS.onclick = goFS;
 
-    show('bar'); // inicia en barras
+    show('bar');
   </script>`);
 });
 
@@ -554,7 +561,7 @@ router.post("/telemetry/install", async (req, res) => {
   }
 });
 
-/* -------------------- Enviar pase por email -------------------- */
+/* -------------------- Enviar pase por email (manual) -------------------- */
 router.post("/wallet/send", async (req, res) => {
   try {
     const { client, campaign, email, platform = "google" } = req.body || {};
@@ -562,50 +569,77 @@ router.post("/wallet/send", async (req, res) => {
       return res.status(400).json({ ok:false, error:"client, campaign y email son requeridos" });
     }
 
+    // Trae nombre/apellido para saludar
     const [rows] = await pool.query(
-      `SELECT id FROM members WHERE codigoCliente = ? AND \`codigoCampana\` = ? LIMIT 1`,
+      `SELECT id, nombre, apellido
+       FROM members
+       WHERE codigoCliente = ? AND \`codigoCampana\` = ?
+       LIMIT 1`,
       [client, campaign]
     );
-    if (!rows.length) return res.status(404).json({ ok:false, error:"Miembro no encontrado" });
-
+    if (rows.length === 0) {
+      return res.status(404).json({ ok:false, error:"Miembro no encontrado" });
+    }
     const memberId = rows[0].id;
-    const token = jwt.sign({ id: memberId, client, campaign }, SECRET, { expiresIn: "15m" });
+    const displayName = getDisplayName(rows[0]) || "";
+
+    // Token SIN expiración
+    const token = jwt.sign({ id: memberId, client, campaign }, SECRET);
 
     const appleUrl  = `${baseUrl(req)}/api/wallet/ios/${token}`;
     const googleUrl = `${baseUrl(req)}/api/wallet/google/${token}`;
 
+    // Email con light/dark y sin el texto de expiración
     await transporter.sendMail({
       from: process.env.MAIL_FROM || '"PassForge" <no-reply@passforge.local>',
       to: email,
       subject: "Tu pase digital",
       html: `
-        <div style="font-family:Inter,Arial,sans-serif">
-          <h2>Tu pase digital</h2>
-          <p>Haz clic para guardarlo en tu billetera:</p>
-          <p>
-            <a href="${appleUrl}" style="padding:10px 16px;border-radius:8px;border:1px solid #111;text-decoration:none">Add to Apple Wallet</a>
-            &nbsp;
-            <a href="${googleUrl}" style="padding:10px 16px;border-radius:8px;background:#1a73e8;color:#fff;text-decoration:none">Add to Google Wallet</a>
-          </p>
-          <p style="color:#6b7280">El enlace expira en 15 minutos.</p>
+        <meta name="color-scheme" content="light dark">
+        <style>
+          :root{ color-scheme: light dark; }
+          body{ margin:0; background:#111827; color:#f9fafb; font:16px system-ui,-apple-system,Segoe UI,Roboto }
+          .wrap{ max-width:720px; margin:0 auto; padding:24px }
+          .card{ background:#0f2b40; padding:28px; border-radius:16px; line-height:1.45 }
+          .btn{ display:inline-block; padding:12px 18px; border-radius:8px; text-decoration:none; font-weight:600; margin-right:8px }
+          .btn-ios{ border:1px solid #111; color:#111; background:#fff }
+          .btn-gw{ background:#1a73e8; color:#fff }
+          @media (prefers-color-scheme: light){
+            body{ background:#f3f4f6; color:#111827 }
+            .card{ background:#ffffff }
+            .btn-ios{ border-color:#111; color:#111; background:#fff }
+          }
+        </style>
+        <div class="wrap">
+          <div class="card">
+            <h2 style="margin-top:0">Su Tarjeta de Lealtad</h2>
+            ${displayName ? `<p>Estimado/a <strong>${displayName}</strong>,</p>` : ""}
+            <p>Guárdela en su billetera móvil:</p>
+            <p>
+              <a class="btn btn-ios" href="${appleUrl}">Add to Apple Wallet</a>
+              <a class="btn btn-gw" href="${googleUrl}">Add to Google Wallet</a>
+            </p>
+          </div>
         </div>
       `,
     });
 
-    // Registrar como 'install' por email (según tu enum)
-    await pool.query(
-      `INSERT INTO telemetry_events
+    // Telemetría (marca como link para encajar con el enum)
+    try {
+      await pool.query(
+        `INSERT INTO telemetry_events
          (member_id, pass_id, platform, source, event_type, user_agent, ip_address)
-       VALUES (?, ?, ?, ?, 'install', ?, ?)`,
-      [
-        memberId,
-        null,
-        platform === "apple" ? "apple" : "google",
-        "link",   // <= en lugar de "email"
-        "mailer",
-        null,
-      ]
-    );
+         VALUES (?, ?, ?, ?, 'install', ?, ?)`,
+        [
+          memberId,
+          null,
+          platform === "apple" ? "apple" : "google",
+          "link",
+          "mailer",
+          null,
+        ]
+      );
+    } catch {}
 
     return res.json({ ok:true });
   } catch (e) {
