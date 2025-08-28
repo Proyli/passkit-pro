@@ -13,9 +13,11 @@ function baseUrl(req) {
   return process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get("host")}`;
 }
 
+
 // -------- ENV --------
 const SA_EMAIL = process.env.GOOGLE_SA_EMAIL; // wallet-svc@...iam.gserviceaccount.com
 const SECRET   = process.env.WALLET_TOKEN_SECRET || "changeme";
+const SKIP_DB  = process.env.SKIP_DB === "true";  
 
 // SMTP
 const transporter = nodemailer.createTransport({
@@ -599,7 +601,7 @@ router.post("/wallet/send", async (req, res) => {
         memberId,
         null,
         platform === "apple" ? "apple" : "google",
-        "email",            // aunque tu enum es ('qr','barcode','link'), si prefieres 'link' cambia aquí
+        "link",   // <= en lugar de "email"
         "mailer",
         null,
       ]
