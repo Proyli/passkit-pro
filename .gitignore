@@ -33,3 +33,8 @@ Thumbs.db
 ehthumbs.db
 desktop.ini
 
+
+# Ignore env files
+.env
+**/.env
+backend/.env
