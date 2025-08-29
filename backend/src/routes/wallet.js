@@ -83,6 +83,8 @@ function platformForTelemetry(req) {
   if (p === "google") return "google";
   return "unknown";
 }
+
+// --- helpers de datos de miembro ---
 function getDisplayName(row) {
   if (!row) return null;
   const f = row.firstname ?? row.first_name ?? row.nombre ?? row.name ?? "";
@@ -90,11 +92,26 @@ function getDisplayName(row) {
   const full = `${String(f||"").trim()} ${String(l||"").trim()}`.trim();
   return full || null;
 }
+function getExternalId(row){
+  return row?.external_id ?? row?.externalId ?? row?.external ?? null;
+}
+
+// --- elegir la CLASS de Google Wallet según la campaña/tier ---
+function pickClassIdByCampaign(campaign) {
+  const c = String(campaign || "").toLowerCase();
+  if (c.includes("gold") || c.includes("15")) {
+    return process.env.GOOGLE_WALLET_CLASS_ID_GOLD || process.env.GOOGLE_WALLET_CLASS_ID;
+  }
+  if (c.includes("blue") || c.includes("5")) {
+    return process.env.GOOGLE_WALLET_CLASS_ID_BLUE || process.env.GOOGLE_WALLET_CLASS_ID;
+  }
+  return process.env.GOOGLE_WALLET_CLASS_ID; // fallback
+}
 
 /* =================================================================
    GET /wallet/resolve?client=L0003&campaign=C3214[&platform=ios|google][&source=qr|barcode|link][&dry=1]
    - Busca al miembro (members.codigoCliente & members.codigoCampana)
-   - Firma token (sin expiración)
+   - Firma token (sin expiración) con { client, campaign, extId, name }
    - Redirige a /wallet/ios/:token o /wallet/google/:token
    - Registra evento 'scan' en telemetry_events
    ================================================================ */
@@ -117,8 +134,15 @@ router.get("/wallet/resolve", async (req, res) => {
       member = { id: null }; // modo sin DB
     }
 
-    // Token sin expiración
-    const token = jwt.sign({ sub: String(member?.id ?? client), client, campaign }, SECRET);
+    // datos que queremos empujar al token
+    const extId = getExternalId(member);
+    const displayName = getDisplayName(member) || null;
+
+    // Token sin expiración (si quieres expirar, agrega { expiresIn: "15m" })
+    const token = jwt.sign(
+      { sub: String(member?.id ?? client), client, campaign, extId, name: displayName },
+      SECRET
+    );
 
     const platformUX = pickPlatform(req);
     const platformDB = platformForTelemetry(req);
@@ -140,7 +164,7 @@ router.get("/wallet/resolve", async (req, res) => {
       }
     }
 
-    if (req.query.dry === "1") return res.json({ next: dest, platformUX, platformDB, memberId: member?.id || null });
+    if (req.query.dry === "1") return res.json({ next: dest, platformUX, platformDB, memberId: member?.id || null, extId, name: displayName });
     return res.redirect(302, dest);
   } catch (e) {
     console.error("resolve error:", e);
@@ -179,33 +203,18 @@ router.get("/wallet/barcode/full", (req, res) => {
   `);
 });
 
-// --- arriba del handler /wallet/google/:token ---
-// --- elegir la CLASS de Google Wallet según la campaña/tier ---
-function pickClassIdByCampaign(campaign) {
-  const c = String(campaign || "").toLowerCase();
-
-  // Ajusta estas condiciones a tus nombres reales
-  if (c.includes("gold") || c.includes("15")) {
-    return process.env.GOOGLE_WALLET_CLASS_ID_GOLD || process.env.GOOGLE_WALLET_CLASS_ID;
-  }
-  if (c.includes("blue") || c.includes("5")) {
-    return process.env.GOOGLE_WALLET_CLASS_ID_BLUE || process.env.GOOGLE_WALLET_CLASS_ID;
-  }
-  return process.env.GOOGLE_WALLET_CLASS_ID; // fallback
-}
-
-
 /* =================================================================
    GET /wallet/google/:token
    - Genera Save URL firmado (JWT RS256) y redirige a Google Wallet
+   - Usa external_id como código si existe
    ================================================================ */
 router.get("/wallet/google/:token", async (req, res) => {
   try {
     const payload = jwt.verify(req.params.token, SECRET);
-    const { client, campaign } = payload;
+    const { client, campaign, extId, name } = payload;
 
     const issuer = process.env.GOOGLE_WALLET_ISSUER_ID;
-    const klass  = pickClassIdByCampaign(campaign); // <-- usa la class según campaña
+    const klass  = pickClassIdByCampaign(campaign); // class por tier/campaña
     if (!issuer || !klass) {
       return res.status(500).json({ message: "Faltan GOOGLE_WALLET_ISSUER_ID o GOOGLE_WALLET_CLASS_ID" });
     }
@@ -216,60 +225,40 @@ router.get("/wallet/google/:token", async (req, res) => {
     const objectId = `${issuer}.${sanitize(`${client}-${campaign}`)}`;
     const classRef = `${issuer}.${klass}`;
 
-    const codeValue = `PK|${client}|${campaign}`;
+    // código principal: external_id si está, si no PK|cliente|campaña
+    const codeValue = extId || `PK|${client}|${campaign}`;
+
     const BASE = baseUrl(req);
     const barcodeImgUrl  = `${BASE}/api/barcode/${encodeURIComponent(codeValue)}.png`;
     const barcodeFullUrl = `${BASE}/api/wallet/barcode/full?value=${encodeURIComponent(codeValue)}`;
-    const codesUrl       = `${BASE}/api/wallet/codes?client=${encodeURIComponent(client)}&campaign=${encodeURIComponent(campaign)}`;
-
-    // (opcional) intenta leer el nombre desde DB para mostrarlo dentro del pase
-    let displayName = "";
-    try {
-      if (!SKIP_DB) {
-        const [rows] = await pool.query(
-          `SELECT nombre, apellido, first_name, last_name
-             FROM members
-            WHERE codigoCliente=? AND \`codigoCampana\`=? LIMIT 1`,
-          [client, campaign]
-        );
-        if (Array.isArray(rows) && rows[0]) {
-          const r = rows[0];
-          const fn = r.nombre || r.first_name || "";
-          const ln = r.apellido || r.last_name || "";
-          displayName = `${fn} ${ln}`.trim();
-        }
-      }
-    } catch {}
+    const codesUrl       = `${BASE}/api/wallet/codes?value=${encodeURIComponent(codeValue)}`;
 
     const loyaltyObject = {
       id: objectId,
       classId: classRef,
       state: "ACTIVE",
-      accountId: client,
-      accountName: client,
+
+      // Lo que se muestra en el panel derecho:
+      accountId:   codeValue,         // ID de miembro → external_id
+      accountName: name || client,    // Nombre del miembro (si lo tenemos)
+
+      // QR principal del frente
       barcode: { type: "QR_CODE", value: codeValue, alternateText: codeValue },
 
-      // muestra una imagen (tu código de barras alojado en tu backend)
+      // Imagen (barras) y enlaces útiles
       imageModulesData: [
         {
           id: "barcode_img",
           mainImage: {
             sourceUri: { uri: barcodeImgUrl },
-            contentDescription: { defaultValue: { language: "es", value: "Código de barras" } }
+            contentDescription: { defaultValue: { language: "es", value: "Código (barras/QR)" } }
           }
         }
       ],
-
-      // texto visible dentro del pase (aquí el nombre del miembro si lo tenemos)
-      textModulesData: displayName ? [
-        { header: "Nombre", body: displayName }
-      ] : [],
-
-      // enlaces útiles
       linksModuleData: {
         uris: [
-          { id: "codes_ui", description: "Mostrar mi código", uri: codesUrl },
-          { id: "barcode_full", description: "Código de barras (pantalla completa)", uri: barcodeFullUrl }
+          { id: "codes_ui",    description: "Mostrar mi código",                         uri: codesUrl },
+          { id: "barcode_full",description: "Código de barras (pantalla completa)",     uri: barcodeFullUrl }
         ]
       }
     };
@@ -297,7 +286,6 @@ router.get("/wallet/google/:token", async (req, res) => {
     return res.status(status).json({ message: "Token inválido/vencido o error en Google Wallet", details });
   }
 });
-
 
 /* -------------------- Leer/crear objeto directamente (debug/dev) -------------------- */
 router.get("/wallet/debug/object", async (req, res) => {
@@ -327,7 +315,7 @@ router.get("/wallet/debug/object", async (req, res) => {
   }
 });
 
-/* -------------------- Crear (o devolver si existe) loyaltyObject -------------------- */
+/* -------------------- Crear (o devolver si existe) loyaltyObject (dev) -------------------- */
 router.get("/wallet/dev-insert", async (req, res) => {
   try {
     const client   = String(req.query.client || "");
@@ -345,7 +333,7 @@ router.get("/wallet/dev-insert", async (req, res) => {
     const objectId = `${issuer}.${sanitize(`${client}-${campaign}`)}`;
     const classId  = `${issuer}.${klass}`;
 
-    const codeValue = `PK|${client}|${campaign}`;
+    const codeValue = `PK|${client}|${campaign}`; // dev: ejemplo rápido
     const BASE = baseUrl(req);
     const barcodeImgUrl  = `${BASE}/api/barcode/${encodeURIComponent(codeValue)}.png`;
     const barcodeFullUrl = `${BASE}/api/wallet/barcode/full?value=${encodeURIComponent(codeValue)}`;
@@ -407,8 +395,8 @@ router.get("/wallet/dev-insert", async (req, res) => {
 router.get("/wallet/patch-image", async (req, res) => {
   try {
     const client   = String(req.query.client || "");
-    the_campaign = String(req.query.campaign || "");
-    const campaign = the_campaign; // (para evitar linter)
+    const the_campaign = String(req.query.campaign || "");
+    const campaign = the_campaign;
     if (!client || !campaign) return res.status(400).json({ message: "client & campaign requeridos" });
 
     const issuer   = process.env.GOOGLE_WALLET_ISSUER_ID;
@@ -486,6 +474,7 @@ router.get("/wallet/patch-links", async (req, res) => {
 router.get("/wallet/codes", (req, res) => {
   const client   = String(req.query.client || "");
   const campaign = String(req.query.campaign || "");
+  // si envían ?value=... lo usamos directo; si no, caemos a PK|client|campaign
   const value = String(req.query.value || (client && campaign ? `PK|${client}|${campaign}` : ""));
   if (!value) return res.status(400).send("missing value or client/campaign");
 
@@ -614,27 +603,29 @@ router.post("/wallet/send", async (req, res) => {
       return res.status(400).json({ ok:false, error:"client, campaign y email son requeridos" });
     }
 
-    // Trae nombre/apellido para saludar
+    // Trae datos para nombre y external_id
     const [rows] = await pool.query(
-      `SELECT id, nombre, apellido
-       FROM members
-       WHERE codigoCliente = ? AND \`codigoCampana\` = ?
-       LIMIT 1`,
+      `SELECT id, nombre, apellido, first_name, last_name, external_id, externalId, external
+         FROM members
+        WHERE codigoCliente = ? AND \`codigoCampana\` = ?
+        LIMIT 1`,
       [client, campaign]
     );
     if (rows.length === 0) {
       return res.status(404).json({ ok:false, error:"Miembro no encontrado" });
     }
-    const memberId = rows[0].id;
-    const displayName = getDisplayName(rows[0]) || "";
+    const member    = rows[0];
+    const memberId  = member.id;
+    const displayName = getDisplayName(member) || "";
+    const extId       = getExternalId(member) || null;
 
-    // Token SIN expiración
-    const token = jwt.sign({ id: memberId, client, campaign }, SECRET);
+    // Token SIN expiración (incluye extId y name)
+    const token = jwt.sign({ id: memberId, client, campaign, extId, name: displayName }, SECRET);
 
     const appleUrl  = `${baseUrl(req)}/api/wallet/ios/${token}`;
     const googleUrl = `${baseUrl(req)}/api/wallet/google/${token}`;
 
-    // Email con light/dark y sin el texto de expiración
+    // Email con light/dark y sin texto de expiración
     await transporter.sendMail({
       from: process.env.MAIL_FROM || '"PassForge" <no-reply@passforge.local>',
       to: email,
