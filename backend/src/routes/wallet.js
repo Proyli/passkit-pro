@@ -642,24 +642,31 @@ router.post("/wallet/send", async (req, res) => {
       return res.status(400).json({ ok:false, error:"client, campaign y email son requeridos" });
     }
 
-    // Trae datos para nombre y external_id
-    const [rows] = await pool.query(
-      `SELECT id, nombre, apellido, first_name, last_name, external_id, externalId, external
-         FROM members
-        WHERE codigoCliente = ? AND \`codigoCampana\` = ?
-        LIMIT 1`,
-      [client, campaign]
-    );
-    if (rows.length === 0) {
-      return res.status(404).json({ ok:false, error:"Miembro no encontrado" });
-    }
-    const member    = rows[0];
-    const memberId  = member.id;
-    const displayName = getDisplayName(member) || "";
-    const extId       = getExternalId(member) || null;
+    // Intenta traer nombre/apellido para saludar, pero si SKIP_DB=true simplemente continúa
+    let memberId = null;
+    let displayName = "";
 
-    // Token SIN expiración (incluye extId y name)
-    const token = jwt.sign({ id: memberId, client, campaign, extId, name: displayName }, SECRET);
+    if (!SKIP_DB) {
+      try {
+        const [rows] = await pool.query(
+          `SELECT id, nombre, apellido, first_name, last_name
+           FROM members
+           WHERE codigoCliente = ? AND \`codigoCampana\` = ?
+           LIMIT 1`,
+          [client, campaign]
+        );
+        if (rows.length) {
+          memberId = rows[0].id;
+          displayName = getDisplayName(rows[0]) || "";
+        }
+      } catch (e) {
+        // Si la DB falla, seguimos sin nombre
+        console.warn("wallet/send: DB lookup skipped:", e?.message || e);
+      }
+    }
+
+    // Token SIN expiración
+    const token = jwt.sign({ id: memberId, client, campaign }, SECRET);
 
     const appleUrl  = `${baseUrl(req)}/api/wallet/ios/${token}`;
     const googleUrl = `${baseUrl(req)}/api/wallet/google/${token}`;
@@ -699,28 +706,33 @@ router.post("/wallet/send", async (req, res) => {
       `,
     });
 
-    // Telemetría (marca como link para encajar con el enum)
-    try {
-      await pool.query(
-        `INSERT INTO telemetry_events
-         (member_id, pass_id, platform, source, event_type, user_agent, ip_address)
-         VALUES (?, ?, ?, ?, 'install', ?, ?)`,
-        [
-          memberId,
-          null,
-          platform === "apple" ? "apple" : "google",
-          "link",
-          "mailer",
-          null,
-        ]
-      );
-    } catch {}
+    // Telemetría: solo si tenemos DB y memberId
+    if (!SKIP_DB && memberId) {
+      try {
+        await pool.query(
+          `INSERT INTO telemetry_events
+           (member_id, pass_id, platform, source, event_type, user_agent, ip_address)
+           VALUES (?, ?, ?, ?, 'install', ?, ?)`,
+          [
+            memberId,
+            null,
+            platform === "apple" ? "apple" : "google",
+            "link",
+            "mailer",
+            null,
+          ]
+        );
+      } catch (e) {
+        console.warn("wallet/send: telemetry insert skipped:", e?.message || e);
+      }
+    }
 
     return res.json({ ok:true });
   } catch (e) {
     console.error("wallet/send error:", e);
-    return res.status(500).json({ ok:false, error: e.message });
+    return res.status(500).json({ ok:false, error: (e?.message || String(e)) });
   }
 });
+
 
 module.exports = router;
