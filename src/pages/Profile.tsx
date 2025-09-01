@@ -5,6 +5,18 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useProfileStore } from "@/store/profileStore";
 
+// === Tier options → mapean el select a codigoCampana ===
+const TIER_OPTIONS = [
+  { value: "blue",  label: "Blue 5%",  campaign: "blue_5"  },
+  { value: "gold",  label: "Gold 15%", campaign: "gold_15" },
+  { value: "silver",label: "Silver",   campaign: "blue_5"  }, // por ahora se comportan como blue
+  { value: "bronze",label: "Bronze",   campaign: "blue_5"  },
+];
+
+const mapTierToCampaign = (v: string) =>
+  TIER_OPTIONS.find(t => t.value === v)?.campaign ?? "";
+
+
 // Carga diferida para que un error en PassList no rompa Profile
 const PassList = lazy(() => import("./PassList"));
 
@@ -128,21 +140,27 @@ const Profile: React.FC = () => {
               onChange={handleChange}
             />
           </div>
-          <div>
-            <Label>Tipo de cliente</Label>
-            <select
-              name="tipoCliente"
-              value={formData.tipoCliente}
-              onChange={handleChange}
-              className="w-full border rounded-md px-3 py-2"
-            >
-              <option value="">Selecciona un tipo</option>
-              <option value="Black">Black</option>
-              <option value="Gold">Gold</option>
-              <option value="Silver">Silver</option>
-              <option value="Bronze">Bronze</option>
-            </select>
-          </div>
+         <div>
+              <Label>Tipo de cliente</Label>
+              <select
+                name="tipoCliente"
+                value={formData.tipoCliente}
+                onChange={(e) => {
+                  const tipo = e.target.value;
+                  const campaign = mapTierToCampaign(tipo);
+                  const newData = { ...formData, tipoCliente: tipo, codigoCampana: campaign };
+                  setFormData(newData);
+                  setProfileData(newData);
+                }}
+                className="w-full border rounded-md px-3 py-2"
+              >
+                <option value="">Selecciona un tipo</option>
+                {TIER_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+
           <div>
             <Label>Email</Label>
             <Input name="email" value={formData.email} onChange={handleChange} />

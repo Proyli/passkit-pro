@@ -4,96 +4,40 @@ const router = express.Router();
 const { pool } = require("../src/db");
 const nodemailer = require("nodemailer");
 const { nanoid } = require("nanoid");
+const fetch = require("node-fetch"); // npm i node-fetch@2
 
-// ================== SMTP ==================
+const API_BASE = process.env.PUBLIC_BASE_URL || ""; // para links absolutos
+const SKIP_DB = process.env.SKIP_DB === "true";
+
+// ---------- SMTP (para futuros usos locales; hoy delegamos al /wallet/send) ----------
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
   port: Number(process.env.SMTP_PORT || 587),
   secure: false,
-  auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+  auth: { user: process.env.SMPP_USER || process.env.SMTP_USER, pass: process.env.SMTP_PASS },
 });
 
-// ================== Helpers comunes ==================
-const jwt = require("jsonwebtoken");
-const fs  = require("fs");
-const path = require("path");
+// ---------- Defaults cuando no hay DB ----------
+const DEFAULT_SETTINGS = {
+  enabled: true,
+  subject: "Tu tarjeta de lealtad",
+  fromName: "Distribuidora Alcazarén, S. A.",
+  buttonText: "Guardar en el móvil",
+  lightBg: "#143c5c",
+  darkBg: "#0f2b40",
+  bodyColorLight: "#c69667",
+  bodyColorDark: "#0f2b40",
+  htmlBody:
+    '<p><strong>Estimado/a {{DISPLAY_NAME}},</strong></p>' +
+    '<p>Bienvenido al programa <em>Lealtad Alcazaren</em>. Guarde su tarjeta en su billetera móvil.</p>' +
+    '<p><a href="{{GOOGLE_SAVE_URL}}"><strong>{{BUTTON_TEXT}}</strong></a></p>' +
+    '<p style="font-size:13px">¿Usa iPhone? <a href="{{APPLE_URL}}">Añadir a Apple Wallet</a></p>',
+};
 
-const SA_EMAIL = process.env.GOOGLE_SA_EMAIL;
-const SECRET   = process.env.WALLET_TOKEN_SECRET || "changeme";
-const DEFAULT_KEY_PATH = "./keys/wallet-sa.json";
-const KEY_PATH = process.env.GOOGLE_WALLET_KEY_PATH || DEFAULT_KEY_PATH;
-
-let PRIVATE_KEY = null;
-// private key vía env o archivo
-if (process.env.GOOGLE_WALLET_PRIVATE_KEY) {
-  try {
-    const raw = process.env.GOOGLE_WALLET_PRIVATE_KEY.trim();
-    PRIVATE_KEY = raw.includes("BEGIN PRIVATE KEY") ? raw : JSON.parse(raw).private_key;
-  } catch (e) {
-    console.error("❌ GOOGLE_WALLET_PRIVATE_KEY inválida:", e.message);
-  }
-}
-if (!PRIVATE_KEY) {
-  try {
-    const resolved = fs.existsSync(KEY_PATH) ? KEY_PATH : DEFAULT_KEY_PATH;
-    const fileRaw = fs.readFileSync(resolved, "utf8");
-    PRIVATE_KEY = JSON.parse(fileRaw).private_key;
-  } catch (e) {
-    console.error("❌ No pude leer private_key:", e.message);
-  }
-}
-if (!PRIVATE_KEY) console.warn("⚠️  PRIVATE_KEY vacío. Google Wallet no podrá firmar.");
-
-const sanitize = (s) => String(s).replace(/[^\w.-]/g, "_");
-const baseUrl = () => process.env.PUBLIC_BASE_URL || "";
-
-// elegir CLASS según campaña/tier (igual que en wallet.js)
-function pickClassIdByCampaign(campaign) {
-  const c = String(campaign || "").toLowerCase();
-  if (c.includes("gold") || c.includes("15"))  return process.env.GOOGLE_WALLET_CLASS_ID_GOLD || process.env.GOOGLE_WALLET_CLASS_ID;
-  if (c.includes("blue") || c.includes("5"))   return process.env.GOOGLE_WALLET_CLASS_ID_BLUE || process.env.GOOGLE_WALLET_CLASS_ID;
-  return process.env.GOOGLE_WALLET_CLASS_ID;
-}
-
-// Google: Save URL directo (pay.google.com) – RS256 + typ: savetowallet
-function buildGoogleSaveUrl({ client, campaign, externalId, displayName }) {
-  const issuer = process.env.GOOGLE_WALLET_ISSUER_ID;
-  const klass  = pickClassIdByCampaign(campaign);
-
-  if (!issuer || !klass) throw new Error("Faltan GOOGLE_WALLET_ISSUER_ID o CLASS_ID");
-  if (!SA_EMAIL || !PRIVATE_KEY) throw new Error("Faltan GOOGLE_SA_EMAIL o PRIVATE_KEY");
-
-  const objectId = `${issuer}.${sanitize(`${client}-${campaign}`)}`;
-  const classRef = `${issuer}.${klass}`;
-  const codeValue = externalId || client;
-
-  const loyaltyObject = {
-    id: objectId,
-    classId: classRef,
-    state: "ACTIVE",
-    accountId:   codeValue,
-    accountName: displayName || codeValue,
-    barcode: { type: "QR_CODE", value: codeValue, alternateText: codeValue },
-  };
-
-  const saveToken = jwt.sign(
-    { iss: SA_EMAIL, aud: "google", typ: "savetowallet", payload: { loyaltyObjects: [loyaltyObject] } },
-    PRIVATE_KEY,
-    { algorithm: "RS256" }
-  );
-
-  return `https://pay.google.com/gp/v/save/${saveToken}`;
-}
-
-// Apple: URL a tu endpoint que genera .pkpass
-function buildAppleUrl({ client, campaign }) {
-  const token = jwt.sign({ client, campaign }, SECRET);
-  return `${baseUrl()}/api/wallet/ios/${token}`;
-}
-
-// ================== DB bootstrap ==================
+// ---------- DB bootstrap ----------
 async function ensureTable() {
-  // Settings del email editable por admin
+  if (SKIP_DB) return; // en Render sin DB: no crear nada
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS distribution_settings (
       id TINYINT PRIMARY KEY DEFAULT 1,
@@ -114,17 +58,12 @@ async function ensureTable() {
     await pool.query(
       `INSERT INTO distribution_settings
        (id, enabled, subject, from_name, button_text, light_bg, dark_bg, body_color_light, body_color_dark, html_body)
-       VALUES (1, 1, 'Su Tarjeta de Lealtad Alcazaren', 'Distribuidora Alcazarén, S. A.', 'Guardar en el móvil',
+       VALUES (1, 1, 'Tu tarjeta de lealtad', 'Distribuidora Alcazarén, S. A.', 'Guardar en el móvil',
                '#143c5c', '#0f2b40', '#c69667', '#0f2b40',
-               '<p><strong>Estimado/a {{DISPLAY_NAME}},</strong></p>\
-<p>Es un honor darle la bienvenida al programa <em>Lealtad Alcazaren</em>, diseñado para premiar su preferencia con beneficios únicos.</p>\
-<p>Acceda a sus beneficios desde su billetera digital y disfrute de descuentos exclusivos.</p>\
-<p><em>Aplican restricciones.</em></p>\
-<p style="font-size:13px">¿Dudas? 2429-5959 ext. 2120 (Capital), ext. 1031 (Xelajú) o <a href="mailto:alcazaren@alcazaren.com.gt">alcazaren@alcazaren.com.gt</a>.</p>')
-    `);
+               '<p><strong>Estimado/a {{DISPLAY_NAME}},</strong></p><p>Bienvenido al programa <em>Lealtad Alcazaren</em>. Guarde su tarjeta en su billetera móvil.</p><p><a href=\"{{GOOGLE_SAVE_URL}}\"><strong>{{BUTTON_TEXT}}</strong></a></p><p style=\"font-size:13px\">¿Usa iPhone? <a href=\"{{APPLE_URL}}\">Añadir a Apple Wallet</a></p>')`
+    );
   }
 
-  // Config del formulario por tier
   await pool.query(`
     CREATE TABLE IF NOT EXISTS registration_forms (
       tier_id VARCHAR(64) PRIMARY KEY,
@@ -141,65 +80,39 @@ async function ensureTable() {
   `);
 }
 
-// ================== Email render ==================
-function emailHTML(settings, member, urls) {
-  const fullName =
-    [member?.nombre, member?.apellido].filter(Boolean).join(" ").trim() ||
-    "cliente";
-
-  const safeBody = String(settings.html_body || "")
-    .replaceAll("{{DISPLAY_NAME}}", fullName)
-    .replaceAll("{{BUTTON_TEXT}}", settings.button_text || "Guardar en el móvil")
-    .replaceAll("{{CLIENT}}", member?.codigoCliente || "")
-    .replaceAll("{{CAMPAIGN}}", member?.codigoCampana || "")
-    .replaceAll("{{GOOGLE_SAVE_URL}}", urls.googleSaveUrl || "")
-    .replaceAll("{{APPLE_URL}}", urls.appleUrl || "");
-
-  // Si el admin no incluyó placeholders de links, añadimos CTA estándar
-  const cta =
-    (safeBody.includes("{{GOOGLE_SAVE_URL}}") || safeBody.includes("{{APPLE_URL}}"))
-      ? "" // el admin controla los enlaces dentro del cuerpo
-      : `
-        <p style="margin-top:20px">
-          <a class="btn" href="${urls.googleSaveUrl}">${settings.button_text || "Guardar en el móvil"}</a>
-        </p>
-        <p style="font-size:13px">¿Usa iPhone? <a href="${urls.appleUrl}" style="color:#fff;text-decoration:underline;">Añadir a Apple Wallet</a></p>
-      `;
-
-  return `
-<meta name="color-scheme" content="light dark">
-<style>
-  :root { color-scheme: light dark; }
-  body { margin:0; padding:0; background:${settings.light_bg}; font:16px system-ui,-apple-system,Segoe UI,Roboto; color:#fff; }
-  .wrap { max-width:720px; margin:0 auto; padding:24px; }
-  .card { background:${settings.body_color_light}; padding:28px; border-radius:16px; line-height:1.5; }
-  .btn { display:inline-block; padding:12px 18px; background:#8b173c; color:#fff; border-radius:8px; text-decoration:none; font-weight:700; }
-  @media (prefers-color-scheme: dark){
-    body { background:${settings.dark_bg}; }
-    .card { background:${settings.body_color_dark}; }
-  }
-</style>
-<div class="wrap">
-  <div class="card">
-    <h2 style="margin-top:0">Su Tarjeta de Lealtad</h2>
-    ${safeBody}
-    ${cta}
-  </div>
-</div>`.trim();
+// ---------- helpers ----------
+function makeSlug() {
+  return nanoid(10);
+}
+function defaultFormForTier(tierId) {
+  return {
+    tierId,
+    slug: makeSlug(),
+    enabled: 1,
+    title: "Register Below",
+    intro: "Necesitamos que ingreses información que garantice el acceso a tu tarjeta de lealtad.",
+    buttonText: "REGISTER",
+    primaryColor: "#8b173c",
+    fields: [
+      { name: "nombre", label: "First Name", type: "text", required: true },
+      { name: "apellido", label: "Last Name", type: "text", required: true },
+      { name: "email", label: "Email", type: "email", required: true },
+      { name: "telefono", label: "Phone", type: "tel", required: false },
+    ],
+  };
+}
+function buildResolveUrl(member) {
+  const client = member.codigoCliente || member.clientCode;
+  const campaign = member.codigoCampana || member.campaignCode;
+  if (!client || !campaign) return "";
+  return `${API_BASE}/api/wallet/resolve?client=${encodeURIComponent(client)}&campaign=${encodeURIComponent(campaign)}&source=link`;
 }
 
-// ================== Admin guard ==================
-// ⚠️ Ajusta a tu auth real (JWT, session, etc.)
-// Aquí permitimos pasar `x-role: admin` como fallback de prueba.
-function requireAdmin(req, res, next) {
-  const role = req.user?.role || req.headers["x-role"];
-  if (role === "admin") return next();
-  return res.status(403).json({ ok:false, error:"Solo administradores" });
-}
-
-// ================== SETTINGS (solo admins) ==================
-router.get("/distribution/settings", requireAdmin, async (_req, res) => {
+// ========== SETTINGS ==========
+router.get("/distribution/settings", async (_req, res) => {
   try {
+    if (SKIP_DB) return res.json(DEFAULT_SETTINGS);
+
     await ensureTable();
     const [[row]] = await pool.query(`
       SELECT enabled, subject, from_name AS fromName, button_text AS buttonText,
@@ -207,14 +120,16 @@ router.get("/distribution/settings", requireAdmin, async (_req, res) => {
              body_color_light AS bodyColorLight, body_color_dark AS bodyColorDark,
              html_body AS htmlBody
       FROM distribution_settings WHERE id=1`);
-    res.json(row || {});
+    res.json(row || DEFAULT_SETTINGS);
   } catch (e) {
-    res.status(500).json({ ok:false, error:String(e.message||e) });
+    res.status(500).json({ ok: false, error: String(e?.message || e || "settings error") });
   }
 });
 
-router.post("/distribution/settings", requireAdmin, async (req, res) => {
+router.post("/distribution/settings", async (req, res) => {
   try {
+    if (SKIP_DB) return res.json({ ok: true }); // no-op cuando no hay DB
+
     await ensureTable();
     const b = req.body || {};
     await pool.query(
@@ -228,59 +143,70 @@ router.post("/distribution/settings", requireAdmin, async (req, res) => {
         b.htmlBody || ""
       ]
     );
-    res.json({ ok:true });
+    res.json({ ok: true });
   } catch (e) {
-    res.status(500).json({ ok:false, error:String(e.message||e) });
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
 });
 
-// ================== TIERS / ENROLLMENT ==================
-router.get("/distribution/tiers", requireAdmin, async (_req, res) => {
-  res.json([{ id:"gold_15", name:"Gold 15%" }, { id:"base", name:"Blue 5%" }]);
+// ========== TIERS ==========
+router.get("/distribution/tiers", async (_req, res) => {
+  res.json([{ id: "gold_15", name: "Gold 15%" }, { id: "blue_5", name: "Blue 5%" }]);
 });
 
+// Enrollment simple (puedes persistir si quieres)
 router.get("/distribution/enrollment", async (_req, res) => {
-  res.json({ gold_15: true, base: true });
+  res.json({ gold_15: true, blue_5: true });
+});
+router.post("/distribution/enrollment", async (_req, res) => {
+  // si necesitas persistir, guarda _req.body; por ahora devolvemos ok
+  res.json({ ok: true });
 });
 
-// ================== SEND WELCOME (usado por register submit) ==================
-async function sendWelcomeEmail(memberId) {
-  await ensureTable();
-  const [[settings]] = await pool.query(`SELECT * FROM distribution_settings WHERE id=1`);
-  if (!settings || !settings.enabled) return;
+// ========== SEND WELCOME: delega al endpoint moderno ==========
+async function sendWelcomeEmail(memberIdOrObject) {
+  try {
+    // Cargar miembro según lo que recibamos
+    let m = null;
+    if (memberIdOrObject && typeof memberIdOrObject === "object") {
+      m = memberIdOrObject;
+    } else if (!SKIP_DB) {
+      const [[row]] = await pool.query(
+        `SELECT id, codigoCliente, codigoCampana, nombre, apellido, email
+         FROM members WHERE id=? LIMIT 1`, [memberIdOrObject]
+      );
+      m = row;
+    }
+    if (!m || !m.email || !m.codigoCliente || !m.codigoCampana) return;
 
-  const [[m]] = await pool.query(
-    `SELECT id, codigoCliente, codigoCampana, nombre, apellido, email, external_id
-     FROM members WHERE id=? LIMIT 1`, [memberId]
-  );
-  if (!m || !m.email) return;
-
-  const displayName = [m.nombre, m.apellido].filter(Boolean).join(" ").trim();
-  const googleSaveUrl = buildGoogleSaveUrl({
-    client: m.codigoCliente,
-    campaign: m.codigoCampana,
-    externalId: m.external_id || m.codigoCliente,
-    displayName
-  });
-  const appleUrl = buildAppleUrl({ client: m.codigoCliente, campaign: m.codigoCampana });
-
-  const html = emailHTML(settings, m, { googleSaveUrl, appleUrl });
-
-  await transporter.sendMail({
-    from: process.env.MAIL_FROM || `"${settings.from_name}" <no-reply@passforge.local>`,
-    to: m.email,
-    subject: settings.subject || "Tu pase digital",
-    html,
-  });
+    // Delegar al endpoint que arma el Google Save URL directo y envía el correo
+    // oneButton=true -> correo con botón rojo "Guardar en el móvil"
+    await fetch(`${API_BASE}/api/wallet/send?oneButton=true`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        client:   m.codigoCliente,
+        campaign: m.codigoCampana,   // "gold_15" o "blue_5"
+        email:    m.email
+      })
+    }).catch(() => {});
+  } catch (e) {
+    console.warn("sendWelcomeEmail delegation error:", e?.message || e);
+  }
 }
 
-// ================== REGISTER BUILDER (admin) ==================
-router.get("/distribution/register-config", requireAdmin, async (req, res) => {
+// ========== REGISTER BUILDER (admin) ==========
+router.get("/distribution/register-config", async (req, res) => {
   try {
-    await ensureTable();
     const tier = String(req.query.tier || "").trim();
     if (!tier) return res.status(400).json({ ok:false, error:"tier requerido" });
 
+    if (SKIP_DB) {
+      const cfg = defaultFormForTier(tier);
+      return res.json({ ok: true, ...cfg });
+    }
+
+    await ensureTable();
     const [rows] = await pool.query(`SELECT * FROM registration_forms WHERE tier_id=? LIMIT 1`, [tier]);
     if (rows.length) {
       const r = rows[0];
@@ -310,17 +236,21 @@ router.get("/distribution/register-config", requireAdmin, async (req, res) => {
     );
     res.json({ ok:true, ...cfg });
   } catch (e) {
-    res.status(500).json({ ok:false, error:String(e.message||e) });
+    res.status(500).json({ ok:false, error:String(e?.message||e) });
   }
 });
 
-router.post("/distribution/register-config", requireAdmin, async (req, res) => {
+router.post("/distribution/register-config", async (req, res) => {
   try {
-    await ensureTable();
     const b = req.body || {};
     const tier = String(b.tierId || "").trim();
     if (!tier) return res.status(400).json({ ok:false, error:"tierId requerido" });
 
+    if (SKIP_DB) {
+      return res.json({ ok:true, slug: makeSlug() });
+    }
+
+    await ensureTable();
     const fields = Array.isArray(b.fields) ? b.fields : [];
     await pool.query(
       `INSERT INTO registration_forms
@@ -348,37 +278,18 @@ router.post("/distribution/register-config", requireAdmin, async (req, res) => {
     const [[row]] = await pool.query(`SELECT slug FROM registration_forms WHERE tier_id=?`, [tier]);
     res.json({ ok:true, slug: row?.slug });
   } catch (e) {
-    res.status(500).json({ ok:false, error:String(e.message||e) });
+    res.status(500).json({ ok:false, error:String(e?.message||e) });
   }
 });
 
-// ================== REGISTER público (slug) ==================
-function makeSlug() { return nanoid(10); }
-
-function defaultFormForTier(tierId) {
-  return {
-    tierId,
-    slug: makeSlug(),
-    enabled: 1,
-    title: "Register Below",
-    intro: "Necesitamos que ingreses información que garantice el acceso a tu tarjeta de lealtad.",
-    buttonText: "REGISTER",
-    primaryColor: "#8b173c",
-    fields: [
-      { name: "nombre", label: "First Name", type: "text", required: true },
-      { name: "apellido", label: "Last Name", type: "text", required: true },
-      { name: "email", label: "Email", type: "email", required: true },
-      { name: "telefono", label: "Phone", type: "tel", required: false },
-    ],
-  };
-}
-
 router.get("/distribution/register-config-by-slug", async (req, res) => {
   try {
-    await ensureTable();
     const slug = String(req.query.slug || "").trim();
     if (!slug) return res.status(400).json({ ok:false, error:"slug requerido" });
 
+    if (SKIP_DB) return res.status(404).json({ ok:false });
+
+    await ensureTable();
     const [[r]] = await pool.query(`SELECT * FROM registration_forms WHERE slug=? LIMIT 1`, [slug]);
     if (!r || !r.enabled) return res.status(404).json({ ok:false });
 
@@ -393,16 +304,25 @@ router.get("/distribution/register-config-by-slug", async (req, res) => {
       fields: JSON.parse(r.fields_json || "[]"),
     });
   } catch (e) {
-    res.status(500).json({ ok:false, error:String(e.message||e) });
+    res.status(500).json({ ok:false, error:String(e?.message||e) });
   }
 });
 
 router.post("/distribution/register-submit", async (req, res) => {
   try {
-    await ensureTable();
     const b = req.body || {};
     const slug = String(b.slug || "").trim();
     if (!slug) return res.status(400).json({ ok:false, error:"slug requerido" });
+
+    if (SKIP_DB) {
+      // sin DB: genera datos sintéticos y responde
+      const client   = b.codigoCliente || `M-${nanoid(6).toUpperCase()}`;
+      const campaign = b.codigoCampana || "blue_5";
+      const resolveUrl = `${API_BASE}/api/wallet/resolve?client=${encodeURIComponent(client)}&campaign=${encodeURIComponent(campaign)}&source=register`;
+      return res.json({ ok:true, memberId: 0, resolveUrl, client, campaign });
+    }
+
+    await ensureTable();
 
     const [[form]] = await pool.query(`SELECT tier_id FROM registration_forms WHERE slug=? LIMIT 1`, [slug]);
     if (!form) return res.status(404).json({ ok:false, error:"form no encontrado" });
@@ -425,15 +345,10 @@ router.post("/distribution/register-submit", async (req, res) => {
     const memberId = r.insertId;
     try { await sendWelcomeEmail(memberId); } catch {}
 
-    const displayName = [nombre, apellido].filter(Boolean).join(" ").trim();
-    const googleSaveUrl = buildGoogleSaveUrl({
-      client, campaign, externalId: client, displayName
-    });
-    const appleUrl = buildAppleUrl({ client, campaign });
-
-    res.json({ ok:true, memberId, client, campaign, googleSaveUrl, appleUrl });
+    const resolveUrl = `${API_BASE}/api/wallet/resolve?client=${encodeURIComponent(client)}&campaign=${encodeURIComponent(campaign)}&source=register`;
+    res.json({ ok:true, memberId, resolveUrl, client, campaign });
   } catch (e) {
-    res.status(500).json({ ok:false, error:String(e.message||e) });
+    res.status(500).json({ ok:false, error:String(e?.message||e) });
   }
 });
 

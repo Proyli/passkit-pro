@@ -71,6 +71,19 @@ function getExternalId(row){
   return row?.external_id ?? row?.externalId ?? row?.external ?? null;
 }
 
+function pickClassIdByTier(tier) {
+  const t = String(tier || "").toLowerCase();
+  if (!t) return null;
+  if (t.includes("gold") || t.includes("15")) {
+    return process.env.GOOGLE_WALLET_CLASS_ID_GOLD || process.env.GOOGLE_WALLET_CLASS_ID;
+  }
+  if (t.includes("blue") || t.includes("5")) {
+    return process.env.GOOGLE_WALLET_CLASS_ID_BLUE || process.env.GOOGLE_WALLET_CLASS_ID;
+  }
+  return null; // otras variantes aún no mapeadas
+}
+
+
 // -------- elegir CLASS según campaña/tier --------
 function pickClassIdByCampaign(campaign) {
   const c = String(campaign || "").toLowerCase();
@@ -84,9 +97,12 @@ function pickClassIdByCampaign(campaign) {
 }
 
 // ------ Helper: construir Save URL (Google Wallet) ------
-function buildGoogleSaveUrl({ client, campaign, externalId, displayName }) {
+// ------ Helper: construir Save URL (Google Wallet) ------
+function buildGoogleSaveUrl({ client, campaign, externalId, displayName, classShortId }) {
   const issuer = process.env.GOOGLE_WALLET_ISSUER_ID;
-  const klass  = pickClassIdByCampaign(campaign);
+  // Si me pasan la clase por tier, úsala; si no, decide por campaña:
+  const klass  = classShortId || pickClassIdByCampaign(campaign);
+
   if (!issuer || !klass) throw new Error("Faltan GOOGLE_WALLET_ISSUER_ID o CLASS_ID");
   if (!SA_EMAIL || !PRIVATE_KEY) throw new Error("Faltan GOOGLE_SA_EMAIL o PRIVATE_KEY");
 
@@ -103,14 +119,16 @@ function buildGoogleSaveUrl({ client, campaign, externalId, displayName }) {
     barcode: { type: "QR_CODE", value: codeValue, alternateText: codeValue },
   };
 
+  // 👇 usa el typ correcto
   const saveToken = jwt.sign(
-    { iss: SA_EMAIL, aud: "google", typ: "savetoandroidpay", payload: { loyaltyObjects: [loyaltyObject] } },
+    { iss: SA_EMAIL, aud: "google", typ: "savetowallet", payload: { loyaltyObjects: [loyaltyObject] } },
     PRIVATE_KEY,
     { algorithm: "RS256" }
   );
 
   return `https://pay.google.com/gp/v/save/${saveToken}`;
 }
+
 
 // -------------------- Placeholder iOS (.pkpass más adelante) --------------------
 router.get("/wallet/ios/:token", (req, res) => {
@@ -131,27 +149,98 @@ router.get("/wallet/ios/:token", (req, res) => {
 // =================================================================
 // En wallet.js
 router.get("/wallet/google/:token", async (req, res) => {
-  const t = req.params.token;
-  let payload;
   try {
-    payload = jwt.verify(t, SECRET);
-  } catch (e) {
-    if (e.name === "TokenExpiredError") {
-      payload = jwt.decode(t); // ignoramos exp para rescatar client/campaign
-    } else {
-      return res.status(401).json({ message: "Token inválido" });
+    const payload = jwt.verify(req.params.token, SECRET);
+    const { client, campaign } = payload;
+
+    const issuer = process.env.GOOGLE_WALLET_ISSUER_ID;
+    if (!issuer) return res.status(500).json({ message: "Falta GOOGLE_WALLET_ISSUER_ID" });
+    if (!SA_EMAIL || !PRIVATE_KEY) {
+      return res.status(500).json({ message: "Faltan GOOGLE_SA_EMAIL o PRIVATE_KEY" });
     }
+
+    // ===== lee datos del miembro: external_id, nombre Y tipoCliente (tier) =====
+    let externalId = client;
+    let displayName = client;
+    let tipoCliente = null;
+
+    if (!SKIP_DB) {
+      try {
+        const [rows] = await pool.query(
+          `SELECT external_id, nombre, apellido, first_name, last_name, tipoCliente
+             FROM members
+            WHERE codigoCliente=? AND \`codigoCampana\`=? LIMIT 1`,
+          [client, campaign]
+        );
+        if (Array.isArray(rows) && rows[0]) {
+          const r = rows[0];
+          externalId = r.external_id || client;
+          const fn = r.nombre || r.first_name || "";
+          const ln = r.apellido || r.last_name || "";
+          displayName = `${String(fn||"").trim()} ${String(ln||"").trim()}`.trim() || client;
+          tipoCliente = r.tipoCliente || null;
+        }
+      } catch {}
+    }
+
+    // ===== elegir la CLASS: 1) por tier, 2) por campaign, 3) default =====
+    const klassFromTier = pickClassIdByTier(tipoCliente);
+    const klass = klassFromTier || pickClassIdByCampaign(campaign) || process.env.GOOGLE_WALLET_CLASS_ID;
+    if (!klass) return res.status(500).json({ message: "Falta GOOGLE_WALLET_CLASS_ID(_GOLD/_BLUE)" });
+
+    const classRef = `${issuer}.${klass}`;
+
+    // === resto de tu código igual (con externalId/displayName) ===
+    const objectId = `${issuer}.${sanitize(`${client}-${campaign}`)}`;
+    const codeValue = externalId;
+
+    const BASE = baseUrl(req);
+    const barcodeImgUrl  = `${BASE}/api/barcode/${encodeURIComponent(codeValue)}.png`;
+    const barcodeFullUrl = `${BASE}/api/wallet/barcode/full?value=${encodeURIComponent(codeValue)}`;
+    const codesUrl       = `${BASE}/api/wallet/codes?client=${encodeURIComponent(client)}&campaign=${encodeURIComponent(campaign)}`;
+
+    const loyaltyObject = {
+      id: objectId,
+      classId: classRef,
+      state: "ACTIVE",
+      accountId: externalId,
+      accountName: displayName,
+      barcode: { type: "QR_CODE", value: codeValue, alternateText: externalId },
+      imageModulesData: [
+        {
+          id: "barcode_img",
+          mainImage: {
+            sourceUri: { uri: barcodeImgUrl },
+            contentDescription: { defaultValue: { language: "es", value: "Código de barras" } }
+          }
+        }
+      ],
+      textModulesData: displayName ? [{ header: "Nombre", body: displayName }] : [],
+      linksModuleData: {
+        uris: [
+          { id: "codes_ui",    description: "Mostrar mi código",                    uri: codesUrl },
+          { id: "barcode_full", description: "Código de barras (pantalla completa)", uri: barcodeFullUrl }
+        ]
+      }
+    };
+
+    const saveToken = jwt.sign(
+      { iss: SA_EMAIL, aud: "google", typ: "savetowallet", payload: { loyaltyObjects: [loyaltyObject] } },
+      PRIVATE_KEY,
+      { algorithm: "RS256" }
+    );
+
+    const saveUrl = `https://pay.google.com/gp/v/save/${saveToken}`;
+    if (req.query.raw === "1") return res.json({ platform: "google", saveUrl, objectId, loyaltyObject });
+    return res.redirect(302, saveUrl);
+  } catch (e) {
+    const status  = e?.response?.status || 401;
+    const details = e?.response?.data || e?.message || String(e);
+    console.error("wallet/google error:", details);
+    return res.status(status).json({ message: "Token inválido/vencido o error en Google Wallet", details });
   }
-  const { client, campaign } = payload || {};
-  if (!client || !campaign) return res.status(400).json({ message: "Faltan datos" });
-
-  // (opcional) enriquecer con DB como ya haces
-  const externalId = client;
-  const displayName = client;
-
-  const url = buildGoogleSaveUrl({ client, campaign, externalId, displayName });
-  return res.redirect(302, url);
 });
+
 
 
 // -------------------- UI unificada: QR + Barras (opcional) --------------------
@@ -275,7 +364,7 @@ router.post("/telemetry/install", async (req, res) => {
   }
 });
 
-// -------------------- Enviar pase por email (Opción A) --------------------
+// -------------------- Enviar pase por email --------------------
 router.post("/wallet/send", async (req, res) => {
   try {
     const { client, campaign, email } = req.body || {};
@@ -284,32 +373,44 @@ router.post("/wallet/send", async (req, res) => {
     }
 
     // intentar enriquecer con DB (opcional)
-    let memberId = null;
-    let displayName = "";
-    let externalId  = client;
+   // intentar enriquecer con DB (opcional)
+        let memberId = null;
+        let displayName = "";
+        let externalId  = client;
+        let tipoCliente = null; // 👈
 
-    if (!SKIP_DB) {
-      try {
-        const [rows] = await pool.query(
-          `SELECT id, external_id, nombre, apellido, first_name, last_name
-             FROM members
-            WHERE codigoCliente = ? AND \`codigoCampana\` = ?
-            LIMIT 1`,
-          [client, campaign]
-        );
-        if (rows.length) {
-          const r = rows[0];
-          memberId   = r.id;
-          externalId = r.external_id || client;
-          displayName = getDisplayName(r) || "";
+        if (!SKIP_DB) {
+          try {
+            const [rows] = await pool.query(
+              `SELECT id, external_id, nombre, apellido, first_name, last_name, tipoCliente
+                FROM members
+                WHERE codigoCliente = ? AND \`codigoCampana\` = ?
+                LIMIT 1`,
+              [client, campaign]
+            );
+            if (rows.length) {
+              const r = rows[0];
+              memberId    = r.id;
+              externalId  = r.external_id || client;
+              displayName = getDisplayName(r) || "";
+              tipoCliente = r.tipoCliente || null; // 👈
+            }
+          } catch (e) {
+            console.warn("wallet/send: DB lookup skipped:", e?.message || e);
+          }
         }
-      } catch (e) {
-        console.warn("wallet/send: DB lookup skipped:", e?.message || e);
-      }
-    }
 
-    // Link directo para Google Wallet (no pasa por Render)
-    const googleSaveUrl = buildGoogleSaveUrl({ client, campaign, externalId, displayName });
+        // 👇 prioriza el color por tier (gold/blue); si no hay, caerá a campaign en buildGoogleSaveUrl
+        const classShortId = pickClassIdByTier(tipoCliente) || null;
+
+        const googleSaveUrl = buildGoogleSaveUrl({
+          client,
+          campaign,
+          externalId,
+          displayName,
+          classShortId, // 👈 aquí va
+        });
+
 
     // (Temporal) Apple aún va a tu endpoint placeholder hasta que tengas .pkpass
     const appleUrl = `${baseUrl(req)}/api/wallet/ios/${jwt.sign({ client, campaign }, SECRET)}`;

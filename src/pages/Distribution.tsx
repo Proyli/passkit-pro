@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { API } from "@/config/api";
 import { useNavigate } from "react-router-dom";
 
+
 // ================= Types =================
 type Settings = {
   enabled: boolean;
