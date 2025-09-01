@@ -3,7 +3,7 @@ const express = require("express");
 const jwt = require("jsonwebtoken");
 const { pool } = require("../db");
 const { GoogleAuth } = require("google-auth-library");
-const nodemailer = require("nodemailer");
+//const nodemailer = require("nodemailer");
 const fs = require("fs");
 
 // ----------------- Utils -----------------
@@ -17,13 +17,6 @@ const SA_EMAIL = process.env.GOOGLE_SA_EMAIL; // wallet-svc@...iam.gserviceaccou
 const SECRET   = process.env.WALLET_TOKEN_SECRET || "changeme";
 const SKIP_DB  = process.env.SKIP_DB === "true";
 
-// SMTP
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: Number(process.env.SMTP_PORT || 587),
-  secure: false,
-  auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-});
 
 // ----------------- PRIVATE KEY (var o archivo) -----------------
 const DEFAULT_KEY_PATH = "./keys/wallet-sa.json";
@@ -129,6 +122,10 @@ function buildGoogleSaveUrl({ client, campaign, externalId, displayName, classSh
   return `https://pay.google.com/gp/v/save/${saveToken}`;
 }
 
+function makeSmartLink(req, googleSaveUrl, appleUrl) {
+  const token = jwt.sign({ g: googleSaveUrl, a: appleUrl }, SECRET, { expiresIn: "7d" });
+  return `${baseUrl(req)}/api/wallet/smart/${token}`;
+}
 
 // -------------------- Placeholder iOS (.pkpass más adelante) --------------------
 router.get("/wallet/ios/:token", (req, res) => {
@@ -364,127 +361,30 @@ router.post("/telemetry/install", async (req, res) => {
   }
 });
 
-// -------------------- Enviar pase por email --------------------
-router.post("/wallet/send", async (req, res) => {
+router.get("/wallet/smart/:token", (req, res) => {
   try {
-    const { client, campaign, email } = req.body || {};
-    if (!client || !campaign || !email) {
-      return res.status(400).json({ ok:false, error:"client, campaign y email son requeridos" });
+    const { client, campaign } = jwt.verify(req.params.token, SECRET);
+    const ua = String(req.get("user-agent") || "").toLowerCase();
+    const isApple = /iphone|ipad|ipod|macintosh/.test(ua);
+
+    if (isApple) {
+      const iosToken = jwt.sign({ client, campaign }, SECRET, { expiresIn: "15m" });
+      const appleUrl = `${baseUrl(req)}/api/wallet/ios/${iosToken}`;
+      return res.redirect(302, appleUrl);
     }
 
-    // intentar enriquecer con DB (opcional)
-   // intentar enriquecer con DB (opcional)
-        let memberId = null;
-        let displayName = "";
-        let externalId  = client;
-        let tipoCliente = null; // 👈
-
-        if (!SKIP_DB) {
-          try {
-            const [rows] = await pool.query(
-              `SELECT id, external_id, nombre, apellido, first_name, last_name, tipoCliente
-                FROM members
-                WHERE codigoCliente = ? AND \`codigoCampana\` = ?
-                LIMIT 1`,
-              [client, campaign]
-            );
-            if (rows.length) {
-              const r = rows[0];
-              memberId    = r.id;
-              externalId  = r.external_id || client;
-              displayName = getDisplayName(r) || "";
-              tipoCliente = r.tipoCliente || null; // 👈
-            }
-          } catch (e) {
-            console.warn("wallet/send: DB lookup skipped:", e?.message || e);
-          }
-        }
-
-        // 👇 prioriza el color por tier (gold/blue); si no hay, caerá a campaign en buildGoogleSaveUrl
-        const classShortId = pickClassIdByTier(tipoCliente) || null;
-
-        const googleSaveUrl = buildGoogleSaveUrl({
-          client,
-          campaign,
-          externalId,
-          displayName,
-          classShortId, // 👈 aquí va
-        });
-
-
-    // (Temporal) Apple aún va a tu endpoint placeholder hasta que tengas .pkpass
-    const appleUrl = `${baseUrl(req)}/api/wallet/ios/${jwt.sign({ client, campaign }, SECRET)}`;
-
-    // ¿Forzar un solo botón en el correo?
-    const oneButton = String(req.query.oneButton || "").toLowerCase() === "true";
-
-    const html = `
-      <meta name="color-scheme" content="light dark">
-      <style>
-        :root{ color-scheme: light dark; }
-        body{ margin:0; background:#0b1f2f; color:#f1f5f9; font:16px system-ui,-apple-system,Segoe UI,Roboto }
-        .wrap{ max-width:720px; margin:0 auto; padding:24px }
-        .card{ background:#0f2b40; padding:28px; border-radius:16px; line-height:1.5; box-shadow:0 6px 24px rgba(0,0,0,.25) }
-        h2{ margin:0 0 8px 0; font-size:22px }
-        p{ margin:0 0 12px 0 }
-        .btn{ display:inline-block; padding:12px 18px; border-radius:10px; text-decoration:none; font-weight:700 }
-        .btn-primary{ background:#b10f3a; color:#fff } /* rojo vino (Alcazarén) */
-        .btn-secondary{ border:1px solid #111; color:#111; background:#fff }
-        .hint{ font-size:13px; color:#cbd5e1; margin-top:6px }
-        @media (prefers-color-scheme: light){
-          body{ background:#f3f4f6; color:#111827 }
-          .card{ background:#ffffff }
-          .btn-secondary{ border-color:#111; color:#111; background:#fff }
-        }
-      </style>
-      <div class="wrap">
-        <div class="card">
-          <h2>Tu tarjeta de lealtad</h2>
-          ${displayName ? `<p>Estimado/a <strong>${displayName}</strong>,</p>` : ""}
-          <p>Guárdala en tu billetera móvil.</p>
-          ${
-            oneButton
-              ? `
-                <p><a class="btn btn-primary" href="${googleSaveUrl}">Guardar en el móvil</a></p>
-                <p class="hint">¿Usas iPhone? <a href="${appleUrl}" style="color:#fff;text-decoration:underline;">Toca aquí</a> para Apple Wallet.</p>
-              `
-              : `
-                <p>
-                  <a class="btn btn-secondary" href="${appleUrl}">Add to Apple Wallet</a>
-                  <a class="btn btn-primary"  href="${googleSaveUrl}">Add to Google Wallet</a>
-                </p>
-              `
-          }
-        </div>
-      </div>
-    `;
-
-    await transporter.sendMail({
-      from: process.env.MAIL_FROM || '"PassForge" <no-reply@passforge.local>',
-      to: email,
-      subject: "Tu tarjeta de lealtad",
-      html,
+    const saveUrl = buildGoogleSaveUrl({
+      client,
+      campaign,
+      externalId: client,
+      displayName: client,
     });
-
-    // Telemetría opcional
-    if (!SKIP_DB && memberId) {
-      try {
-        await pool.query(
-          `INSERT INTO telemetry_events
-           (member_id, pass_id, platform, source, event_type, user_agent, ip_address)
-           VALUES (?, ?, ?, ?, 'install', ?, ?)`,
-          [memberId, null, "google", "link", "mailer", null]
-        );
-      } catch (e) {
-        console.warn("wallet/send: telemetry insert skipped:", e?.message || e);
-      }
-    }
-
-    return res.json({ ok:true, googleSaveUrl });
-  } catch (e) {
-    console.error("wallet/send error:", e);
-    return res.status(500).json({ ok:false, error: (e?.message || String(e)) });
+    return res.redirect(302, saveUrl);
+  } catch {
+    return res.status(401).send("Link inválido o expirado");
   }
 });
+
+
 
 module.exports = router;
