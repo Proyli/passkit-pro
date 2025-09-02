@@ -2,7 +2,7 @@
 const express = require("express");
 const jwt = require("jsonwebtoken");
 const { pool } = require("../db");
-const { GoogleAuth } = require("google-auth-library");
+//const { GoogleAuth } = require("google-auth-library");
 //const nodemailer = require("nodemailer");
 const fs = require("fs");
 
@@ -361,30 +361,58 @@ router.post("/telemetry/install", async (req, res) => {
   }
 });
 
-router.get("/wallet/smart/:token", (req, res) => {
+// Smart link: detecta iOS/Android y redirige al destino correcto
+router.get("/wallet/smart/:token", async (req, res) => {
   try {
     const { client, campaign } = jwt.verify(req.params.token, SECRET);
     const ua = String(req.get("user-agent") || "").toLowerCase();
     const isApple = /iphone|ipad|ipod|macintosh/.test(ua);
 
+    // --- Enriquecer con DB: external_id, nombre/apellido, tipoCliente ---
+    let externalId = client;
+    let displayName = client;
+    let tipoCliente = null;
+
+    if (!SKIP_DB) {
+      try {
+        const [rows] = await pool.query(
+          `SELECT external_id, nombre, apellido, first_name, last_name, tipoCliente
+             FROM members
+            WHERE codigoCliente=? AND \`codigoCampana\`=? LIMIT 1`,
+          [client, campaign]
+        );
+        if (Array.isArray(rows) && rows[0]) {
+          const r = rows[0];
+          externalId = r.external_id || client;
+          const fn = r.nombre || r.first_name || "";
+          const ln = r.apellido || r.last_name || "";
+          displayName = `${String(fn||"").trim()} ${String(ln||"").trim()}`.trim() || client;
+          tipoCliente = r.tipoCliente || null;
+        }
+      } catch {}
+    }
+
+    // iOS → a tu endpoint de Apple (.pkpass)
     if (isApple) {
       const iosToken = jwt.sign({ client, campaign }, SECRET, { expiresIn: "15m" });
       const appleUrl = `${baseUrl(req)}/api/wallet/ios/${iosToken}`;
       return res.redirect(302, appleUrl);
     }
 
-    const saveUrl = buildGoogleSaveUrl({
+    // Android → Google Save URL (respetando color por tier/campaign)
+    const classShortId = pickClassIdByTier(tipoCliente) || null;
+    const googleSaveUrl = buildGoogleSaveUrl({
       client,
       campaign,
-      externalId: client,
-      displayName: client,
+      externalId,
+      displayName,
+      classShortId,  // si hay tier → usa esa clase; si no, cae a campaign
     });
-    return res.redirect(302, saveUrl);
+    return res.redirect(302, googleSaveUrl);
   } catch {
     return res.status(401).send("Link inválido o expirado");
   }
 });
-
 
 
 module.exports = router;
