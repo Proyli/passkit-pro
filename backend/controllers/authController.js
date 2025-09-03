@@ -3,7 +3,9 @@ const nodemailer = require("nodemailer");
 const crypto = require("crypto");
 const db = require("../models");
 const Member = db.Member;
-const { renderEmail } = require("../services/renderEmail");
+// arriba del archivo
+const { renderWalletEmail, DEFAULTS } = require("../services/renderEmail");
+
 
 // ---------- SMTP (un solo transporter para todo el módulo) ----------
 const transporter = nodemailer.createTransport({
@@ -124,18 +126,17 @@ exports.sendPassEmail = async (req, res) => {
       return res.status(400).json({ ok: false, error: "Missing to/googleUrl/htmlTemplate" });
     }
 
-    const html = renderEmail(htmlTemplate, {
-      displayName,
-      buttonText,
-      googleUrl,
-      appleUrl,
-    });
+    const html = renderWalletEmail(
+      { htmlBody: htmlTemplate, buttonText: buttonText || DEFAULTS.buttonText },
+      { displayName, googleUrl, appleUrl }
+    );
 
     await transporter.sendMail({
       from: from || DEFAULT_FROM,
       to,
-      subject: subject || "Su Tarjeta de Lealtad",
+      subject: subject || DEFAULTS.subject,
       html,
+      headers: { "Content-Language": "es", "X-Entity-Language": "es" },
     });
 
     return res.json({ ok: true });
@@ -144,3 +145,16 @@ exports.sendPassEmail = async (req, res) => {
     return res.status(500).json({ ok: false, error: "Email send failed" });
   }
 };
+
+
+    await transporter.sendMail({
+  from: from || DEFAULT_FROM,
+  to,
+  subject: subject || DEFAULTS.subject, // "Su Tarjeta de Lealtad"
+  html, // el que generamos arriba
+  headers: {
+    "Content-Language": "es",
+    "X-Entity-Language": "es",
+  },
+});
+

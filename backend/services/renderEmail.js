@@ -7,6 +7,7 @@ const DEFAULTS = {
   subject: "Su Tarjeta de Lealtad",
   fromName: "Distribuidora Alcazarén, S. A.",
   buttonText: "Guardar en el móvil",
+  preheader: "Guárdela en su billetera móvil y disfrute de beneficios.",   // 👈 NUEVO
   lightBg: "#f5f7fb",
   darkBg:  "#0b1626",
   bodyColorLight: "#ffffff",
@@ -105,6 +106,7 @@ function renderWalletEmail(settings={}, vars={}) {
 <html lang="es">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Content-Language" content="es">      
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>${escapeHtml(s.subject)}</title>
