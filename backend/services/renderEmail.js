@@ -12,7 +12,7 @@ const DEFAULTS = {
   darkBg:  "#0b1626",
   bodyColorLight: "#ffffff",
   bodyColorDark:  "#0f2b40",
-  htmlBody: `
+ htmlBody: `
 <p style="margin:0 0 14px 0;font-size:18px;line-height:1.45;">
   <strong>Su Tarjeta de Lealtad</strong>
 </p>
@@ -30,6 +30,27 @@ const DEFAULTS = {
   A partir de hoy, cada compra le otorgará ahorros inmediatos y experiencias distinguidas.
   Guarde su tarjeta en la billetera digital y disfrute de descuentos exclusivos.
 </p>
+
+<!-- ====== CÓDIGOS INCRUSTADOS (CID) ====== -->
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin:16px 0 6px 0;">
+  <tr>
+    <td align="center" style="padding:0;">
+      <!-- QR opcional (si adjuntas cid:qr) -->
+      <img src="cid:qr"
+           width="180" height="180" alt="Código QR"
+           style="display:inline-block;border-radius:8px;margin:6px;background:#ffffff;padding:8px;" />
+    </td>
+  </tr>
+  <tr>
+    <td align="center" style="padding:0;">
+      <!-- Code128 principal (cid:code128) -->
+      <img src="cid:code128"
+           alt="Código de barras Code128"
+           style="display:block;margin:8px auto 0;width:100%;max-width:520px;background:#ffffff;padding:8px;border-radius:8px;" />
+    </td>
+  </tr>
+</table>
+<!-- ====== /CÓDIGOS INCRUSTADOS ====== -->
 
 <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin:18px 0 6px 0;">
   <tr><td align="center" style="padding:0;">

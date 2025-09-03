@@ -6,7 +6,36 @@ const Member = db.Member;
 // arriba del archivo
 const { renderWalletEmail, DEFAULTS } = require("../services/renderEmail");
 
+async function sendLoyaltyEmail(member, { googleUrl, appleUrl }) {
+  const displayName = member.nombre || member.name || "Cliente";
+  const externalId  = member.externalId || member.external_id || member.id || "";
+  const payload     = `PK|${externalId}|ALCAZAREN`;
+  const base        = process.env.PUBLIC_BASE_URL; // ej: https://backend-passforge.onrender.com
 
+  const html = renderWalletEmail({}, { displayName, googleUrl, appleUrl });
+
+  await transporter.sendMail({
+    from: process.env.SMTP_FROM || '"PassForge" <no-reply@alcazaren.com.gt>',
+    to: member.email,
+    subject: "Su Tarjeta de Lealtad",
+    html,
+    attachments: [
+      {
+        filename: "code128.png",
+        path: `${base}/api/barcode/${encodeURIComponent(payload)}.png`,
+        contentType: "image/png",
+        cid: "code128",              // <img src="cid:code128"> en tu htmlBody
+      },
+      // Opcional: si tienes endpoint de QR
+      // {
+      //   filename: "qr.png",
+      //   path: `${base}/api/qr/${encodeURIComponent(payload)}.png`,
+      //   contentType: "image/png",
+      //   cid: "qr",                // <img src="cid:qr">
+      // },
+    ],
+  });
+}
 // ---------- SMTP (un solo transporter para todo el módulo) ----------
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
