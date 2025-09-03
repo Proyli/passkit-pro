@@ -5,6 +5,7 @@ const { pool } = require("../src/db");
 const nodemailer = require("nodemailer");
 const { nanoid } = require("nanoid");
 const fetch = require("node-fetch"); // npm i node-fetch@2
+const { renderWalletEmail, mergeSettings } = require("../services/renderEmail");
 
 const API_BASE = process.env.PUBLIC_BASE_URL || ""; // para links absolutos
 const SKIP_DB = process.env.SKIP_DB === "true";
@@ -16,6 +17,18 @@ const transporter = nodemailer.createTransport({
   secure: false,
   auth: { user: process.env.SMPP_USER || process.env.SMTP_USER, pass: process.env.SMTP_PASS },
 });
+async function sendWelcomeEmail({ to, displayName, googleUrl, appleUrl, settings }) {
+  const s = mergeSettings(settings);
+  const html = renderWalletEmail(s, { displayName, googleUrl, appleUrl });
+
+  return transporter.sendMail({
+    from: `"${s.fromName}" <no-reply@alcazaren.com.gt>`,
+    to,
+    subject: s.subject,
+    html,                           //  usar HTML
+    text: `Guarde su tarjeta: ${googleUrl}` // fallback de texto
+  });
+}
 
 // ---------- Defaults cuando no hay DB ----------
 const DEFAULT_SETTINGS = {
@@ -351,5 +364,29 @@ router.post("/distribution/register-submit", async (req, res) => {
     res.status(500).json({ ok:false, error:String(e?.message||e) });
   }
 });
+
+router.post("/distribution/send-test-email", async (req, res) => {
+  try {
+    const { email, displayName, clientCode, campaignCode } = req.body;
+
+    // Genera/obtén tus URLs reales
+    const googleUrl = await buildGoogleSaveUrl({ clientCode, campaignCode, displayName });
+    const appleUrl  = await buildAppleUrl({ clientCode, campaignCode, displayName });
+
+    await sendWelcomeEmail({
+      to: email,
+      displayName,
+      googleUrl,
+      appleUrl,
+      settings: req.body.settings || {} // opcional, si personalizas
+    });
+
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ ok: false, error: e?.message || "fail" });
+  }
+});
+
 
 module.exports = { router, sendWelcomeEmail };
