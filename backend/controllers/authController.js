@@ -1,11 +1,29 @@
-const bcrypt = require('bcryptjs');
+const bcrypt = require("bcryptjs");
 const nodemailer = require("nodemailer");
 const crypto = require("crypto");
 const db = require("../models");
 const Member = db.Member;
 const { renderEmail } = require("../services/renderEmail");
 
-// LOGIN
+// ---------- SMTP (un solo transporter para todo el módulo) ----------
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: Number(process.env.SMTP_PORT || 587),
+  secure: process.env.SMTP_SECURE === "true", // true=465
+  auth: process.env.SMTP_USER
+    ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+    : undefined,
+});
+
+transporter.verify()
+  .then(() => console.log("✅ SMTP listo"))
+  .catch(err => console.error("❌ SMTP error:", err?.message || err));
+
+const DEFAULT_FROM =
+  process.env.MAIL_FROM ||
+  `"Distribuidora Alcazarén" <${process.env.SMTP_USER || "no-reply@alcazaren.com.gt"}>`;
+
+// -------------------- LOGIN --------------------
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -32,11 +50,10 @@ exports.login = async (req, res) => {
   }
 };
 
-// CAMBIAR CONTRASEÑA
+// -------------------- CAMBIAR CONTRASEÑA --------------------
 exports.changePassword = async (req, res) => {
   try {
     const { email, currentPassword, newPassword } = req.body;
-
     if (!email || !newPassword) return res.status(400).json({ error: "Faltan datos requeridos" });
 
     const user = await Member.findOne({ where: { email } });
@@ -60,7 +77,7 @@ exports.changePassword = async (req, res) => {
   }
 };
 
-// RESET PASSWORD (correo Outlook)
+// -------------------- RESET PASSWORD (correo) --------------------
 exports.resetPassword = async (req, res) => {
   try {
     const { email } = req.body;
@@ -73,21 +90,10 @@ exports.resetPassword = async (req, res) => {
     user.password = await bcrypt.hash(tempPassword, 10);
     await user.save();
 
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT || 587),
-      secure: process.env.SMTP_SECURE === "true",
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-    });
-
-
     console.log("➡️ Enviando correo a:", user.email);
 
     await transporter.sendMail({
-      from: `"PassForge" <${process.env.EMAIL_USER}>`,
+      from: DEFAULT_FROM,
       to: user.email,
       subject: "Tu nueva contraseña temporal",
       text: `Hola ${user.nombre || "usuario"}, tu nueva contraseña temporal es: ${tempPassword}`,
@@ -100,17 +106,18 @@ exports.resetPassword = async (req, res) => {
   }
 };
 
+// -------------------- ENVIAR PASS (bienvenida) --------------------
 exports.sendPassEmail = async (req, res) => {
   try {
     const {
-      to,               // email destino
+      to,               // email destino (obligatorio)
       displayName,      // nombre del cliente
       buttonText,       // texto del botón (opcional)
-      googleUrl,        // URL Google Wallet
-      appleUrl,         // URL .pkpass / Apple Wallet
-      htmlTemplate,     // Body (HTML) guardado desde el diseñador
-      subject,          // opcional; default abajo
-      from,             // opcional; default abajo
+      googleUrl,        // URL Google Wallet (obligatorio)
+      appleUrl,         // URL Apple Wallet (opcional)
+      htmlTemplate,     // HTML base del diseñador (obligatorio)
+      subject,          // asunto opcional
+      from,             // from opcional
     } = req.body;
 
     if (!to || !googleUrl || !htmlTemplate) {
@@ -125,7 +132,7 @@ exports.sendPassEmail = async (req, res) => {
     });
 
     await transporter.sendMail({
-      from: from || (process.env.MAIL_FROM || '"Distribuidora Alcazarén" <no-reply@alcazaren.com.gt>'),
+      from: from || DEFAULT_FROM,
       to,
       subject: subject || "Su Tarjeta de Lealtad",
       html,
@@ -133,8 +140,7 @@ exports.sendPassEmail = async (req, res) => {
 
     return res.json({ ok: true });
   } catch (err) {
-    console.error("sendPassEmail error:", err);
+    console.error("sendPassEmail error:", err?.message || err);
     return res.status(500).json({ ok: false, error: "Email send failed" });
   }
 };
-
