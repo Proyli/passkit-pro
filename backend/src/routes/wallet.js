@@ -91,16 +91,16 @@ function pickClassIdByCampaign(campaign) {
 
 // ------ Helper: construir Save URL (Google Wallet) ------
 // ------ Helper: construir Save URL (Google Wallet) ------
+// ------ Helper: construir Save URL (Google Wallet) ------
 function buildGoogleSaveUrl({ client, campaign, externalId, displayName, classShortId }) {
   const issuer = process.env.GOOGLE_WALLET_ISSUER_ID;
-  // Si me pasan la clase por tier, úsala; si no, decide por campaña:
   const klass  = classShortId || pickClassIdByCampaign(campaign);
 
   if (!issuer || !klass) throw new Error("Faltan GOOGLE_WALLET_ISSUER_ID o CLASS_ID");
   if (!SA_EMAIL || !PRIVATE_KEY) throw new Error("Faltan GOOGLE_SA_EMAIL o PRIVATE_KEY");
 
-  const objectId = `${issuer}.${sanitize(`${client}-${campaign}`)}`;
-  const classRef = `${issuer}.${klass}`;
+  const objectId  = `${issuer}.${sanitize(`${client}-${campaign}`)}`;
+  const classRef  = `${issuer}.${klass}`;
   const codeValue = externalId || client;
 
   const loyaltyObject = {
@@ -109,23 +109,62 @@ function buildGoogleSaveUrl({ client, campaign, externalId, displayName, classSh
     state: "ACTIVE",
     accountId:   codeValue,
     accountName: displayName || codeValue,
-    barcode: { type: "QR_CODE", value: codeValue, alternateText: codeValue },
+
+    // 👇 igual que en /wallet/google
+    infoModuleData: {
+      labelValueRows: [
+        { columns: [{ label: "Name", value: (displayName || codeValue) }] }
+      ]
+    },
+    barcode: { type: "CODE_128", value: codeValue, alternateText: codeValue }
   };
 
-  // 👇 usa el typ correcto
   const saveToken = jwt.sign(
     { iss: SA_EMAIL, aud: "google", typ: "savetowallet", payload: { loyaltyObjects: [loyaltyObject] } },
     PRIVATE_KEY,
     { algorithm: "RS256" }
   );
-
   return `https://pay.google.com/gp/v/save/${saveToken}`;
 }
+
+
 
 function makeSmartLink(req, googleSaveUrl, appleUrl) {
   const token = jwt.sign({ g: googleSaveUrl, a: appleUrl }, SECRET, { expiresIn: "7d" });
   return `${baseUrl(req)}/api/wallet/smart/${token}`;
 }
+
+async function findMemberFlexible(client, campaign) {
+  if (SKIP_DB) return null;
+
+  // 1) intento estricto (cliente + campaña)
+  let [rows] = await pool.query(
+    `SELECT external_id, nombre, apellido, first_name, last_name, tipoCliente, codigoCliente, codigoCampana
+       FROM members
+      WHERE codigoCliente=? AND \`codigoCampana\`=? LIMIT 1`,
+    [client, campaign]
+  );
+  if (rows?.[0]) return rows[0];
+
+  // 2) si campaña viene vacía o es igual al cliente → busca sólo por cliente
+  [rows] = await pool.query(
+    `SELECT external_id, nombre, apellido, first_name, last_name, tipoCliente, codigoCliente, codigoCampana
+       FROM members
+      WHERE codigoCliente=? LIMIT 1`,
+    [client]
+  );
+  if (rows?.[0]) return rows[0];
+
+  // 3) último recurso: por campaña (por si la escribieron igual al cliente)
+  [rows] = await pool.query(
+    `SELECT external_id, nombre, apellido, first_name, last_name, tipoCliente, codigoCliente, codigoCampana
+       FROM members
+      WHERE \`codigoCampana\`=? LIMIT 1`,
+    [campaign]
+  );
+  return rows?.[0] || null;
+}
+
 
 // -------------------- Placeholder iOS (.pkpass más adelante) --------------------
 router.get("/wallet/ios/:token", (req, res) => {
@@ -161,24 +200,17 @@ router.get("/wallet/google/:token", async (req, res) => {
     let displayName = client;
     let tipoCliente = null;
 
-    if (!SKIP_DB) {
-      try {
-        const [rows] = await pool.query(
-          `SELECT external_id, nombre, apellido, first_name, last_name, tipoCliente
-             FROM members
-            WHERE codigoCliente=? AND \`codigoCampana\`=? LIMIT 1`,
-          [client, campaign]
-        );
-        if (Array.isArray(rows) && rows[0]) {
-          const r = rows[0];
-          externalId = r.external_id || client;
-          const fn = r.nombre || r.first_name || "";
-          const ln = r.apellido || r.last_name || "";
-          displayName = `${String(fn||"").trim()} ${String(ln||"").trim()}`.trim() || client;
-          tipoCliente = r.tipoCliente || null;
-        }
-      } catch {}
-    }
+    try {
+      const r = await findMemberFlexible(client, campaign);
+      if (r) {
+        externalId = r.external_id || client;
+        const fn = r.nombre || r.first_name || "";
+        const ln = r.apellido || r.last_name || "";
+        displayName = `${String(fn||"").trim()} ${String(ln||"").trim()}`.trim() || client;
+        tipoCliente = r.tipoCliente || null;
+      }
+    } catch {}
+
 
     // ===== elegir la CLASS: 1) por tier, 2) por campaign, 3) default =====
     const klassFromTier = pickClassIdByTier(tipoCliente);
@@ -370,19 +402,12 @@ router.get("/wallet/smart/:token", async (req, res) => {
 
     // --- Enriquecer con DB: external_id, nombre/apellido, tipoCliente ---
     let externalId = client;
-    let displayName = client;
-    let tipoCliente = null;
+      let displayName = client;
+      let tipoCliente = null;
 
-    if (!SKIP_DB) {
       try {
-        const [rows] = await pool.query(
-          `SELECT external_id, nombre, apellido, first_name, last_name, tipoCliente
-             FROM members
-            WHERE codigoCliente=? AND \`codigoCampana\`=? LIMIT 1`,
-          [client, campaign]
-        );
-        if (Array.isArray(rows) && rows[0]) {
-          const r = rows[0];
+        const r = await findMemberFlexible(client, campaign);
+        if (r) {
           externalId = r.external_id || client;
           const fn = r.nombre || r.first_name || "";
           const ln = r.apellido || r.last_name || "";
@@ -390,7 +415,7 @@ router.get("/wallet/smart/:token", async (req, res) => {
           tipoCliente = r.tipoCliente || null;
         }
       } catch {}
-    }
+
 
     // iOS → a tu endpoint de Apple (.pkpass)
     if (isApple) {
