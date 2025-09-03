@@ -1,7 +1,6 @@
 // src/pages/Designer/index.tsx
 import Google from "./components/Google";
 
-
 export default function DesignerPage() {
   return (
     <div className="flex gap-6">

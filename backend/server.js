@@ -50,6 +50,8 @@ app.use("/api",         walletRoutes);
 app.use("/api",         barcodeRouter);
 app.use("/api",         analyticsRoutes);
 app.use("/api",         distributionRouter);
+app.use("/api", require("./routes/authRoutes"));
+
 
 /* ---- Extras útiles ---- */
 // 1) Raíz: ping rápido

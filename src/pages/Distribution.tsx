@@ -10,6 +10,49 @@ import { useToast } from "@/hooks/use-toast";
 import { API } from "@/config/api";
 import { useNavigate } from "react-router-dom";
 
+type SendArgs = {
+  to: string;
+  displayName: string;
+  clientCode: string;
+  campaignCode: string;
+  buttonText: string;
+  htmlTemplate: string;
+};
+
+function buildUrls(clientCode: string, campaignCode: string) {
+  const c = encodeURIComponent(clientCode.trim());
+  const k = encodeURIComponent(campaignCode.trim());
+  return {
+    googleUrl: `${API}/wallet/resolve?client=${c}&campaign=${k}`,
+    appleUrl: `${API}/wallet/apple/pkpass?client=${c}&campaign=${k}`, // ajusta si tu backend usa otra ruta
+  };
+}
+
+async function sendPassEmail(args: SendArgs) {
+  const { to, displayName, clientCode, campaignCode, buttonText, htmlTemplate } = args;
+  const { googleUrl, appleUrl } = buildUrls(clientCode, campaignCode);
+
+  const r = await fetch(`${API}/email/send-pass`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-role": "admin" }, // si tu backend pide este header
+    body: JSON.stringify({
+      to,
+      displayName,
+      buttonText,
+      googleUrl,                 // → reemplaza {{GOOGLE_SAVE_URL}}
+      appleUrl,                  // → reemplaza {{APPLE_URL}}
+      htmlTemplate,              // → tu Body (HTML)
+      subject: "Su Tarjeta de Lealtad",
+      from: "Distribuidora Alcazarén",
+    }),
+  });
+
+  if (!r.ok) {
+    const j = await r.json().catch(() => ({}));
+    throw new Error(j?.error || `HTTP ${r.status}`);
+  }
+  return r.json();
+}
 
 // ================= Types =================
 type Settings = {
@@ -26,16 +69,17 @@ type Settings = {
 
 const defaultSettings: Settings = {
   enabled: true,
-  subject: "Su Tarjeta de Lealtad Alcazaren",
+  subject: "Su Tarjeta de Lealtad",
   fromName: "Distribuidora Alcazarén, S. A.",
   buttonText: "Guardar en el móvil",
-  lightBg: "#143c5c",
-  darkBg: "#0f2b40",
-  bodyColorLight: "#c69667",
+
+  // ✅ Colores para que luzca como la segunda imagen
+  lightBg: "#f5f7fb",
+  darkBg: "#0b1626",
+  bodyColorLight: "#ffffff",
   bodyColorDark: "#0f2b40",
   htmlBody: '<!-- CONTENIDO PERSONALIZABLE DEL EMAIL -->\n<p style="margin:0 0 14px 0;font-size:18px;line-height:1.45;">\n  <strong>Su Tarjeta de Lealtad</strong>\n</p>\n\n<p style="margin:0 0 10px 0;line-height:1.6;">\n  Estimado/a <strong>{{DISPLAY_NAME}}</strong>,\n</p>\n\n<p style="margin:0 0 10px 0;line-height:1.6;">\n  Es un honor darle la bienvenida a nuestro exclusivo programa\n  <em>Lealtad Alcazaren</em>, diseñado para premiar su preferencia con beneficios únicos.\n</p>\n\n<p style="margin:0 0 10px 0;line-height:1.6;">\n  A partir de hoy, cada compra de nuestra gama de productos selectos le otorgará\n  ahorros inmediatos y experiencias distinguidas. Acceda fácilmente a sus\n  beneficios desde su billetera digital y disfrute de descuentos exclusivos.\n</p>\n\n<!-- CTA: Botones responsivos y compatibles con Outlook -->\n<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin:18px 0 6px 0;">\n  <tr>\n    <td align="center" style="padding:0;">\n      <!--[if mso]>\n      <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="{{GOOGLE_SAVE_URL}}" arcsize="12%" stroke="f" fillcolor="#8B173C" style="height:48px;v-text-anchor:middle;width:320px;">\n        <w:anchorlock/>\n        <center style="color:#ffffff;font-family:Segoe UI,Arial,sans-serif;font-size:16px;font-weight:700;">\n          {{BUTTON_TEXT}}\n        </center>\n      </v:roundrect>\n      <![endif]-->\n      <!--[if !mso]><!-- -->\n      <a href="{{GOOGLE_SAVE_URL}}"\n         style="background:#8B173C;border-radius:10px;display:inline-block;padding:14px 22px;text-decoration:none;\n                color:#ffffff;font-weight:700;font-family:Segoe UI,Roboto,Arial,sans-serif;font-size:16px;">\n        {{BUTTON_TEXT}}\n      </a>\n      <!--<![endif]-->\n    </td>\n  </tr>\n</table>\n\n<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin:8px 0 18px 0;">\n  <tr>\n    <td align="center" style="padding:0;">\n      <!--[if mso]>\n      <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="{{APPLE_URL}}" arcsize="12%" strokecolor="#0F2B40" fillcolor="#FFFFFF" style="height:46px;v-text-anchor:middle;width:320px;">\n        <w:anchorlock/>\n        <center style="color:#0F2B40;font-family:Segoe UI,Arial,sans-serif;font-size:15px;font-weight:700;">\n          Añadir a Apple Wallet\n        </center>\n      </v:roundrect>\n      <![endif]-->\n      <!--[if !mso]><!-- -->\n      <a href="{{APPLE_URL}}"\n         style="background:#FFFFFF;border:2px solid #0F2B40;border-radius:10px;display:inline-block;padding:12px 20px;text-decoration:none;\n                color:#0F2B40;font-weight:700;font-family:Segoe UI,Roboto,Arial,sans-serif;font-size:15px;">\n        Añadir a Apple Wallet\n      </a>\n      <!--<![endif]-->\n    </td>\n  </tr>\n</table>\n\n<hr style="border:none;border-top:1px solid rgba(0,0,0,.12);margin:18px 0;" />\n\n<p style="margin:0 0 6px 0;line-height:1.6;"><em>Aplican restricciones.</em></p>\n<p style="margin:0 0 6px 0;line-height:1.6;">\n  Si tiene dudas, puede comunicarse al teléfono 2429 5959, ext. 2120 (Ciudad Capital),\n  ext. 1031 (Xelajú) o al correo\n  <a href="mailto:alcazaren@alcazaren.com.gt" style="color:inherit;text-decoration:underline;">alcazaren@alcazaren.com.gt</a>.\n</p>\n\n<p style="margin:14px 0 0 0;line-height:1.6;">\n  Saludos cordiales.<br>\n  <strong>Distribuidora Alcazarén</strong>\n</p>\n<!-- /CONTENIDO PERSONALIZABLE DEL EMAIL -->',
 
-    
 };
 
 // Para la tabla de tiers
@@ -51,6 +95,12 @@ export default function Distribution() {
   const [enrollment, setEnrollment] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
   const [previewTheme, setPreviewTheme] = useState<"system" | "light" | "dark">("system");
+
+  const [testEmail, setTestEmail] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [clientCode, setClientCode] = useState("");
+  const [campaignCode, setCampaignCode] = useState("");
+  const [sending, setSending] = useState(false);
 
   // 👉 Encabezados para endpoints protegidos (ajusta a tu auth real)
   const ADMIN_GET_HEADERS: Record<string, string> = { "x-role": "admin" };
@@ -236,6 +286,28 @@ export default function Distribution() {
     }
   };
 
+  const canSendTest =
+  !!testEmail && !!clientCode.trim() && !!campaignCode.trim() && !!settings.htmlBody.trim();
+
+const handleSendTest = async () => {
+  try {
+    setSending(true);
+    await sendPassEmail({
+      to: testEmail,
+      displayName: displayName || "Cliente",
+      clientCode,
+      campaignCode,
+      buttonText: settings.buttonText || "Guardar en el móvil",
+      htmlTemplate: settings.htmlBody,
+    });
+    toast({ title: "Enviado", description: "Correo de bienvenida enviado." });
+  } catch (e: any) {
+    toast({ title: "Error al enviar", description: String(e?.message || e), variant: "destructive" });
+  } finally {
+    setSending(false);
+  }
+};
+
   // ================= Render =================
   return (
     <div className="min-h-screen">
@@ -274,56 +346,34 @@ export default function Distribution() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
           {/* Formulario izquierda */}
-          <Card className="p-5 space-y-4">
+         <Card className="p-5 space-y-3 mt-6">
+          <h3 className="text-base font-semibold">Enviar correo de prueba</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <Label>Subject</Label>
-              <Input value={settings.subject} onChange={(e) => onChange({ subject: e.target.value })} />
+              <Label>Para (email)</Label>
+              <Input value={testEmail} onChange={(e) => setTestEmail(e.target.value)} placeholder="cliente@correo.com" />
             </div>
-
             <div>
-              <Label>From (Sender's Name)</Label>
-              <Input value={settings.fromName} onChange={(e) => onChange({ fromName: e.target.value })} />
+              <Label>Nombre (opcional)</Label>
+              <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Linda Pérez" />
             </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Email Background (Light)</Label>
-                <Input value={settings.lightBg} onChange={(e) => onChange({ lightBg: e.target.value })} />
-              </div>
-              <div>
-                <Label>Email Background (Dark)</Label>
-                <Input value={settings.darkBg} onChange={(e) => onChange({ darkBg: e.target.value })} />
-              </div>
-              <div>
-                <Label>Email Body (Light)</Label>
-                <Input value={settings.bodyColorLight} onChange={(e) => onChange({ bodyColorLight: e.target.value })} />
-              </div>
-              <div>
-                <Label>Email Body (Dark)</Label>
-                <Input value={settings.bodyColorDark} onChange={(e) => onChange({ bodyColorDark: e.target.value })} />
-              </div>
-            </div>
-
             <div>
-              <Label>Button text</Label>
-              <Input value={settings.buttonText} onChange={(e) => onChange({ buttonText: e.target.value })} />
+              <Label>Código Cliente</Label>
+              <Input value={clientCode} onChange={(e) => setClientCode(e.target.value)} placeholder="L00457" />
             </div>
-
             <div>
-              <Label>Body (HTML)</Label>
-              <textarea value={settings.htmlBody} onChange={(e) => onChange({ htmlBody: e.target.value })} className="w-full h-48 rounded-xl border p-3" />
-              <div className="text-xs text-muted-foreground mt-2 space-y-1">
-                <p className="font-medium">Placeholders disponibles:</p>
-                <p>
-                  <code>{"{{BUTTON_TEXT}}"}</code>, <code>{"{{DISPLAY_NAME}}"}</code>, <code>{"{{CLIENT}}"}</code>, <code>{"{{CAMPAIGN}}"}</code>
-                </p>
-                <p>Enlaces (opcional, si no los pones el sistema agrega el CTA):</p>
-                <p>
-                  <code>{"{{GOOGLE_SAVE_URL}}"}</code>, <code>{"{{APPLE_URL}}"}</code>
-                </p>
-              </div>
+              <Label>Código Campaña</Label>
+              <Input value={campaignCode} onChange={(e) => setCampaignCode(e.target.value)} placeholder="blue_5" />
             </div>
-          </Card>
+          </div>
+
+          <div className="pt-2">
+            <Button onClick={handleSendTest} disabled={!canSendTest || sending}>
+              {sending ? "Enviando…" : "Enviar correo de prueba"}
+            </Button>
+          </div>
+        </Card>
+
 
           {/* Preview derecha */}
           <Card className="p-3">

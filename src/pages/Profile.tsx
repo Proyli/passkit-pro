@@ -68,7 +68,7 @@ const Profile: React.FC = () => {
   ) => {
     const { name, value } = e.target;
     const newData = { ...formData, [name]: value };
-    setFormData(newData);
+    setFormData(newData);   
     setProfileData(newData);
   };
 
@@ -82,7 +82,7 @@ const Profile: React.FC = () => {
       const res = await fetch(`${API_BASE}/members`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(nuevoCliente),
+        body: JSON.stringify(nuevoCliente),                
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 

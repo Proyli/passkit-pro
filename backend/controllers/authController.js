@@ -3,6 +3,7 @@ const nodemailer = require("nodemailer");
 const crypto = require("crypto");
 const db = require("../models");
 const Member = db.Member;
+const { renderEmail } = require("../services/renderEmail");
 
 // LOGIN
 exports.login = async (req, res) => {
@@ -73,17 +74,15 @@ exports.resetPassword = async (req, res) => {
     await user.save();
 
     const transporter = nodemailer.createTransport({
-      host: "smtp.office365.com",
-      port: 587,
-      secure: false,
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT || 587),
+      secure: process.env.SMTP_SECURE === "true",
       auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
-      tls: {
-        ciphers: "SSLv3",
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
       },
     });
+
 
     console.log("➡️ Enviando correo a:", user.email);
 
@@ -100,3 +99,42 @@ exports.resetPassword = async (req, res) => {
     res.status(500).json({ error: "Error del servidor" });
   }
 };
+
+exports.sendPassEmail = async (req, res) => {
+  try {
+    const {
+      to,               // email destino
+      displayName,      // nombre del cliente
+      buttonText,       // texto del botón (opcional)
+      googleUrl,        // URL Google Wallet
+      appleUrl,         // URL .pkpass / Apple Wallet
+      htmlTemplate,     // Body (HTML) guardado desde el diseñador
+      subject,          // opcional; default abajo
+      from,             // opcional; default abajo
+    } = req.body;
+
+    if (!to || !googleUrl || !htmlTemplate) {
+      return res.status(400).json({ ok: false, error: "Missing to/googleUrl/htmlTemplate" });
+    }
+
+    const html = renderEmail(htmlTemplate, {
+      displayName,
+      buttonText,
+      googleUrl,
+      appleUrl,
+    });
+
+    await transporter.sendMail({
+      from: from || (process.env.MAIL_FROM || '"Distribuidora Alcazarén" <no-reply@alcazaren.com.gt>'),
+      to,
+      subject: subject || "Su Tarjeta de Lealtad",
+      html,
+    });
+
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("sendPassEmail error:", err);
+    return res.status(500).json({ ok: false, error: "Email send failed" });
+  }
+};
+
