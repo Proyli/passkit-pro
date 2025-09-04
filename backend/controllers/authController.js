@@ -6,36 +6,67 @@ const Member = db.Member;
 // arriba del archivo
 const { renderWalletEmail, DEFAULTS } = require("../services/renderEmail");
 
-async function sendLoyaltyEmail(member, { googleUrl, appleUrl }) {
-  const displayName = member.nombre || member.name || "Cliente";
-  const externalId  = member.externalId || member.external_id || member.id || "";
+async function sendLoyaltyEmail(
+  member,
+  {
+    googleUrl,
+    appleUrl,
+
+    // 👇 Opcionales; si no los pasas, se usan defaults
+    settings,            // objeto de look-and-feel completo (colores, body, etc.)
+    htmlTemplate,        // tu HTML (si no mandas settings)
+    buttonText,          // texto del botón principal
+    logoUrl,             // url del logo
+    membershipId,        // ID del cliente (L00005-CP0160, etc.)
+    subject,             // asunto opcional
+    from,                // from opcional
+  } = {}
+) {
+  const displayName = member?.nombre || member?.name || "Cliente";
+  const externalId  = member?.externalId || member?.external_id || member?.id || "";
   const payload     = `PK|${externalId}|ALCAZAREN`;
-  const base        = process.env.PUBLIC_BASE_URL; // ej: https://backend-passforge.onrender.com
+  const base        = process.env.PUBLIC_BASE_URL || "";
 
-  const html = renderWalletEmail({}, { displayName, googleUrl, appleUrl });
+  // 1) Construir el HTML final
+  const html = renderWalletEmail(
+    settings
+      ? { ...settings, logoUrl } // si pasas settings, respetamos todo
+      : {                         // si no, usamos tu htmlTemplate + buttonText
+          htmlBody: htmlTemplate || DEFAULTS.htmlBody,
+          buttonText: buttonText || DEFAULTS.buttonText || "Guardar en el móvil",
+          logoUrl,
+        },
+    { displayName, googleUrl, appleUrl, membershipId }
+  );
 
+  // 2) Enviar correo
   await transporter.sendMail({
-    from: process.env.SMTP_FROM || '"PassForge" <no-reply@alcazaren.com.gt>',
+    from: from || process.env.SMTP_FROM || DEFAULT_FROM,
     to: member.email,
-    subject: "Su Tarjeta de Lealtad",
+    subject: subject || DEFAULTS.subject || "Su Tarjeta de Lealtad",
     html,
+    headers: {
+      "Content-Language": "es",
+      "X-Entity-Language": "es",
+    },
     attachments: [
       {
         filename: "code128.png",
-        path: `${base}/api/barcode/${encodeURIComponent(payload)}.png`,
+        path: base ? `${base}/api/barcode/${encodeURIComponent(payload)}.png` : undefined,
         contentType: "image/png",
-        cid: "code128",              // <img src="cid:code128"> en tu htmlBody
+        cid: "code128", // usa <img src="cid:code128"> en tu htmlBody si quieres mostrarlo
       },
-      // Opcional: si tienes endpoint de QR
+      // Si tienes QR, descomenta:
       // {
       //   filename: "qr.png",
-      //   path: `${base}/api/qr/${encodeURIComponent(payload)}.png`,
+      //   path: base ? `${base}/api/qr/${encodeURIComponent(payload)}.png` : undefined,
       //   contentType: "image/png",
-      //   cid: "qr",                // <img src="cid:qr">
+      //   cid: "qr",
       // },
-    ],
+    ].filter(Boolean),
   });
 }
+
 // ---------- SMTP (un solo transporter para todo el módulo) ----------
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
