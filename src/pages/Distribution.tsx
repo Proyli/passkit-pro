@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { API } from "@/config/api";
 import { useNavigate } from "react-router-dom";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import AddToWalletButton from "@/components/wallet/AddToWalletButton";
 
 type SendArgs = {
   to: string;
@@ -299,6 +300,14 @@ useEffect(() => {
     doc.close();
   }, [previewHTML]);
 
+// === URL para el botón "Guardar en la billetera" ===
+const api = import.meta.env.VITE_API_BASE_URL || "/api";
+const resolveUrl = useMemo(() => {
+  if (!clientCode || !campaignCode) return "";
+  return `${api}/wallet/resolve?client=${encodeURIComponent(clientCode)}&campaign=${encodeURIComponent(campaignCode)}`;
+}, [api, clientCode, campaignCode]);
+
+
   // ================= Helpers =================
   const onChange = (patch: Partial<Settings>) => setSettings((s) => ({ ...s, ...patch }));
 
@@ -446,7 +455,7 @@ const handleSendTest = async () => {
         placeholder="blue_5"
       />
     </div>
-
+            
     {/* 👇 AQUI VA EL SELECT "Tipo de cliente" */}
     <div>
       <Label>Tipo de cliente</Label>
@@ -486,6 +495,17 @@ const handleSendTest = async () => {
         </Button>
       </div>
     </div>
+  </div>
+
+           {/* 👉 Botón para probar la billetera con los códigos actuales */}
+  {resolveUrl && (
+    <AddToWalletButton resolveUrl={resolveUrl} className="mt-3" />
+  )}
+
+  <div className="pt-2">
+    <Button onClick={handleSendTest} disabled={!canSendTest || sending}>
+      {sending ? "Enviando…" : "Enviar correo de prueba"}
+    </Button>
   </div>
 </Card>
 
