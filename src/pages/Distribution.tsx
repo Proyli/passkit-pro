@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { API } from "@/config/api";
 import { useNavigate } from "react-router-dom";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 
 type SendArgs = {
   to: string;
@@ -128,12 +129,16 @@ export default function Distribution() {
   const [enrollment, setEnrollment] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
   const [previewTheme, setPreviewTheme] = useState<"system" | "light" | "dark">("system");
+  const [clientType, setClientType] = useState<string>(""); // “Tipo de cliente” independiente
+
 
   const [testEmail, setTestEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [clientCode, setClientCode] = useState("");
   const [campaignCode, setCampaignCode] = useState("");
   const [sending, setSending] = useState(false);
+  const [campaignTouched, setCampaignTouched] = useState(false);
+
 
   // === Membership ID editable con sugerencia automática ===
 const [membershipId, setMembershipId] = useState<string>(() =>
@@ -411,57 +416,79 @@ const handleSendTest = async () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
           {/* Formulario izquierda */}
          <Card className="p-5 space-y-3 mt-6">
-          <h3 className="text-base font-semibold">Enviar correo de prueba</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <Label>Para (email)</Label>
-              <Input value={testEmail} onChange={(e) => setTestEmail(e.target.value)} placeholder="cliente@correo.com" />
-            </div>
-            <div>
-              <Label>Nombre (opcional)</Label>
-              <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Linda Pérez" />
-            </div>
-            <div>
-              <Label>Código Cliente</Label>
-              <Input value={clientCode} onChange={(e) => setClientCode(e.target.value)} placeholder="L00457" />
-            </div>
-            <div>
-              <Label>Código Campaña</Label>
-              <Input value={campaignCode} onChange={(e) => setCampaignCode(e.target.value)} placeholder="blue_5" />
-            </div>
-          </div>
+  <h3 className="text-base font-semibold">Enviar correo de prueba</h3>
 
-          <div>
-        <Label>Membership ID</Label>
-        <Input
-          value={membershipId}
-          onChange={(e) => { setMembershipId(e.target.value); setMembershipTouched(true); }}
-          placeholder="L00005-CP0160"
-        />
-        <div className="mt-2 flex gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            className="h-8"
-            onClick={() => { setMembershipTouched(false); setMembershipId(buildMembershipId(clientCode, campaignCode)); }}
-            title="Volver a sugerencia automática"
-          >
-            Restablecer sugerido
-          </Button>
-          {membershipTouched && (
-            <span className="text-xs text-slate-500 self-center">
-              Editado manualmente (no se sobrescribirá)
-            </span>
-          )}
-        </div>
+  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+    {/* Para */}
+    <div>
+      <Label>Para (email)</Label>
+      <Input value={testEmail} onChange={(e)=>setTestEmail(e.target.value)} placeholder="cliente@correo.com" />
+    </div>
+
+    {/* Nombre */}
+    <div>
+      <Label>Nombre (opcional)</Label>
+      <Input value={displayName} onChange={(e)=>setDisplayName(e.target.value)} placeholder="Linda Pérez" />
+    </div>
+
+    {/* Código Cliente */}
+    <div>
+      <Label>Código Cliente</Label>
+      <Input value={clientCode} onChange={(e)=>setClientCode(e.target.value)} placeholder="L00457" />
+    </div>
+
+    {/* Código Campaña */}
+    <div>
+      <Label>Código Campaña</Label>
+      <Input
+        value={campaignCode}
+        onChange={(e)=>{ setCampaignCode(e.target.value); setCampaignTouched(true); }}
+        placeholder="blue_5"
+      />
+    </div>
+
+    {/* 👇 AQUI VA EL SELECT "Tipo de cliente" */}
+    <div>
+      <Label>Tipo de cliente</Label>
+      <Select
+        value={clientType}
+        onValueChange={(v)=>{
+          setClientType(v);
+          if (!campaignTouched) setCampaignCode(v); // sugiere sin pisar si ya escribiste
+        }}
+      >
+        <SelectTrigger className="w-full">
+          <SelectValue placeholder="Seleccione un tipo" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="blue_5">Blue 5%</SelectItem>
+          <SelectItem value="gold_10">Gold 10%</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+
+    {/* Membership ID */}
+    <div>
+      <Label>Membership ID</Label>
+      <Input
+        value={membershipId}
+        onChange={(e)=>{ setMembershipId(e.target.value); setMembershipTouched(true); }}
+        placeholder="L00005-CP0160"
+      />
+      <div className="mt-2">
+        <Button
+          type="button"
+          variant="outline"
+          className="h-8"
+          onClick={()=>{ setMembershipTouched(false); setMembershipId(buildMembershipId(clientCode, campaignCode)); }}
+        >
+          Restablecer sugerido
+        </Button>
       </div>
+    </div>
+  </div>
+</Card>
 
-          <div className="pt-2">
-            <Button onClick={handleSendTest} disabled={!canSendTest || sending}>
-              {sending ? "Enviando…" : "Enviar correo de prueba"}
-            </Button>
-          </div>
-        </Card>
 
 
           {/* Preview derecha */}
