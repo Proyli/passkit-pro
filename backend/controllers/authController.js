@@ -12,7 +12,7 @@ async function sendLoyaltyEmail(
     googleUrl,
     appleUrl,
 
-    // 👇 Opcionales; si no los pasas, se usan defaults
+    //  Opcionales; si no los pasas, se usan defaults
     settings,            // objeto de look-and-feel completo (colores, body, etc.)
     htmlTemplate,        // tu HTML (si no mandas settings)
     buttonText,          // texto del botón principal
@@ -28,16 +28,14 @@ async function sendLoyaltyEmail(
   const base        = process.env.PUBLIC_BASE_URL || "";
 
   // 1) Construir el HTML final
-  const html = renderWalletEmail(
-    settings
-      ? { ...settings, logoUrl } // si pasas settings, respetamos todo
-      : {                         // si no, usamos tu htmlTemplate + buttonText
-          htmlBody: htmlTemplate || DEFAULTS.htmlBody,
-          buttonText: buttonText || DEFAULTS.buttonText || "Guardar en el móvil",
-          logoUrl,
-        },
-    { displayName, googleUrl, appleUrl, membershipId }
-  );
+  // ✅ lo nuevo (pegar tal cual)
+const html = renderWalletEmail(
+  settings
+    ? { ...settings, logoUrl }
+    : { htmlBody: htmlTemplate, buttonText: buttonText || DEFAULTS.buttonText, logoUrl },
+  { displayName, googleUrl, appleUrl, membershipId }
+);
+
 
   // 2) Enviar correo
   await transporter.sendMail({
@@ -190,11 +188,14 @@ if (!to || !googleUrl || !htmlTemplate) {
   return res.status(400).json({ ok: false, error: "Missing to/googleUrl/htmlTemplate" });
 }
 
+// ✅ lo nuevo (pegar tal cual)
 const html = renderWalletEmail(
-  // Si mandas settings, respeta todo; si no, usa htmlTemplate+buttonText
-  (settings ? { ...settings, logoUrl } : { htmlBody: htmlTemplate, buttonText: buttonText || DEFAULTS.buttonText, logoUrl }),
+  settings
+    ? { ...settings, logoUrl }
+    : { htmlBody: htmlTemplate, buttonText: buttonText || DEFAULTS.buttonText, logoUrl },
   { displayName, googleUrl, appleUrl, membershipId }
 );
+
 
 
     await transporter.sendMail({

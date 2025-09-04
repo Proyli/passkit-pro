@@ -18,7 +18,7 @@ const transporter = nodemailer.createTransport({
   auth: { user: process.env.SMPP_USER || process.env.SMTP_USER, pass: process.env.SMTP_PASS },
 });
 
-// ✨ Esta es la función que respeta htmlTemplate/settings
+//  Esta es la función que respeta htmlTemplate/settings
 async function sendWelcomeEmailHtml(
   to,
   displayName,
@@ -27,12 +27,15 @@ async function sendWelcomeEmailHtml(
   settings,
   { htmlTemplate, buttonText, membershipId, logoUrl, subject, from } = {}
 ) {
-  const s = (settings && Object.keys(settings).length)
+  const s = (settings && Object.keys(settings || {}).length)
   ? mergeSettings(settings)
   : { htmlBody: htmlTemplate, buttonText: buttonText || DEFAULT_SETTINGS.buttonText, logoUrl };
 
+const html = renderWalletEmail(
+  s,
+  { displayName, googleUrl, appleUrl, membershipId }
+);
 
-  const html = renderWalletEmail(s, { displayName, googleUrl, appleUrl, membershipId });
 
   return transporter.sendMail({
     from: from || `${s.fromName || "Alcazarén"} <no-reply@alcazaren.com.gt>`,
