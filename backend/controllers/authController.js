@@ -138,34 +138,43 @@ exports.resetPassword = async (req, res) => {
 };
 
 // -------------------- ENVIAR PASS (bienvenida) --------------------
+// -------------------- SEND PASS EMAIL --------------------
 exports.sendPassEmail = async (req, res) => {
   try {
     const {
-      to,               // email destino (obligatorio)
-      displayName,      // nombre del cliente
-      buttonText,       // texto del botón (opcional)
-      googleUrl,        // URL Google Wallet (obligatorio)
-      appleUrl,         // URL Apple Wallet (opcional)
-      htmlTemplate,     // HTML base del diseñador (obligatorio)
-      subject,          // asunto opcional
-      from,             // from opcional
-    } = req.body;
+  to,
+  displayName,
+  buttonText,
+  googleUrl,
+  appleUrl,
+  htmlTemplate,
+  subject,
+  from,
+  settings,        // opcional
+  membershipId,    // 👈 NUEVO (ID por cliente)
+  logoUrl          // opcional, por si quieres reemplazar el del DEFAULTS
+} = req.body;
 
-    if (!to || !googleUrl || !htmlTemplate) {
-      return res.status(400).json({ ok: false, error: "Missing to/googleUrl/htmlTemplate" });
-    }
+if (!to || !googleUrl || !htmlTemplate) {
+  return res.status(400).json({ ok: false, error: "Missing to/googleUrl/htmlTemplate" });
+}
 
-    const html = renderWalletEmail(
-      { htmlBody: htmlTemplate, buttonText: buttonText || DEFAULTS.buttonText },
-      { displayName, googleUrl, appleUrl }
-    );
+const html = renderWalletEmail(
+  // Si mandas settings, respeta todo; si no, usa htmlTemplate+buttonText
+  (settings ? { ...settings, logoUrl } : { htmlBody: htmlTemplate, buttonText: buttonText || DEFAULTS.buttonText, logoUrl }),
+  { displayName, googleUrl, appleUrl, membershipId }
+);
+
 
     await transporter.sendMail({
       from: from || DEFAULT_FROM,
       to,
-      subject: subject || DEFAULTS.subject,
+      subject: subject || DEFAULTS.subject, // "Su Tarjeta de Lealtad"
       html,
-      headers: { "Content-Language": "es", "X-Entity-Language": "es" },
+      headers: {
+        "Content-Language": "es",
+        "X-Entity-Language": "es",
+      },
     });
 
     return res.json({ ok: true });
@@ -174,6 +183,7 @@ exports.sendPassEmail = async (req, res) => {
     return res.status(500).json({ ok: false, error: "Email send failed" });
   }
 };
+
 
 
 

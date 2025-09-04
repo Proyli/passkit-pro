@@ -17,7 +17,21 @@ type SendArgs = {
   campaignCode: string;
   buttonText: string;
   htmlTemplate: string;
+
+  //  nuevos (dinámicos por cliente)
+  membershipId?: string;     // p.ej. "L00005-CP0160"
+  logoUrl?: string;          // si quieres forzar el logo del correo
+  settings?: Settings;       // si deseas enviar TODO el look desde el front
 };
+
+// Sugerir "L00005-CP0160" a partir de clientCode/campaignCode
+function buildMembershipId(clientCode: string, campaignCode: string) {
+  const num = String(clientCode ?? "").replace(/\D/g, "");
+  const padded = num ? num.padStart(5, "0") : String(clientCode ?? "");
+  const cleanCamp = String(campaignCode ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const camp = cleanCamp.startsWith("CP") ? cleanCamp : (cleanCamp ? `CP${cleanCamp}` : "");
+  return `L${padded}${camp ? `-${camp}` : ""}`;
+}
 
 function buildUrls(clientCode: string, campaignCode: string) {
   const c = encodeURIComponent(clientCode.trim());
@@ -29,30 +43,47 @@ function buildUrls(clientCode: string, campaignCode: string) {
 }
 
 async function sendPassEmail(args: SendArgs) {
-  const { to, displayName, clientCode, campaignCode, buttonText, htmlTemplate } = args;
+  const {
+    to,
+    displayName,
+    clientCode,
+    campaignCode,
+    buttonText,
+    htmlTemplate,
+    membershipId,   // 👈 nuevo
+    logoUrl,        // opcional
+    settings,       // opcional
+  } = args;
+
   const { googleUrl, appleUrl } = buildUrls(clientCode, campaignCode);
 
   const r = await fetch(`${API}/email/send-pass`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "x-role": "admin" }, // si tu backend pide este header
+    headers: { "Content-Type": "application/json", "x-role": "admin" },
     body: JSON.stringify({
       to,
       displayName,
-      buttonText,
-      googleUrl,                 // → reemplaza {{GOOGLE_SAVE_URL}}
-      appleUrl,                  // → reemplaza {{APPLE_URL}}
-      htmlTemplate,              // → tu Body (HTML)
+      buttonText,            // → {{BUTTON_TEXT}}
+      googleUrl,             // → {{GOOGLE_SAVE_URL}}
+      appleUrl,              // → {{APPLE_URL}}
+      htmlTemplate,          // → body (HTML) desde tu editor
       subject: "Su Tarjeta de Lealtad",
       from: "Distribuidora Alcazarén",
+
+      // 👇 NUEVOS
+      membershipId,          // → {{MEMBERSHIP_ID}}
+      logoUrl,               // → {{LOGO_URL}} (opcional)
+      settings,              // si lo envías, el backend usará todo tu look
     }),
   });
 
   if (!r.ok) {
-    const j = await r.json().catch(() => ({}));
+    const j = await r.json().catch(() => ({} as any));
     throw new Error(j?.error || `HTTP ${r.status}`);
   }
   return r.json();
 }
+
 
 // ================= Types =================
 type Settings = {
@@ -65,6 +96,7 @@ type Settings = {
   bodyColorLight: string;
   bodyColorDark: string;
   htmlBody: string;
+  logoUrl?: string;
 };
 
 const defaultSettings: Settings = {
@@ -80,6 +112,7 @@ const defaultSettings: Settings = {
   bodyColorDark: "#0f2b40",
   htmlBody: '<!-- CONTENIDO PERSONALIZABLE DEL EMAIL -->\n<p style="margin:0 0 14px 0;font-size:18px;line-height:1.45;">\n  <strong>Su Tarjeta de Lealtad</strong>\n</p>\n\n<p style="margin:0 0 10px 0;line-height:1.6;">\n  Estimado/a <strong>{{DISPLAY_NAME}}</strong>,\n</p>\n\n<p style="margin:0 0 10px 0;line-height:1.6;">\n  Es un honor darle la bienvenida a nuestro exclusivo programa\n  <em>Lealtad Alcazaren</em>, diseñado para premiar su preferencia con beneficios únicos.\n</p>\n\n<p style="margin:0 0 10px 0;line-height:1.6;">\n  A partir de hoy, cada compra de nuestra gama de productos selectos le otorgará\n  ahorros inmediatos y experiencias distinguidas. Acceda fácilmente a sus\n  beneficios desde su billetera digital y disfrute de descuentos exclusivos.\n</p>\n\n<!-- CTA: Botones responsivos y compatibles con Outlook -->\n<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin:18px 0 6px 0;">\n  <tr>\n    <td align="center" style="padding:0;">\n      <!--[if mso]>\n      <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="{{GOOGLE_SAVE_URL}}" arcsize="12%" stroke="f" fillcolor="#8B173C" style="height:48px;v-text-anchor:middle;width:320px;">\n        <w:anchorlock/>\n        <center style="color:#ffffff;font-family:Segoe UI,Arial,sans-serif;font-size:16px;font-weight:700;">\n          {{BUTTON_TEXT}}\n        </center>\n      </v:roundrect>\n      <![endif]-->\n      <!--[if !mso]><!-- -->\n      <a href="{{GOOGLE_SAVE_URL}}"\n         style="background:#8B173C;border-radius:10px;display:inline-block;padding:14px 22px;text-decoration:none;\n                color:#ffffff;font-weight:700;font-family:Segoe UI,Roboto,Arial,sans-serif;font-size:16px;">\n        {{BUTTON_TEXT}}\n      </a>\n      <!--<![endif]-->\n    </td>\n  </tr>\n</table>\n\n<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin:8px 0 18px 0;">\n  <tr>\n    <td align="center" style="padding:0;">\n      <!--[if mso]>\n      <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="{{APPLE_URL}}" arcsize="12%" strokecolor="#0F2B40" fillcolor="#FFFFFF" style="height:46px;v-text-anchor:middle;width:320px;">\n        <w:anchorlock/>\n        <center style="color:#0F2B40;font-family:Segoe UI,Arial,sans-serif;font-size:15px;font-weight:700;">\n          Añadir a Apple Wallet\n        </center>\n      </v:roundrect>\n      <![endif]-->\n      <!--[if !mso]><!-- -->\n      <a href="{{APPLE_URL}}"\n         style="background:#FFFFFF;border:2px solid #0F2B40;border-radius:10px;display:inline-block;padding:12px 20px;text-decoration:none;\n                color:#0F2B40;font-weight:700;font-family:Segoe UI,Roboto,Arial,sans-serif;font-size:15px;">\n        Añadir a Apple Wallet\n      </a>\n      <!--<![endif]-->\n    </td>\n  </tr>\n</table>\n\n<hr style="border:none;border-top:1px solid rgba(0,0,0,.12);margin:18px 0;" />\n\n<p style="margin:0 0 6px 0;line-height:1.6;"><em>Aplican restricciones.</em></p>\n<p style="margin:0 0 6px 0;line-height:1.6;">\n  Si tiene dudas, puede comunicarse al teléfono 2429 5959, ext. 2120 (Ciudad Capital),\n  ext. 1031 (Xelajú) o al correo\n  <a href="mailto:alcazaren@alcazaren.com.gt" style="color:inherit;text-decoration:underline;">alcazaren@alcazaren.com.gt</a>.\n</p>\n\n<p style="margin:14px 0 0 0;line-height:1.6;">\n  Saludos cordiales.<br>\n  <strong>Distribuidora Alcazarén</strong>\n</p>\n<!-- /CONTENIDO PERSONALIZABLE DEL EMAIL -->',
 
+    logoUrl: "https://raw.githubusercontent.com/Proyli/wallet-assets/main/program-logo.png",
 };
 
 // Para la tabla de tiers
@@ -101,6 +134,19 @@ export default function Distribution() {
   const [clientCode, setClientCode] = useState("");
   const [campaignCode, setCampaignCode] = useState("");
   const [sending, setSending] = useState(false);
+
+  // === Membership ID editable con sugerencia automática ===
+const [membershipId, setMembershipId] = useState<string>(() =>
+  buildMembershipId(clientCode, campaignCode)
+);
+const [membershipTouched, setMembershipTouched] = useState(false);
+
+// Recalcular solo si NO ha sido editado manualmente
+useEffect(() => {
+  if (!membershipTouched) {
+    setMembershipId(buildMembershipId(clientCode, campaignCode));
+  }
+}, [clientCode, campaignCode, membershipTouched]);
 
   // 👉 Encabezados para endpoints protegidos (ajusta a tu auth real)
   const ADMIN_GET_HEADERS: Record<string, string> = { "x-role": "admin" };
@@ -152,46 +198,55 @@ export default function Distribution() {
   // ================= Preview =================
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  const previewHTML = useMemo(() => {
-    const btn = settings.buttonText || "Guardar en el móvil";
+ const previewHTML = useMemo(() => {
+  const btn = settings.buttonText || "Guardar en el móvil";
 
-    // Reemplazos de PREVIEW (solo visual; el backend inyecta los reales al enviar)
-    const SAMPLE: Record<string, string> = {
-      DISPLAY_NAME: "Linda Pérez",
-      CLIENT: "L01313",
-      CAMPAIGN: "C00131",
-      BUTTON_TEXT: btn,
-      GOOGLE_SAVE_URL: "#google-wallet",
-      APPLE_URL: "#apple-wallet",
-    };
+  // Reemplazos de PREVIEW (solo visual; el backend inyecta los reales al enviar)
+  const SAMPLE: Record<string, string> = {
+    DISPLAY_NAME: displayName || "Linda Pérez",
+    CLIENT: clientCode || "L01313",
+    CAMPAIGN: campaignCode || "C00131",
+    BUTTON_TEXT: btn,
+    GOOGLE_SAVE_URL: "#google-wallet",
+    APPLE_URL: "#apple-wallet",
+    // 👇 añadidos
+    MEMBERSHIP_ID: membershipId || "L00005-CP0160",
+    LOGO_URL: settings.logoUrl || "https://raw.githubusercontent.com/Proyli/wallet-assets/main/program-logo.png",
+  };
 
-    const originalBody = String(settings.htmlBody || "");
-    let safeBody = originalBody;
-    Object.entries(SAMPLE).forEach(([k, v]) => {
-      safeBody = safeBody.split(`{{${k}}}`).join(v);
-    });
+  const originalBody = String(settings.htmlBody || "");
+  let safeBody = originalBody;
+  Object.entries(SAMPLE).forEach(([k, v]) => {
+    safeBody = safeBody.split(`{{${k}}}`).join(v);
+  });
 
-    const hasLinks = originalBody.includes("{{GOOGLE_SAVE_URL}}") || originalBody.includes("{{APPLE_URL}}");
-    const fallbackCTA = hasLinks
-      ? ""
-      : `
-        <p style="margin-top:24px"><a class="btn" href="javascript:void(0)">${btn}</a></p>
-        <p style="font-size:12px">¿Usa iPhone? <a class="underline" href="javascript:void(0)">Añadir a Apple Wallet</a></p>
-      `;
+  const hasLinks =
+    originalBody.includes("{{GOOGLE_SAVE_URL}}") || originalBody.includes("{{APPLE_URL}}");
 
-    const bg = previewTheme === "dark" ? settings.darkBg : settings.lightBg;
-    const screenBg = previewTheme === "dark" ? settings.bodyColorDark : settings.bodyColorLight;
+  const fallbackCTA = hasLinks
+    ? ""
+    : `
+      <p style="margin-top:24px">
+        <a class="btn" href="javascript:void(0)">${btn}</a>
+      </p>
+      <p style="font-size:12px">
+        ¿Usa iPhone? <a class="underline" href="javascript:void(0)">Añadir a Apple Wallet</a>
+      </p>
+    `;
 
-    const darkBlock =
-      previewTheme === "system"
-        ? `
-  @media (prefers-color-scheme: dark){
-    body  { background:${settings.darkBg}; }
-    .screen { background:${settings.bodyColorDark}; }
-  }`
-        : "";
+  const bg = previewTheme === "dark" ? settings.darkBg : settings.lightBg;
+  const screenBg = previewTheme === "dark" ? settings.bodyColorDark : settings.bodyColorLight;
 
-    return `
+  const darkBlock =
+    previewTheme === "system"
+      ? `
+@media (prefers-color-scheme: dark){
+  body  { background:${settings.darkBg}; }
+  .screen { background:${settings.bodyColorDark}; }
+}`
+      : "";
+
+  return `
 <!doctype html>
 <meta name="color-scheme" content="light dark">
 <style>
@@ -216,15 +271,18 @@ export default function Distribution() {
   </div>
 </body>
 `.trim();
-  }, [
-    settings.htmlBody,
-    settings.buttonText,
-    settings.lightBg,
-    settings.darkBg,
-    settings.bodyColorLight,
-    settings.bodyColorDark,
-    previewTheme,
-  ]);
+}, [
+  settings.htmlBody,
+  settings.buttonText,
+  settings.lightBg,
+  settings.darkBg,
+  settings.bodyColorLight,
+  settings.bodyColorDark,
+  previewTheme,
+  // 👇 asegúrate de volver a renderizar cuando cambie:
+  membershipId, displayName, clientCode, campaignCode, settings.logoUrl,
+]);
+
 
   useEffect(() => {
     const iframe = iframeRef.current;
@@ -293,13 +351,19 @@ const handleSendTest = async () => {
   try {
     setSending(true);
     await sendPassEmail({
-      to: testEmail,
-      displayName: displayName || "Cliente",
-      clientCode,
-      campaignCode,
-      buttonText: settings.buttonText || "Guardar en el móvil",
-      htmlTemplate: settings.htmlBody,
-    });
+  to: testEmail,
+  displayName: displayName || "Cliente",
+  clientCode,
+  campaignCode,
+  buttonText: settings.buttonText || "Guardar en el móvil",
+  htmlTemplate: settings.htmlBody,
+
+  // 👇 añade esto
+  membershipId,
+  // logoUrl: "https://…/program-logo.png", // opcional
+  // settings: settings,                    // opcional (o defaultSettings)
+});
+
     toast({ title: "Enviado", description: "Correo de bienvenida enviado." });
   } catch (e: any) {
     toast({ title: "Error al enviar", description: String(e?.message || e), variant: "destructive" });
@@ -366,6 +430,31 @@ const handleSendTest = async () => {
               <Input value={campaignCode} onChange={(e) => setCampaignCode(e.target.value)} placeholder="blue_5" />
             </div>
           </div>
+
+          <div>
+        <Label>Membership ID</Label>
+        <Input
+          value={membershipId}
+          onChange={(e) => { setMembershipId(e.target.value); setMembershipTouched(true); }}
+          placeholder="L00005-CP0160"
+        />
+        <div className="mt-2 flex gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="h-8"
+            onClick={() => { setMembershipTouched(false); setMembershipId(buildMembershipId(clientCode, campaignCode)); }}
+            title="Volver a sugerencia automática"
+          >
+            Restablecer sugerido
+          </Button>
+          {membershipTouched && (
+            <span className="text-xs text-slate-500 self-center">
+              Editado manualmente (no se sobrescribirá)
+            </span>
+          )}
+        </div>
+      </div>
 
           <div className="pt-2">
             <Button onClick={handleSendTest} disabled={!canSendTest || sending}>
