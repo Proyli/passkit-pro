@@ -176,14 +176,4 @@ exports.sendPassEmail = async (req, res) => {
 };
 
 
-    await transporter.sendMail({
-  from: from || DEFAULT_FROM,
-  to,
-  subject: subject || DEFAULTS.subject, // "Su Tarjeta de Lealtad"
-  html, // el que generamos arriba
-  headers: {
-    "Content-Language": "es",
-    "X-Entity-Language": "es",
-  },
-});
 
