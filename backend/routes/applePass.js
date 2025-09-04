@@ -7,8 +7,14 @@ const { PKPass } = require("passkit-generator");
 const router = express.Router();
 
 // ⬇️ AQUÍ van tus líneas de certificados (justo debajo de los imports)
-const CERT_DIR  = path.join(process.cwd(), "backend", "certs");
-const MODEL_DIR = path.join(process.cwd(), "backend", "passes", "alcazaren.pass");
+// base = carpeta "backend"
+const BASE      = path.resolve(__dirname, "..");
+const CERT_DIR  = path.join(BASE, "certs");
+const MODEL_DIR = path.join(BASE, "passes", "alcazaren.pass");
+
+console.log("CERT_DIR:", CERT_DIR);
+console.log("MODEL_DIR:", MODEL_DIR);
+
 
 const wwdr       = fs.readFileSync(path.join(CERT_DIR, "AppleWWDR.pem"));
 const signerCert = fs.readFileSync(path.join(CERT_DIR, "pass_cert.pem"));

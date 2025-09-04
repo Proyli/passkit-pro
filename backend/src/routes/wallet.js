@@ -128,7 +128,6 @@ function buildGoogleSaveUrl({ client, campaign, externalId, displayName, classSh
 }
 
 
-
 function makeSmartLink(req, googleSaveUrl, appleUrl) {
   const token = jwt.sign({ g: googleSaveUrl, a: appleUrl }, SECRET, { expiresIn: "7d" });
   return `${baseUrl(req)}/api/wallet/smart/${token}`;
