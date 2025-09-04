@@ -14,6 +14,7 @@ const designRoutes       = require("./routes/designRoutes");
 const walletRoutes       = require(path.join(__dirname, "src", "routes", "wallet"));
 const analyticsRoutes    = require("./src/routes/analytics");
 const { router: distributionRouter } = require("./routes/distribution");
+const applePassRoutes = require("./routes/applePass");
 
 /* ==== DB ==== */
 const db = require("./models");
@@ -51,7 +52,7 @@ app.use("/api",         barcodeRouter);
 app.use("/api",         analyticsRoutes);
 app.use("/api",         distributionRouter);
 app.use("/api", require("./routes/authRoutes"));
-
+app.use("/api", applePassRoutes);
 
 /* ---- Extras útiles ---- */
 // 1) Raíz: ping rápido

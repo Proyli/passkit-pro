@@ -1,0 +1,5 @@
+
+# Certificados y llaves privadas
+certs/*
+!certs/README.md
+

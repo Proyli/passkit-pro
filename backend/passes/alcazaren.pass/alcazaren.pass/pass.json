@@ -1,0 +1,27 @@
+{
+  "formatVersion": 1,
+  "passTypeIdentifier": "pass.com.alcazaren.loyalty",
+  "teamIdentifier": "5DWY4L69C8",
+  "organizationName": "Alcazarén",
+  "description": "Tarjeta de Lealtad (demo)",
+  "logoText": "Alcazarén",
+  "foregroundColor": "rgb(255,255,255)",
+  "backgroundColor": "rgb(43,120,228)",
+  "serialNumber": "SERIAL-PLACEHOLDER",
+  "storeCard": {
+    "primaryFields": [
+      {
+        "key": "points",
+        "label": "Puntos",
+        "value": "150"
+      }
+    ]
+  },
+  "barcodes": [
+    {
+      "format": "PKBarcodeFormatCode128",
+      "message": "ALC-SERIAL-PLACEHOLDER",
+      "messageEncoding": "iso-8859-1"
+    }
+  ]
+}
