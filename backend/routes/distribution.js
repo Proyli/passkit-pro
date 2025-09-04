@@ -17,18 +17,32 @@ const transporter = nodemailer.createTransport({
   secure: false,
   auth: { user: process.env.SMPP_USER || process.env.SMTP_USER, pass: process.env.SMTP_PASS },
 });
-async function sendWelcomeEmail({ to, displayName, googleUrl, appleUrl, settings }) {
-  const s = mergeSettings(settings);
-  const html = renderWalletEmail(s, { displayName, googleUrl, appleUrl });
+
+// ✨ Esta es la función que respeta htmlTemplate/settings
+async function sendWelcomeEmailHtml(
+  to,
+  displayName,
+  googleUrl,
+  appleUrl,
+  settings,
+  { htmlTemplate, buttonText, membershipId, logoUrl, subject, from } = {}
+) {
+  const s = (settings && Object.keys(settings).length)
+  ? mergeSettings(settings)
+  : { htmlBody: htmlTemplate, buttonText: buttonText || DEFAULT_SETTINGS.buttonText, logoUrl };
+
+
+  const html = renderWalletEmail(s, { displayName, googleUrl, appleUrl, membershipId });
 
   return transporter.sendMail({
-    from: `"${s.fromName}" <no-reply@alcazaren.com.gt>`,
+    from: from || `${s.fromName || "Alcazarén"} <no-reply@alcazaren.com.gt>`,
     to,
-    subject: s.subject,
-    html,                           //  usar HTML
-    text: `Guarde su tarjeta: ${googleUrl}` // fallback de texto
+    subject: subject || s.subject || "Su Tarjeta de Lealtad",
+    html,
+    text: `Guarde su tarjeta: ${googleUrl}`, // fallback de texto plano
   });
 }
+
 
 // ---------- Defaults cuando no hay DB ----------
 const DEFAULT_SETTINGS = {
@@ -367,19 +381,32 @@ router.post("/distribution/register-submit", async (req, res) => {
 
 router.post("/distribution/send-test-email", async (req, res) => {
   try {
-    const { email, displayName, clientCode, campaignCode } = req.body;
+    const {
+      email,
+      displayName = "",
+      clientCode = "",
+      campaignCode = "",
+      settings = {},
+      htmlTemplate,
+      buttonText,
+      membershipId,
+      logoUrl,
+      subject,
+      from,
+    } = req.body;
 
-    // Genera/obtén tus URLs reales
-    const googleUrl = await buildGoogleSaveUrl({ clientCode, campaignCode, displayName });
-    const appleUrl  = await buildAppleUrl({ clientCode, campaignCode, displayName });
+    // URLs reales (ajusta si tu backend usa otros paths)
+    const googleUrl = `${API_BASE}/api/wallet/resolve?client=${encodeURIComponent(clientCode)}&campaign=${encodeURIComponent(campaignCode)}&source=test`;
+    const appleUrl  = `${API_BASE}/api/wallet/apple/pkpass?client=${encodeURIComponent(clientCode)}&campaign=${encodeURIComponent(campaignCode)}&source=test`;
 
-    await sendWelcomeEmail({
-      to: email,
+    await sendWelcomeEmailHtml(
+      email,
       displayName,
       googleUrl,
       appleUrl,
-      settings: req.body.settings || {} // opcional, si personalizas
-    });
+      settings,
+      { htmlTemplate, buttonText, membershipId, logoUrl, subject, from }
+    );
 
     res.json({ ok: true });
   } catch (e) {
@@ -389,4 +416,5 @@ router.post("/distribution/send-test-email", async (req, res) => {
 });
 
 
-module.exports = { router, sendWelcomeEmail };
+module.exports = { router, sendWelcomeEmailHtml, sendWelcomeEmail };
+
