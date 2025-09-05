@@ -1,4 +1,6 @@
 // backend/src/routes/wallet.js
+// backend/src/routes/wallet.js
+const { classIdForTier } = require("../helpers/tier"); 
 const express = require("express");
 const jwt = require("jsonwebtoken");
 const { pool } = require("../db");
@@ -89,33 +91,37 @@ function pickClassIdByCampaign(campaign) {
   return process.env.GOOGLE_WALLET_CLASS_ID; // fallback
 }
 
-// ------ Helper: construir Save URL (Google Wallet) ------
-// ------ Helper: construir Save URL (Google Wallet) ------
-// ------ Helper: construir Save URL (Google Wallet) ------
-function buildGoogleSaveUrl({ client, campaign, externalId, displayName, classShortId }) {
-  const issuer = process.env.GOOGLE_WALLET_ISSUER_ID;
-  const klass  = classShortId || pickClassIdByCampaign(campaign);
 
-  if (!issuer || !klass) throw new Error("Faltan GOOGLE_WALLET_ISSUER_ID o CLASS_ID");
+// ------ Helper: construir Save URL (Google Wallet) ------
+// ------ Helper: construir Save URL (Google Wallet) ------
+// ------ Helper: construir Save URL (Google Wallet) ------
+function buildGoogleSaveUrl({ client, campaign, externalId, displayName, tier }) {
+  const issuer = process.env.GOOGLE_WALLET_ISSUER_ID;
+  if (!issuer) throw new Error("Falta GOOGLE_WALLET_ISSUER_ID");
   if (!SA_EMAIL || !PRIVATE_KEY) throw new Error("Faltan GOOGLE_SA_EMAIL o PRIVATE_KEY");
 
-  const objectId  = `${issuer}.${sanitize(`${client}-${campaign}`)}`;
-  const classRef  = `${issuer}.${klass}`;
+  const objectId = `${issuer}.${sanitize(`${client}-${campaign}`)}`;
+
+  // classId por TIER (gold/blue). classIdForTier devuelve issuer.classId-suffix
+  const classRef = classIdForTier((tier || "blue").toLowerCase());
+
   const codeValue = externalId || client;
 
   const loyaltyObject = {
     id: objectId,
     classId: classRef,
     state: "ACTIVE",
-    accountId:   codeValue,
+    accountId:  codeValue,
     accountName: displayName || codeValue,
 
-    // 👇 igual que en /wallet/google
+    // Bloque "Name" como en el mock
     infoModuleData: {
       labelValueRows: [
-        { columns: [{ label: "Name", value: (displayName || codeValue) }] }
+        { columns: [{ label: "Name", value: displayName || codeValue }] }
       ]
     },
+
+    // CODE 128 como en el mock
     barcode: { type: "CODE_128", value: codeValue, alternateText: codeValue }
   };
 
@@ -124,8 +130,11 @@ function buildGoogleSaveUrl({ client, campaign, externalId, displayName, classSh
     PRIVATE_KEY,
     { algorithm: "RS256" }
   );
+
   return `https://pay.google.com/gp/v/save/${saveToken}`;
 }
+
+
 
 
 function makeSmartLink(req, googleSaveUrl, appleUrl) {
@@ -393,6 +402,7 @@ router.post("/telemetry/install", async (req, res) => {
 });
 
 // Smart link: detecta iOS/Android y redirige al destino correcto
+// Smart link: detecta iOS/Android y redirige al destino correcto
 router.get("/wallet/smart/:token", async (req, res) => {
   try {
     const { client, campaign } = jwt.verify(req.params.token, SECRET);
@@ -400,41 +410,45 @@ router.get("/wallet/smart/:token", async (req, res) => {
     const isApple = /iphone|ipad|ipod|macintosh/.test(ua);
 
     // --- Enriquecer con DB: external_id, nombre/apellido, tipoCliente ---
-    let externalId = client;
-      let displayName = client;
-      let tipoCliente = null;
+    let externalId  = client;
+    let displayName = client;
+    let tipoCliente = null;
 
-      try {
-        const r = await findMemberFlexible(client, campaign);
-        if (r) {
-          externalId = r.external_id || client;
-          const fn = r.nombre || r.first_name || "";
-          const ln = r.apellido || r.last_name || "";
-          displayName = `${String(fn||"").trim()} ${String(ln||"").trim()}`.trim() || client;
-          tipoCliente = r.tipoCliente || null;
-        }
-      } catch {}
+    try {
+      const r = await findMemberFlexible(client, campaign);
+      if (r) {
+        externalId = r.external_id || client;
+        const fn = r.nombre || r.first_name || "";
+        const ln = r.apellido || r.last_name || "";
+        displayName = `${String(fn||"").trim()} ${String(ln||"").trim()}`.trim() || client;
+        tipoCliente = r.tipoCliente || null; // "gold" / "blue"
+      }
+    } catch {}
 
-
-    // iOS → a tu endpoint de Apple (.pkpass)
+    // iOS → endpoint de Apple (.pkpass)
     if (isApple) {
       const iosToken = jwt.sign({ client, campaign }, SECRET, { expiresIn: "15m" });
       const appleUrl = `${baseUrl(req)}/api/wallet/ios/${iosToken}`;
       return res.redirect(302, appleUrl);
     }
 
-    // Android → Google Save URL (respetando color por tier/campaign)
-    const classShortId = pickClassIdByTier(tipoCliente) || null;
+    // Android/Google Wallet → usa tier (preferencia: DB, luego query/body, luego "blue")
+    const tier = (tipoCliente || req.body?.tier || req.query?.tier || "blue").toLowerCase();
+
     const googleSaveUrl = buildGoogleSaveUrl({
       client,
       campaign,
       externalId,
       displayName,
-      classShortId,  // si hay tier → usa esa clase; si no, cae a campaign
+      tier
     });
+
     return res.redirect(302, googleSaveUrl);
-  } catch {
-    return res.status(401).send("Link inválido o expirado");
+  } catch (e) {
+    const status  = e?.response?.status || 401;
+    const details = e?.response?.data || e?.message || String(e);
+    console.error("wallet/smart error:", details);
+    return res.status(status).json({ message: "Token inválido/vencido", details });
   }
 });
 
