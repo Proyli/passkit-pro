@@ -22,20 +22,56 @@ const signerKey  = fs.readFileSync(path.join(CERT_DIR, "pass_private.key"));
 const signerKeyPassphrase = process.env.PASS_KEY_PASSPHRASE || undefined;
 
 // Ruta que devuelve el .pkpass
+// Ruta que devuelve el .pkpass
 router.get("/apple/pass/:serial", async (req, res) => {
   try {
+    const displayName  = req.query.displayName || req.query.name || "Cliente";
+    const membershipId = req.query.membershipId || req.query.mid || req.params.serial;
+
     const pass = await PKPass.from(
       {
         model: MODEL_DIR,
         certificates: { wwdr, signerCert, signerKey, signerKeyPassphrase },
       },
       {
-        serialNumber: req.params.serial,
-        barcodes: [{
-          format: "PKBarcodeFormatCode128",
-          message: `ALC-${req.params.serial}`,
-          messageEncoding: "iso-8859-1",
-        }],
+        // === Identidad ===
+        serialNumber: membershipId,
+
+        // === Código de barras: CODE128 (NO QR) ===
+        barcodes: [
+          {
+            format: "PKBarcodeFormatCode128",
+            message: `PK|${membershipId}|ALCAZAREN`,
+            messageEncoding: "iso-8859-1",
+            altText: membershipId,
+          },
+        ],
+
+        // === Campos storeCard: se ven como tu diseño “largo” ===
+        storeCard: {
+          primaryFields: [
+            { key: "title", label: "Lealtad Alcazarén", value: "Lealtad Alcazarén" },
+          ],
+          secondaryFields: [
+            { key: "name", label: "Name", value: displayName },
+          ],
+          auxiliaryFields: [
+            {
+              key: "info",
+              label: "Information",
+              value:
+                "Disfruta un 5% de ahorro en cada compra. Tu lealtad merece un beneficio exclusivo. Aplican restricciones.",
+            },
+          ],
+          backFields: [
+            { key: "terms", label: "Términos", value: "Aplican restricciones." },
+          ],
+        },
+
+        // (opcional) Colores/logoText si tu modelo no los fija
+        // foregroundColor: "rgb(255,255,255)",
+        // backgroundColor: "rgb(16,43,70)",
+        // logoText: "Distribuidora Alcazarén",
       }
     );
 
@@ -43,11 +79,12 @@ router.get("/apple/pass/:serial", async (req, res) => {
       .status(200)
       .type("application/vnd.apple.pkpass")
       .set("Content-Disposition", 'attachment; filename="alcazaren.pkpass"')
-      .send(pass.getAsBuffer());
+      .send(await pass.asBuffer()); // 👈 mejor usar asBuffer() async
   } catch (e) {
-    console.error(e);
+    console.error("apple/pass error:", e);
     res.status(500).json({ error: "No se pudo generar el pase" });
   }
 });
+
 
 module.exports = router;

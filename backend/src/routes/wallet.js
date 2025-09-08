@@ -19,6 +19,8 @@ const SA_EMAIL = process.env.GOOGLE_SA_EMAIL; // wallet-svc@...iam.gserviceaccou
 const SECRET   = process.env.WALLET_TOKEN_SECRET || "changeme";
 const SKIP_DB  = process.env.SKIP_DB === "true";
 
+console.log("[wallet] SECRET prefix:", String(SECRET || "none").slice(0, 10));
+
 
 // ----------------- PRIVATE KEY (var o archivo) -----------------
 const DEFAULT_KEY_PATH = "./keys/wallet-sa.json";
