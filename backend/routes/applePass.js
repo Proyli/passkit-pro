@@ -79,7 +79,7 @@ router.get("/apple/pass/:serial", async (req, res) => {
       .status(200)
       .type("application/vnd.apple.pkpass")
       .set("Content-Disposition", 'attachment; filename="alcazaren.pkpass"')
-      .send(await pass.asBuffer()); // 👈 mejor usar asBuffer() async
+      .send(pass.getAsBuffer());
   } catch (e) {
     console.error("apple/pass error:", e);
     res.status(500).json({ error: "No se pudo generar el pase" });
