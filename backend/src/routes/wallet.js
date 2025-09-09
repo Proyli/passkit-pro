@@ -7,6 +7,10 @@ const { pool } = require("../db");
 //const { GoogleAuth } = require("google-auth-library");
 //const nodemailer = require("nodemailer");
 const fs = require("fs");
+const PKPass = require("pkpass");
+const path = require("path");
+const fs = require("fs");
+
 
 // ----------------- Utils -----------------
 const sanitize = (s) => String(s).replace(/[^\w.-]/g, "_");
@@ -175,22 +179,83 @@ async function findMemberFlexible(client, campaign) {
 
 
 // -------------------- Placeholder iOS (.pkpass más adelante) --------------------
-router.get("/wallet/ios/:token", (req, res) => {
+router.get("/wallet/ios/:token", async (req, res) => {
   try {
-    jwt.verify(req.params.token, SECRET);
-    // TODO: devolver .pkpass aquí
-    return res
-      .status(200)
-      .type("html")
-      .send(`<meta name="viewport" content="width=device-width, initial-scale=1">
-        <div style="font-family:system-ui;padding:24px;max-width:560px;margin:auto">
-          <h2>Apple Wallet</h2>
-          <p>Pronto generaremos el archivo .pkpass automáticamente.</p>
-        </div>`);
-  } catch {
-    return res.status(401).type("text").send("Token inválido o vencido");
+    const { client, campaign } = jwt.verify(req.params.token, SECRET);
+
+    // (Opcional) enriquecer con DB
+    let externalId = client;
+    let displayName = client;
+    try {
+      const r = await findMemberFlexible(client, campaign);
+      if (r) {
+        externalId  = r.external_id || client;
+        const fn = r.nombre || r.first_name || "";
+        const ln = r.apellido || r.last_name || "";
+        displayName = `${String(fn||"").trim()} ${String(ln||"").trim()}`.trim() || client;
+      }
+    } catch {}
+
+    const CERT_DIR  = process.env.CERT_DIR  || path.resolve(process.cwd(), "backend/certs");
+    const MODEL_DIR = process.env.MODEL_DIR || path.resolve(process.cwd(), "backend/passes/alcazaren.pass");
+
+    // iconos obligatorios
+    const icon1x = path.join(MODEL_DIR, "icon.png");
+    const icon2x = path.join(MODEL_DIR, "icon@2x.png");
+    if (!fs.existsSync(icon1x) || !fs.existsSync(icon2x)) {
+      return res.status(500).type("text").send("Faltan icon.png e icon@2x.png en MODEL_DIR");
+    }
+
+    const serial = `ALC-${client}-${campaign}`.replace(/[^\w-]/g, "_");
+
+    const pass = new PKPass(
+      {
+        formatVersion: 1,
+        passTypeIdentifier: process.env.APPLE_PASS_TYPE_ID,
+        teamIdentifier: process.env.APPLE_TEAM_ID,
+        organizationName: process.env.APPLE_ORG_NAME || "Distribuidora Alcazaren",
+        description: "Tarjeta de Lealtad",
+        serialNumber: serial,
+        logoText: "Alcazaren",
+        backgroundColor: "rgb(139,23,60)",
+        foregroundColor: "rgb(255,255,255)",
+        labelColor: "rgb(255,255,255)",
+        barcode: {
+          format: "PKBarcodeFormatCode128",
+          message: externalId,
+          messageEncoding: "iso-8859-1",
+          altText: externalId
+        },
+        storeCard: {
+          primaryFields:   [{ key: "name",    label: "Nombre", value: displayName }],
+          secondaryFields: [{ key: "account", label: "Cuenta",  value: externalId }]
+        }
+      },
+      {
+        wwdr:       fs.readFileSync(path.join(CERT_DIR, "wwdr.pem")),
+        signerCert: fs.readFileSync(path.join(CERT_DIR, "signerCert.pem")),
+        signerKey:  fs.readFileSync(path.join(CERT_DIR, "signerKey.pem")),
+        signerKeyPassphrase: process.env.APPLE_CERT_PASSWORD || undefined
+      }
+    );
+
+    // assets
+    pass.addBuffer("icon.png",    fs.readFileSync(icon1x));
+    pass.addBuffer("icon@2x.png", fs.readFileSync(icon2x));
+    const logo1x = path.join(MODEL_DIR, "logo.png");
+    const logo2x = path.join(MODEL_DIR, "logo@2x.png");
+    if (fs.existsSync(logo1x)) pass.addBuffer("logo.png", fs.readFileSync(logo1x));
+    if (fs.existsSync(logo2x)) pass.addBuffer("logo@2x.png", fs.readFileSync(logo2x));
+
+    res.setHeader("Content-Type", "application/vnd.apple.pkpass");
+    res.setHeader("Content-Disposition", 'inline; filename="alcazaren.pkpass"');
+    return res.send(pass.getAsBuffer());
+  } catch (e) {
+    console.error("pkpass ios error:", e?.message || e);
+    return res.status(400).type("text").send("No se pudo generar el .pkpass");
   }
 });
+
 
 
 // ===============================================================

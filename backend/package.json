@@ -28,6 +28,7 @@
     "node-fetch": "^2.7.0",
     "nodemailer": "^7.0.5",
     "passkit-generator": "^3.4.0",
+    "pkpass": "^1.0.0",
     "sequelize": "^6.37.7"
   },
   "devDependencies": {
