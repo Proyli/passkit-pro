@@ -355,62 +355,82 @@ const displayedPasses = useMemo(() => {
       )}
 
       {displayedPasses.map((pass) => (
-        <div
-          key={pass.id}
-          className="bg-white rounded-2xl shadow-md p-6 flex flex-col justify-between relative"
-        >
-          {/* Menú de acciones */}
-          <div className="absolute top-4 right-4">
-            <Button variant="ghost" className="text-xl" onClick={() => toggleMenu(pass.id)}>
-              ⋮
-            </Button>
-            {openMenuId === pass.id && (
-              <div className="absolute right-0 mt-2 w-40 bg-white border border-gray-200 shadow-md rounded-lg z-50">
-                <ul className="text-sm text-gray-700">
-                  <li className="px-4 py-2 hover:bg-gray-100 cursor-pointer">✏️ Edit</li>
-                  <li
-                    className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
-                    onClick={() => handleOpenDuplicate(pass)}
-                  >
-                    📄 Duplicate
-                  </li>
-                  <li className="px-4 py-2 hover:bg-gray-100 cursor-pointer">🔳 QR Code</li>
-                  <li className="px-4 py-2 text-red-600 hover:bg-red-50 cursor-pointer">🗑️ Delete</li>
-                </ul>
-              </div>
-            )}
-          </div>
-
-          {/* Contenido del pase */}
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <h3 className="text-lg font-semibold text-gray-800">{pass.title}</h3>
-              <span className={`text-xs font-medium px-3 py-1 rounded-full ${typeColors[pass.type] ?? "bg-gray-200 text-gray-800"}`}>
-                {pass.type}
-              </span>
-            </div>
-            <p className="text-gray-600 mb-3">{pass.description}</p>
-            <p className="text-sm text-gray-500">
-              Created: {safeShortDate(pass.createdAt)} &nbsp; Scans: {pass.scans ?? 0}
-            </p>
-          </div>
-
-          {/* Estado y botones */}
-          <div className="flex items-center justify-between mt-5">
-            <div className="flex items-center gap-2">
-              <span className={`h-3 w-3 rounded-full ${statusDotColors[pass.estado]}`}></span>
-              <span className={`text-sm font-semibold px-3 py-1 rounded-full capitalize ${statusColors[pass.estado]}`}>
-                {pass.estado}
-              </span>
-            </div>
-
-            <div className="flex gap-2">
-              <Button variant="outline" className="rounded-lg">Apple Wallet</Button>
-              <Button variant="outline" className="rounded-lg">Google Pay</Button>
-            </div>
-          </div>
+  <div
+    key={pass.id}
+    className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-shadow p-4 flex flex-col gap-3 relative"
+  >
+    {/* Menú de acciones */}
+    <div className="absolute top-2 right-2">
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8"
+        onClick={() => toggleMenu(pass.id)}
+        aria-label="acciones"
+      >
+        ⋮
+      </Button>
+      {openMenuId === pass.id && (
+        <div className="absolute right-0 mt-2 w-44 bg-white border border-gray-200 shadow-md rounded-lg z-50">
+          <ul className="text-sm text-gray-700">
+            <li className="px-3 py-2 hover:bg-gray-100 cursor-pointer">✏️ Edit</li>
+            <li
+              className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+              onClick={() => handleOpenDuplicate(pass)}
+            >
+              📄 Duplicate
+            </li>
+            <li className="px-3 py-2 hover:bg-gray-100 cursor-pointer">🔳 QR Code</li>
+            <li className="px-3 py-2 text-red-600 hover:bg-red-50 cursor-pointer">🗑️ Delete</li>
+          </ul>
         </div>
-      ))}
+      )}
+    </div>
+
+    {/* Encabezado */}
+    <div className="flex items-start justify-between gap-2 pr-8">
+      <h3 className="text-base font-semibold leading-5 line-clamp-1">
+        {pass.title}
+      </h3>
+      <span
+        className={`text-xs font-medium px-2.5 py-1 rounded-full shrink-0 ${typeColors[pass.type] ?? "bg-gray-200 text-gray-800"}`}
+      >
+        {pass.type}
+      </span>
+    </div>
+
+    {/* Descripción */}
+    <p className="text-sm text-gray-600 leading-5 line-clamp-2">
+      {pass.description || "Información del cliente"}
+    </p>
+
+    {/* Meta */}
+    <div className="text-[11px] text-gray-500">
+      <span className="mr-3">Created: {safeShortDate(pass.createdAt)}</span>
+      <span>Scans: {pass.scans ?? 0}</span>
+    </div>
+
+    {/* Estado + Acciones */}
+    <div className="flex items-center justify-between pt-1">
+      <div className="flex items-center gap-2">
+        <span className={`h-2.5 w-2.5 rounded-full ${statusDotColors[pass.estado]}`}></span>
+        <span className={`text-xs font-semibold px-2.5 py-1 rounded-full capitalize ${statusColors[pass.estado]}`}>
+          {pass.estado}
+        </span>
+      </div>
+
+      <div className="flex gap-2">
+        <Button size="sm" className="h-9 rounded-xl font-semibold">
+          Guardar en la billetera
+        </Button>
+        <Button size="sm" variant="outline" className="h-9 rounded-xl">
+          Enviar por email
+        </Button>
+      </div>
+    </div>
+  </div>
+))}
+
     </div>
 
     {/* Modal de duplicar */}
