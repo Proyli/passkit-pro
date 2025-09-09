@@ -63,14 +63,25 @@ const Profile: React.FC = () => {
     ...(profileData as Partial<FormData> | undefined),
   });
 
+  // justo debajo de useState<FormData>(...)
+const [campaignManual, setCampaignManual] = useState<boolean>(
+  Boolean((profileData as any)?.codigoCampana)
+);
+
   const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
-  ) => {
-    const { name, value } = e.target;
-    const newData = { ...formData, [name]: value };
-    setFormData(newData);   
-    setProfileData(newData);
-  };
+  e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+) => {
+  const { name, value } = e.target;
+
+  if (name === "codigoCampana" && !campaignManual) {
+    setCampaignManual(true);
+  }
+
+  const newData = { ...formData, [name]: value };
+  setFormData(newData);
+  setProfileData(newData);
+};
+
 
   const handleGuardar = async () => {
     const nuevoCliente = {
@@ -132,34 +143,43 @@ const Profile: React.FC = () => {
               onChange={handleChange}
             />
           </div>
+          {/* Código de la campaña */}
+        <div>
+          <Label>Código de la campaña</Label>
+          <Input
+            name="codigoCampana"
+            value={formData.codigoCampana}
+            onChange={handleChange}
+            // opcional: placeholder="CP502"
+          />
+        </div>
+
+
+          {/* Tipo de cliente */}
           <div>
-            <Label>Código de la campaña</Label>
-            <Input
-              name="codigoCampana"
-              value={formData.codigoCampana}
-              onChange={handleChange}
-            />
+            <Label>Tipo de cliente</Label>
+            <select
+              name="tipoCliente"
+              value={formData.tipoCliente}
+              onChange={(e) => {
+                const tipo = e.target.value;
+                // ✅ solo actualiza el tipo; NO modifica codigoCampana
+                const next = { ...formData, tipoCliente: tipo };
+                setFormData(next);
+                setProfileData(next);
+              }}
+              className="w-full border rounded-md px-3 py-2"
+            >
+              <option value="">Selecciona un tipo</option>
+              {TIER_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
           </div>
-         <div>
-              <Label>Tipo de cliente</Label>
-              <select
-                name="tipoCliente"
-                value={formData.tipoCliente}
-                onChange={(e) => {
-                  const tipo = e.target.value;
-                  const campaign = mapTierToCampaign(tipo);
-                  const newData = { ...formData, tipoCliente: tipo, codigoCampana: campaign };
-                  setFormData(newData);
-                  setProfileData(newData);
-                }}
-                className="w-full border rounded-md px-3 py-2"
-              >
-                <option value="">Selecciona un tipo</option>
-                {TIER_OPTIONS.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-            </div>
+
+
 
           <div>
             <Label>Email</Label>
