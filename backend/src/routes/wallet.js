@@ -137,8 +137,6 @@ function buildGoogleSaveUrl({ client, campaign, externalId, displayName, tier })
 }
 
 
-
-
 function makeSmartLink(req, googleSaveUrl, appleUrl) {
   const token = jwt.sign({ g: googleSaveUrl, a: appleUrl }, SECRET, { expiresIn: "7d" });
   return `${baseUrl(req)}/api/wallet/smart/${token}`;
@@ -179,16 +177,87 @@ async function findMemberFlexible(client, campaign) {
 // -------------------- Placeholder iOS (.pkpass más adelante) --------------------
 router.get("/wallet/ios/:token", (req, res) => {
   try {
-    const payload = jwt.verify(req.params.token, SECRET);
-    return res.json({
-      platform: "ios",
-      message: "OK iOS. Próximo paso: generar y devolver un .pkpass firmado.",
-      payload,
-    });
+    jwt.verify(req.params.token, SECRET);
+    // TODO: devolver .pkpass aquí
+    return res
+      .status(200)
+      .type("html")
+      .send(`<meta name="viewport" content="width=device-width, initial-scale=1">
+        <div style="font-family:system-ui;padding:24px;max-width:560px;margin:auto">
+          <h2>Apple Wallet</h2>
+          <p>Pronto generaremos el archivo .pkpass automáticamente.</p>
+        </div>`);
   } catch {
-    return res.status(401).json({ message: "Token inválido o vencido" });
+    return res.status(401).type("text").send("Token inválido o vencido");
   }
 });
+
+
+// ===============================================================
+// NUEVO: GET /wallet/resolve
+// Decide destino segun ?platform=apple|google y/o User-Agent
+//  - Android / google -> redirige a https://pay.google.com/gp/v/save/<JWT>
+//  - iOS / apple      -> (por ahora) página informativa (reemplaza por .pkpass cuando lo tengas)
+// ===============================================================
+router.get("/wallet/resolve", async (req, res) => {
+  try {
+    const client   = String(req.query.client   || "");
+    const campaign = String(req.query.campaign || "");
+    const forced   = String(req.query.platform || "").toLowerCase(); // apple | google | ""
+    if (!client || !campaign) return res.status(400).send("missing client/campaign");
+
+    const ua    = String(req.get("user-agent") || "");
+    const isiOS = /iPhone|iPad|iPod/i.test(ua);
+
+    // --- enriquecer con DB: external_id, nombre/apellido, tipoCliente ---
+    let externalId  = client;
+    let displayName = client;
+    let tipoCliente = null;
+
+    try {
+      const r = await findMemberFlexible(client, campaign);
+      if (r) {
+        externalId = r.external_id || client;
+        const fn = r.nombre || r.first_name || "";
+        const ln = r.apellido || r.last_name || "";
+        displayName = `${String(fn||"").trim()} ${String(ln||"").trim()}`.trim() || client;
+        tipoCliente = r.tipoCliente || null;
+      }
+    } catch {}
+
+    // ---- Google Wallet (Android o si se fuerza google) ----
+    if (forced === "google" || (!forced && !isiOS)) {
+      const tier = (tipoCliente || req.query.tier || "blue").toLowerCase();
+      const saveUrl = buildGoogleSaveUrl({ client, campaign, externalId, displayName, tier });
+      return res.redirect(302, saveUrl);
+    }
+
+    // ---- Apple Wallet (iOS o si se fuerza apple) ----
+    // TODO: aquí debes generar y devolver el .pkpass real
+    return res
+      .status(200)
+      .set("Content-Type", "text/html; charset=utf-8")
+      .send(`<!doctype html>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Añadir a Apple Wallet</title>
+<style>
+  body{font:16px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#fff;color:#111;padding:24px}
+  .card{max-width:560px;margin:0 auto;border:1px solid #e5e7eb;border-radius:16px;padding:24px;background:#fff}
+  h1{font-size:20px;margin:0 0 12px}
+  p{margin:0 0 10px;line-height:1.5}
+  a.btn{display:inline-block;padding:10px 14px;border-radius:10px;background:#111;color:#fff;text-decoration:none}
+</style>
+<div class="card">
+  <h1>Apple Wallet</h1>
+  <p>Para iPhone debemos entregar un archivo <b>.pkpass</b>. Esta ruta aún no lo genera.</p>
+  <p>Mientras tanto, puede abrir el enlace de Google Wallet desde un dispositivo Android para guardar su tarjeta.</p>
+</div>`);
+  } catch (e) {
+    console.error("wallet/resolve error:", e?.message || e);
+    return res.status(500).send("resolve failed");
+  }
+});
+
 
 // =================================================================
 // (Compat) GET /wallet/google/:token -> genera Save URL y redirige

@@ -179,8 +179,6 @@ const [campaignManual, setCampaignManual] = useState<boolean>(
             </select>
           </div>
 
-
-
           <div>
             <Label>Email</Label>
             <Input name="email" value={formData.email} onChange={handleChange} />
