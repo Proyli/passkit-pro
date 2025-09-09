@@ -3,12 +3,15 @@ import { useMemo, useState } from "react";
 
 const API = import.meta.env.VITE_API_BASE_URL || "/api";
 
+type Size = "sm" | "md" | "lg";
+
 type Props = {
   /** /api/wallet/resolve?client=...&campaign=... */
   resolveUrl: string;
   memberId?: string | number | null;
   passId?: string | number | null;
   className?: string;
+  size?: Size;                // << NUEVO (por defecto 'sm')
 
   // Opcional: forzar etiquetas
   appleLabel?: string;
@@ -21,6 +24,7 @@ export default function AddToWalletButton({
   memberId = null,
   passId = null,
   className = "",
+  size = "sm",               // << pequeño por defecto
   appleLabel,
   googleLabel,
   defaultLabel,
@@ -34,7 +38,6 @@ export default function AddToWalletButton({
     const isAndroid = /Android/i.test(ua);
     const platform = isIOS ? "apple" : isAndroid ? "google" : "unknown";
 
-    // Etiquetas por defecto en ES (y override por props)
     const es = lang.toLowerCase().startsWith("es");
     const labels = {
       apple: appleLabel ?? (es ? "Añadir a Apple Wallet" : "Add to Apple Wallet"),
@@ -42,23 +45,27 @@ export default function AddToWalletButton({
       any: defaultLabel ?? (es ? "Guardar en la billetera" : "Save to Wallet"),
     };
 
-    // Estilos: negro para Apple, vino Alcazarén para Google
+    // SOLO colores/estados. Sin paddings aquí.
     const styles = {
-      base: "inline-flex items-center justify-center rounded-xl font-semibold transition focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-60",
-      apple:
-        "bg-black text-white hover:opacity-90 focus:ring-black px-4 py-2",
-      google:
-        "bg-[#8B173C] text-white hover:opacity-90 focus:ring-[#8B173C] px-4 py-2",
-      unknown:
-        "bg-slate-900 text-white hover:bg-slate-800 focus:ring-slate-900 px-4 py-2",
+      base:
+        "inline-flex items-center justify-center rounded-xl font-semibold transition focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-60",
+      apple: "bg-black text-white hover:opacity-90 focus:ring-black",
+      google: "bg-[#8B173C] text-white hover:opacity-90 focus:ring-[#8B173C]",
+      unknown: "bg-slate-900 text-white hover:bg-slate-800 focus:ring-slate-900",
+    };
+
+    // Tamaños compactos
+    const sizeCls: Record<Size, string> = {
+      sm: "h-9 px-3 text-sm",     // << pequeño
+      md: "h-10 px-4 text-sm",
+      lg: "h-11 px-5 text-base",
     };
 
     const label = platform === "apple" ? labels.apple : platform === "google" ? labels.google : labels.any;
-    const style =
-      platform === "apple" ? styles.apple : platform === "google" ? styles.google : styles.unknown;
+    const color = platform === "apple" ? styles.apple : platform === "google" ? styles.google : styles.unknown;
 
-    return { ua, isIOS, isAndroid, platform, label, style, base: styles.base };
-  }, [appleLabel, googleLabel, defaultLabel]);
+    return { platform, label, base: styles.base, color, sizeCls };
+  }, [appleLabel, googleLabel, defaultLabel, size]);
 
   const onClick = async () => {
     if (!resolveUrl || loading) return;
@@ -96,7 +103,7 @@ export default function AddToWalletButton({
       type="button"
       onClick={onClick}
       disabled={!resolveUrl || loading}
-      className={`${env.base} ${env.style} ${className}`}
+      className={`${env.base} ${env.sizeCls[size]} ${env.color} ${className}`}
       title={env.label}
       aria-label={env.label}
     >

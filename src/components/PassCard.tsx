@@ -200,12 +200,14 @@ const PassCard = ({ pass, onDuplicate, onDelete, compact = false }: PassCardProp
                 resolveUrl={resolveUrl}
                 memberId={memberId}
                 passId={pass.id}
+                size="sm"   
                 className={compact ? "h-9 px-4 rounded-xl min-w-[140px]" : "min-w-[180px]"}
               />
-              <Button variant="outline" size="sm" onClick={handleSendByEmail} className="h-9 rounded-xl">
-                <Mail className="w-4 h-4 mr-2" />
-                Enviar por email
-              </Button>
+             <Button variant="outline" size="sm" onClick={handleSendByEmail} className="h-9 px-3 rounded-xl text-sm">
+              <Mail className="w-4 h-4 mr-2" />
+              Enviar por email
+            </Button>
+
               {!resolveUrl && <span className="text-xs text-muted-foreground">Falta cliente/campaña</span>}
             </div>
           </div>
