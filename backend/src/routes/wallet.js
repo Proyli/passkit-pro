@@ -6,8 +6,8 @@ const jwt = require("jsonwebtoken");
 const { pool } = require("../db");
 //const { GoogleAuth } = require("google-auth-library");
 //const nodemailer = require("nodemailer");
+const { template: PassTemplate } = require("passkit-generator");
 const fs = require("fs");
-const PKPass = require("pkpass");
 const path = require("path");
 
 
@@ -199,63 +199,67 @@ router.get("/wallet/ios/:token", async (req, res) => {
     const CERT_DIR  = process.env.CERT_DIR  || path.resolve(process.cwd(), "backend/certs");
     const MODEL_DIR = process.env.MODEL_DIR || path.resolve(process.cwd(), "backend/passes/alcazaren.pass");
 
-    // iconos obligatorios
+    // Asegura iconos obligatorios
     const icon1x = path.join(MODEL_DIR, "icon.png");
     const icon2x = path.join(MODEL_DIR, "icon@2x.png");
     if (!fs.existsSync(icon1x) || !fs.existsSync(icon2x)) {
       return res.status(500).type("text").send("Faltan icon.png e icon@2x.png en MODEL_DIR");
     }
 
-    const serial = `ALC-${client}-${campaign}`.replace(/[^\w-]/g, "_");
-
-    const pass = new PKPass(
-      {
-        formatVersion: 1,
-        passTypeIdentifier: process.env.APPLE_PASS_TYPE_ID,
-        teamIdentifier: process.env.APPLE_TEAM_ID,
-        organizationName: process.env.APPLE_ORG_NAME || "Distribuidora Alcazaren",
-        description: "Tarjeta de Lealtad",
-        serialNumber: serial,
-        logoText: "Alcazaren",
-        backgroundColor: "rgb(139,23,60)",
-        foregroundColor: "rgb(255,255,255)",
-        labelColor: "rgb(255,255,255)",
-        barcode: {
-          format: "PKBarcodeFormatCode128",
-          message: externalId,
-          messageEncoding: "iso-8859-1",
-          altText: externalId
-        },
-        storeCard: {
-          primaryFields:   [{ key: "name",    label: "Nombre", value: displayName }],
-          secondaryFields: [{ key: "account", label: "Cuenta",  value: externalId }]
-        }
-      },
-      {
+    // Cargar plantilla base (tipo StoreCard por ejemplo)
+    const tpl = await PassTemplate.from({
+      // Si no tienes pass.json en MODEL_DIR, puedes pasar el tipo aquí:
+      // passType: "storeCard",
+      model: MODEL_DIR, // carpeta con icon.png, icon@2x.png (y opcional logo*.png)
+      certificates: {
         wwdr:       fs.readFileSync(path.join(CERT_DIR, "wwdr.pem")),
         signerCert: fs.readFileSync(path.join(CERT_DIR, "signerCert.pem")),
         signerKey:  fs.readFileSync(path.join(CERT_DIR, "signerKey.pem")),
-        signerKeyPassphrase: process.env.APPLE_CERT_PASSWORD || undefined
-      }
-    );
+        signerKeyPassphrase: process.env.APPLE_CERT_PASSWORD || undefined,
+      },
+    });
 
-    // assets
-    pass.addBuffer("icon.png",    fs.readFileSync(icon1x));
-    pass.addBuffer("icon@2x.png", fs.readFileSync(icon2x));
-    const logo1x = path.join(MODEL_DIR, "logo.png");
-    const logo2x = path.join(MODEL_DIR, "logo@2x.png");
-    if (fs.existsSync(logo1x)) pass.addBuffer("logo.png", fs.readFileSync(logo1x));
-    if (fs.existsSync(logo2x)) pass.addBuffer("logo@2x.png", fs.readFileSync(logo2x));
+    // Crear el pase con tus campos
+    const serial = `ALC-${client}-${campaign}`.replace(/[^\w-]/g, "_");
 
+    const pass = tpl.createPass({
+      passTypeIdentifier: process.env.APPLE_PASS_TYPE_ID,
+      teamIdentifier:     process.env.APPLE_TEAM_ID,
+      organizationName:   process.env.APPLE_ORG_NAME || "Distribuidora Alcazaren",
+      description:        "Tarjeta de Lealtad",
+      serialNumber:       serial,
+      logoText:           "Alcazaren",
+      backgroundColor:    "rgb(139,23,60)",
+      foregroundColor:    "rgb(255,255,255)",
+      labelColor:         "rgb(255,255,255)",
+
+      // Tipo StoreCard con campos
+      storeCard: {
+        primaryFields:   [{ key: "name",    label: "Nombre", value: displayName }],
+        secondaryFields: [{ key: "account", label: "Cuenta",  value: externalId }],
+      },
+
+      // Código (Apple recomienda PKBarcodeFormatCode128 para retail)
+      barcode: {
+        format: "PKBarcodeFormatCode128",
+        message: externalId,
+        messageEncoding: "iso-8859-1",
+        altText: externalId,
+      },
+    });
+
+    // (opcional) si tienes logo.png / logo@2x.png, se incluirán automáticamente si están en MODEL_DIR
+
+    // Devolver .pkpass
+    const buffer = await pass.asBuffer(); // en algunas versiones es getAsBuffer()
     res.setHeader("Content-Type", "application/vnd.apple.pkpass");
     res.setHeader("Content-Disposition", 'inline; filename="alcazaren.pkpass"');
-    return res.send(pass.getAsBuffer());
+    return res.send(buffer);
   } catch (e) {
     console.error("pkpass ios error:", e?.message || e);
     return res.status(400).type("text").send("No se pudo generar el .pkpass");
   }
 });
-
 
 
 // ===============================================================
