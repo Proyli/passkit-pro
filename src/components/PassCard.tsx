@@ -181,8 +181,8 @@ const PassCard = ({ pass, onDuplicate, onDelete, compact = false }: PassCardProp
             </DropdownMenu>
           </div>
 
-          {/* Status + Acciones */}
-          <div className="flex items-center justify-between">
+          {/* Estado + Acciones (responsivo, sin desbordes) */}
+          <div className="mt-3 flex flex-wrap items-center gap-2">
             {/* Estado */}
             <div className="flex items-center gap-2">
               <div
@@ -194,23 +194,40 @@ const PassCard = ({ pass, onDuplicate, onDelete, compact = false }: PassCardProp
               </Badge>
             </div>
 
-            {/* Acciones */}
-            <div className="flex items-center gap-2">
+            {/* Botones */}
+            <div className="ml-auto flex items-center gap-2">
               <AddToWalletButton
                 resolveUrl={resolveUrl}
                 memberId={memberId}
                 passId={pass.id}
-                size="sm"   
-                className={compact ? "h-9 px-4 rounded-xl min-w-[140px]" : "min-w-[180px]"}
+                size="sm"
+                className="h-9 px-3 rounded-xl min-w-[128px] max-w-full"
+                defaultLabel="Guardar"     // etiqueta más corta
+                appleLabel="Añadir"
+                googleLabel="Guardar"
               />
-             <Button variant="outline" size="sm" onClick={handleSendByEmail} className="h-9 px-3 rounded-xl text-sm">
-              <Mail className="w-4 h-4 mr-2" />
-              Enviar por email
-            </Button>
 
-              {!resolveUrl && <span className="text-xs text-muted-foreground">Falta cliente/campaña</span>}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSendByEmail}
+                className="h-9 px-3 rounded-xl shrink-0"
+                title="Enviar por email"
+              >
+                <Mail className="w-4 h-4 mr-2" />
+                <span className="hidden sm:inline">Enviar por email</span>
+                <span className="sm:hidden">Email</span>
+              </Button>
             </div>
+
+            {/* Nota en línea completa si falta info */}
+            {!resolveUrl && (
+              <span className="w-full text-xs text-muted-foreground">
+                Falta cliente/campaña
+              </span>
+            )}
           </div>
+
         </CardContent>
       </Card>
 
