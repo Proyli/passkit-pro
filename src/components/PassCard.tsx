@@ -1,6 +1,6 @@
 // src/components/PassCard.tsx
 import { useState } from "react";
-import { MoreHorizontal, Edit, Copy, QrCode, Trash2 } from "lucide-react";
+import { MoreHorizontal, Edit, Copy, QrCode, Trash2, Mail } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,9 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { PassModal } from "./ui/PassModal";
 import { Pass } from "@/types/pass.types";
 import AddToWalletButton from "@/components/wallet/AddToWalletButton";
-import { Mail } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-
 
 const API = import.meta.env.VITE_API_BASE_URL || "/api";
 
@@ -23,68 +21,72 @@ interface PassCardProps {
   pass: Pass;
   onDuplicate?: (pass: Pass) => void;
   onDelete?: (id: string) => void;
+  /** Modo compacto para usar en Dashboard (p-4, textos sm, botones sm) */
+  compact?: boolean;
 }
 
-const PassCard = ({ pass, onDuplicate, onDelete }: PassCardProps) => {
+const PassCard = ({ pass, onDuplicate, onDelete, compact = false }: PassCardProps) => {
   const [isModalOpen, setModalOpen] = useState(false);
-
-const { toast } = useToast();
-
-async function handleSendByEmail() {
-  if (!resolveUrl) {
-    toast({ title: "Falta cliente/campaña", variant: "destructive" });
-    return;
-  }
-  const email = window.prompt("Enviar pase a (correo):");
-  if (!email) return;
-
-  try {
-    const res = await fetch(`${API}/wallet/send`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        client: client,
-        campaign: campaign,
-        email: email,
-        platform: "google", // o "apple" si lo quieres forzar; opcional
-      }),
-    });
-    const json = await res.json();
-    if (!res.ok || !json.ok) throw new Error(json?.error || `HTTP ${res.status}`);
-    toast({ title: "Correo enviado", description: `Hemos enviado el pase a ${email}` });
-  } catch (e: any) {
-    console.error(e);
-    toast({ title: "No se pudo enviar", description: String(e?.message || e), variant: "destructive" });
-  }
-}
-
+  const { toast } = useToast();
 
   // Si tu pass viene con el member incluido:
- // Soporta member embebido o campos sueltos + nombres con/sin "ñ"
-const member: any = (pass as any).member ?? null;
+  const member: any = (pass as any).member ?? null;
 
-const memberId =
-  member?.id ??
-  (pass as any).member_id ??
-  null;
+  const memberId =
+    member?.id ??
+    (pass as any).member_id ??
+    null;
 
-const client =
-  member?.codigoCliente ??
-  (pass as any).clientCode ??
-  null;
+  const client =
+    member?.codigoCliente ??
+    (pass as any).clientCode ??
+    null;
 
-const campaign =
-  member?.codigoCampana ??
-  member?.codigoCampaña ??        // ← por si viene con “ñ”
-  (pass as any).campaignCode ??
-  null;
+  const campaign =
+    member?.codigoCampana ??
+    member?.codigoCampaña ?? // por si viene con “ñ”
+    (pass as any).campaignCode ??
+    null;
 
-// URL que resuelve a Apple/Google según el dispositivo
-const resolveUrl =
-  client && campaign
-    ? `${API}/wallet/resolve?client=${encodeURIComponent(client)}&campaign=${encodeURIComponent(campaign)}&source=link`
-    : "";
+  // URL que resuelve Apple/Google según dispositivo
+  const resolveUrl =
+    client && campaign
+      ? `${API}/wallet/resolve?client=${encodeURIComponent(client)}&campaign=${encodeURIComponent(
+          campaign
+        )}&source=link`
+      : "";
 
+  async function handleSendByEmail() {
+    if (!resolveUrl) {
+      toast({ title: "Falta cliente/campaña", variant: "destructive" });
+      return;
+    }
+    const email = window.prompt("Enviar pase a (correo):");
+    if (!email) return;
+
+    try {
+      const res = await fetch(`${API}/wallet/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          client,
+          campaign,
+          email,
+          platform: "google", // o "apple"
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      toast({ title: "Correo enviado", description: `Hemos enviado el pase a ${email}` });
+    } catch (e: any) {
+      console.error(e);
+      toast({
+        title: "No se pudo enviar",
+        description: String(e?.message || e),
+        variant: "destructive",
+      });
+    }
+  }
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -102,21 +104,22 @@ const resolveUrl =
   return (
     <>
       <Card className="glass-effect border-white/20 hover:shadow-lg transition-all duration-300 animate-fade-in group">
-        <CardContent className="p-6">
-          <div className="flex items-start justify-between mb-4">
-            <div className="flex-1">
-              <div className="flex items-center space-x-2 mb-2">
-                <h3 className="font-semibold text-lg text-gray-900">
+        <CardContent className={compact ? "p-4" : "p-6"}>
+          {/* Header */}
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1.5">
+                <h3 className={`font-semibold ${compact ? "text-base" : "text-lg"} text-gray-900 truncate`}>
                   {pass.title}
                 </h3>
-                <Badge variant="secondary" className="text-xs">
+                <Badge variant="secondary" className="text-xs capitalize">
                   {pass.type}
                 </Badge>
               </div>
-              <p className="text-sm text-muted-foreground mb-3">
-                {pass.description}
+              <p className="text-sm text-muted-foreground mb-2 line-clamp-2">
+                {pass.description || "Información del cliente"}
               </p>
-              <div className="flex items-center space-x-4 text-xs text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-4 text-[11px] text-muted-foreground">
                 <span>Created: {pass.createdAt}</span>
                 <span>Scans: {(pass as any).scans ?? 0}</span>
               </div>
@@ -127,8 +130,9 @@ const resolveUrl =
                 <Button
                   type="button"
                   variant="ghost"
-                  size="sm"
-                  className="opacity-0 group-hover:opacity-100 transition-opacity"
+                  size="icon"
+                  className={`transition-opacity ${compact ? "" : "opacity-0 group-hover:opacity-100"} h-8 w-8 ml-2`}
+                  aria-label="Acciones"
                 >
                   <MoreHorizontal className="w-4 h-4" />
                 </Button>
@@ -165,11 +169,7 @@ const resolveUrl =
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    if (
-                      window.confirm(
-                        "¿Eliminar este pase? Esta acción no se puede deshacer."
-                      )
-                    ) {
+                    if (window.confirm("¿Eliminar este pase? Esta acción no se puede deshacer.")) {
                       onDelete?.(pass.id);
                     }
                   }}
@@ -181,35 +181,33 @@ const resolveUrl =
             </DropdownMenu>
           </div>
 
+          {/* Status + Acciones */}
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
+            {/* Estado */}
+            <div className="flex items-center gap-2">
               <div
-                className="w-4 h-4 rounded-full border-2 border-white shadow-sm"
+                className="w-3 h-3 rounded-full border-2 border-white shadow-sm"
                 style={{ backgroundColor: pass.backgroundColor || "#007AFF" }}
               />
-              <Badge className={getStatusColor(pass.status || "active")}>
+              <Badge className={`${compact ? "text-xs px-2.5 py-1" : ""} ${getStatusColor(pass.status || "active")}`}>
                 {pass.status || "active"}
               </Badge>
             </div>
 
-            <div className="flex space-x-2 items-center">
-            <AddToWalletButton
-              resolveUrl={resolveUrl}
-              memberId={memberId}
-              passId={pass.id}
-              className="min-w-[180px]"
-            />
-
-            <Button variant="outline" size="sm" onClick={handleSendByEmail}>
-              <Mail className="w-4 h-4 mr-2" />
-              Enviar por email
-            </Button>
-
-            {!resolveUrl && (
-              <span className="text-xs text-muted-foreground">Falta cliente/campaña</span>
-            )}
-          </div>
-
+            {/* Acciones */}
+            <div className="flex items-center gap-2">
+              <AddToWalletButton
+                resolveUrl={resolveUrl}
+                memberId={memberId}
+                passId={pass.id}
+                className={compact ? "h-9 px-4 rounded-xl min-w-[140px]" : "min-w-[180px]"}
+              />
+              <Button variant="outline" size="sm" onClick={handleSendByEmail} className="h-9 rounded-xl">
+                <Mail className="w-4 h-4 mr-2" />
+                Enviar por email
+              </Button>
+              {!resolveUrl && <span className="text-xs text-muted-foreground">Falta cliente/campaña</span>}
+            </div>
           </div>
         </CardContent>
       </Card>
