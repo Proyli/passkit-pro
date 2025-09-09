@@ -9,7 +9,7 @@ const { pool } = require("../db");
 const fs = require("fs");
 const PKPass = require("pkpass");
 const path = require("path");
-const fs = require("fs");
+
 
 
 // ----------------- Utils -----------------
