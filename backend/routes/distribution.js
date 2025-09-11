@@ -41,7 +41,7 @@ async function sendWelcomeEmailHtml(
 
   // 4) Enviar (elige Outlook/Gmail según disponibilidad)
   return sendMailSmart({
-    from: from || `${s.fromName || "Alcazarén"} <no-reply@alcazaren.com.gt>`,
+   
     to,
     subject: subject || s.subject || "Su Tarjeta de Lealtad",
     html,
