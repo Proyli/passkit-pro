@@ -71,63 +71,57 @@ function mergeSettings(overrides = {}) {
  * @param {object} vars - { displayName, membershipId, smartUrl }
  * @returns {string} HTML final
  */
-function renderWalletEmail(settings = {}, vars = {}) {
-  const s = mergeSettings(settings);
 
-  const displayName  = escapeHtml(vars.displayName || "Cliente");
-  const membershipId = escapeHtml(vars.membershipId || "");
-  const smartUrl     = vars.smartUrl || "#";
-  const logoUrl      = s.logoUrl || DEFAULTS.logoUrl;
+function renderWalletEmail(s, { displayName, smartUrl, membershipId }) {
+  const buttonText = s.buttonText || 'Añadir a mi Wallet';
 
-  const inner = String(s.htmlBody || "")
-    .replace(/{{DISPLAY_NAME}}/g, displayName)
-    .replace(/{{MEMBERSHIP_ID}}/g, membershipId)
+  const body = (s.htmlBody || `
+    <p style="margin:0 0 16px 0;"><strong>Estimado/a {{DISPLAY_NAME}},</strong></p>
+    <p style="margin:0 0 16px 0;">Bienvenido al programa <em>Lealtad Alcazarén</em>. Guarde su tarjeta en su billetera móvil.</p>
+    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:16px 0;">
+      <tr>
+        <td style="background:#b91c1c;border-radius:8px;padding:12px 18px;">
+          <a href="{{SMART_URL}}" style="text-decoration:none;color:#ffffff !important;font-weight:600;display:inline-block;">
+            {{BUTTON_TEXT}}
+          </a>
+        </td>
+      </tr>
+    </table>
+    <p style="font-size:13px;margin:16px 0 0 0;">Si tienes iPhone, el enlace también abrirá Apple Wallet.</p>
+  `)
+    .replace(/{{DISPLAY_NAME}}/g, escapeHTML(displayName || ''))
     .replace(/{{SMART_URL}}/g, smartUrl)
-    .replace(/{{BUTTON_TEXT}}/g, s.buttonText || DEFAULTS.buttonText)
-    .replace(/{{LOGO_URL}}/g, logoUrl);
+    .replace(/{{BUTTON_TEXT}}/g, buttonText);
 
-  return `<!DOCTYPE html>
-<html lang="es" xmlns="http://www.w3.org/1999/xhtml">
+  return `
+<!doctype html>
+<html>
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="x-apple-disable-message-reformatting" />
-  <meta name="color-scheme" content="light dark" />
-  <meta name="supported-color-schemes" content="light dark" />
-  <title>${s.subject}</title>
-  <style>
-    table, td { border-collapse: collapse; }
-    img { border: 0; display: block; }
-    .pre { display:none!important; visibility:hidden; opacity:0; color:transparent; height:0; width:0; overflow:hidden; mso-hide:all; }
-    .txt { font-family: Segoe UI, Roboto, Arial, sans-serif; }
-    @media (prefers-color-scheme: dark) {
-      .wrap { background: ${s.darkBg} !important; }
-      .card { background: ${s.bodyColorDark} !important; color: ${s.textDark} !important; }
-      .muted { color: ${s.mutedDark} !important; }
-    }
-  </style>
+<meta charset="utf-8">
+<meta name="color-scheme" content="light only">
+<meta name="supported-color-schemes" content="light">
 </head>
-<body style="margin:0; padding:0; background:${s.lightBg};">
-  <div class="pre">${s.preheader}</div>
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="wrap" style="background:${s.lightBg};">
+<body style="margin:0;padding:0;background:#ffffff;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;">
     <tr>
-      <td align="center" style="padding:18px 12px;">
-        <table role="presentation" width="680" cellpadding="0" cellspacing="0" class="card"
-               style="max-width:680px; width:100%; background:${s.bodyColorLight}; border-radius:12px; padding:22px;">
+      <td align="center">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-collapse:collapse;">
           <tr>
-            <td class="txt" style="font-size:16px; line-height:1.6; color:${s.textLight};">
-              ${inner}
+            <td style="padding:24px;font:16px/1.5 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial,sans-serif;color:#0f2b40 !important;">
+              ${body}
             </td>
           </tr>
         </table>
-        <div class="txt muted" style="font-size:12px; color:${s.mutedLight}; margin-top:12px;">
-          © Alcazarén — Todos los derechos reservados
-        </div>
       </td>
     </tr>
   </table>
 </body>
 </html>`;
 }
+
+function escapeHTML(s) {
+  return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
 
 module.exports = { renderWalletEmail, mergeSettings, DEFAULTS };
