@@ -1,60 +1,17 @@
 // backend/routes/distribution.js
-// backend/routes/distribution.js
 const express = require("express");
 const router = express.Router();
 const { pool } = require("../src/db");
 const { nanoid } = require("nanoid");
-//const fetch = require("node-fetch"); // npm i node-fetch@2
 const jwt = require("jsonwebtoken");
 
 const { renderWalletEmail, mergeSettings } = require("../services/renderEmail");
-const { sendMailSmart } = require("../src/mailer"); // usa tu mailer.js
+const { sendMailSmart } = require("../src/mailer");
 
-const API_BASE = process.env.PUBLIC_BASE_URL || ""; // https://backend-passforge.onrender.com
+const API_BASE = process.env.PUBLIC_BASE_URL || "";
 const SKIP_DB = process.env.SKIP_DB === "true";
 
-
-//  Esta es la función que respeta htmlTemplate/settings
-//  Esta función respeta settings/htmlTemplate y usa un solo botón (smart link)
-//  Esta función respeta settings/htmlTemplate y usa un solo botón (smart link)
-async function sendWelcomeEmailHtml(
-  to,
-  displayName,
-  client,
-  campaign,
-  settings,
-  { htmlTemplate, buttonText, membershipId, logoUrl, subject, from } = {}
-) {
-  // 1) token + smart URL
-  const token = jwt.sign({ client, campaign }, process.env.WALLET_TOKEN_SECRET, { expiresIn: "7d" });
-  const smartUrl = `${API_BASE}/api/wallet/smart/${token}`;
-
-  // 2) settings/plantilla con fallbacks robustos
-  const s = (settings && Object.keys(settings || {}).length)
-    ? mergeSettings({ ...DEFAULT_SETTINGS, ...settings })
-    : mergeSettings({
-        ...DEFAULT_SETTINGS,
-        htmlBody: htmlTemplate || DEFAULT_SETTINGS.htmlBody,
-        buttonText: buttonText || DEFAULT_SETTINGS.buttonText,
-        logoUrl,
-        subject: subject || DEFAULT_SETTINGS.subject,
-      });
-
-  // 3) Render con smart URL
-  const html = renderWalletEmail(s, { displayName, membershipId, smartUrl });
-
-  // 4) Enviar (Outlook/Gmail según disponibilidad y defaults de mailer)
-  return sendMailSmart({
-    from: from || s.from || s.fromName || process.env.MAIL_FROM || undefined,
-    to,
-    subject: s.subject || subject || "Su Tarjeta de Lealtad",
-    html,
-    text: `Añadir a mi Wallet: ${smartUrl}`, // fallback texto plano
-  });
-}
-
-
-// ---------- Defaults cuando no hay DB ----------
+// ---------- Defaults ----------
 const DEFAULT_SETTINGS = {
   enabled: true,
   subject: "Tu tarjeta de lealtad",
@@ -70,335 +27,38 @@ const DEFAULT_SETTINGS = {
     '<p><a href="{{SMART_URL}}"><strong>{{BUTTON_TEXT}}</strong></a></p>',
 };
 
-// ---------- DB bootstrap ----------
-// ---------- DB bootstrap ----------
-async function ensureTable() {
-  if (SKIP_DB) return;
+// ========== SEND WELCOME ==========
+async function sendWelcomeEmailHtml(
+  to,
+  displayName,
+  client,
+  campaign,
+  settings,
+  { htmlTemplate, buttonText, membershipId, logoUrl, subject, from, provider } = {}
+) {
+  const token = jwt.sign({ client, campaign }, process.env.WALLET_TOKEN_SECRET, { expiresIn: "7d" });
+  const smartUrl = `${API_BASE}/api/wallet/smart/${token}`;
 
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS distribution_settings (
-      id TINYINT PRIMARY KEY DEFAULT 1,
-      enabled TINYINT(1) NOT NULL DEFAULT 1,
-      subject VARCHAR(200) NOT NULL,
-      from_name VARCHAR(200) NOT NULL,
-      button_text VARCHAR(80) NOT NULL,
-      light_bg VARCHAR(16) NOT NULL,
-      dark_bg VARCHAR(16) NOT NULL,
-      body_color_light VARCHAR(16) NOT NULL,
-      body_color_dark VARCHAR(16) NOT NULL,
-      html_body MEDIUMTEXT NOT NULL
-    )
-  `);
+  const s = (settings && Object.keys(settings || {}).length)
+    ? mergeSettings(settings)
+    : { htmlBody: htmlTemplate, buttonText: buttonText || DEFAULT_SETTINGS.buttonText, logoUrl };
 
-  const [rows] = await pool.query(`SELECT id FROM distribution_settings WHERE id=1`);
-  if (rows.length === 0) {
-    await pool.query(
-      `INSERT INTO distribution_settings
-       (id, enabled, subject, from_name, button_text, light_bg, dark_bg, body_color_light, body_color_dark, html_body)
-       VALUES (
-         1, 1,
-         'Tu tarjeta de lealtad',
-         'Distribuidora Alcazarén, S. A.',
-         'Añadir a mi Wallet',
-         '#143c5c', '#0f2b40', '#c69667', '#0f2b40',
-         '<p><strong>Estimado/a {{DISPLAY_NAME}},</strong></p><p>Bienvenido al programa <em>Lealtad Alcazarén</em>. Guarde su tarjeta en su billetera móvil.</p><p><a href="{{SMART_URL}}"><strong>{{BUTTON_TEXT}}</strong></a></p>'
-       )`
-    );
-  }
+  const html = renderWalletEmail(s, { displayName, membershipId, smartUrl });
 
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS registration_forms (
-      tier_id VARCHAR(64) PRIMARY KEY,
-      slug VARCHAR(64) NOT NULL UNIQUE,
-      enabled TINYINT(1) NOT NULL DEFAULT 1,
-      title VARCHAR(200) NOT NULL,
-      intro MEDIUMTEXT NOT NULL,
-      button_text VARCHAR(64) NOT NULL,
-      primary_color VARCHAR(16) NOT NULL,
-      fields_json MEDIUMTEXT NOT NULL,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        ON UPDATE CURRENT_TIMESTAMP
-    )
-  `);
+  const result = await sendMailSmart({
+    from: from || `${s.fromName || "Alcazaren"} <no-reply@alcazaren.com.gt>`,
+    to,
+    subject: subject || s.subject || "Su Tarjeta de Lealtad",
+    html,
+    text: `Añadir a mi Wallet: ${smartUrl}`,
+    provider,
+  });
+
+  console.log("📬 sendMailSmart result:", result);
+  return result;
 }
 
-
-// ---------- helpers ----------
-function makeSlug() {
-  return nanoid(10);
-}
-function defaultFormForTier(tierId) {
-  return {
-    tierId,
-    slug: makeSlug(),
-    enabled: 1,
-    title: "Register Below",
-    intro: "Necesitamos que ingreses información que garantice el acceso a tu tarjeta de lealtad.",
-    buttonText: "REGISTER",
-    primaryColor: "#8b173c",
-    fields: [
-      { name: "nombre", label: "First Name", type: "text", required: true },
-      { name: "apellido", label: "Last Name", type: "text", required: true },
-      { name: "email", label: "Email", type: "email", required: true },
-      { name: "telefono", label: "Phone", type: "tel", required: false },
-    ],
-  };
-}
-
-
-// ========== SETTINGS ==========
-router.get("/distribution/settings", async (_req, res) => {
-  try {
-    if (SKIP_DB) return res.json(DEFAULT_SETTINGS);
-
-    await ensureTable();
-    const [[row]] = await pool.query(`
-      SELECT enabled, subject, from_name AS fromName, button_text AS buttonText,
-             light_bg AS lightBg, dark_bg AS darkBg,
-             body_color_light AS bodyColorLight, body_color_dark AS bodyColorDark,
-             html_body AS htmlBody
-      FROM distribution_settings WHERE id=1`);
-    res.json(row || DEFAULT_SETTINGS);
-  } catch (e) {
-    res.status(500).json({ ok: false, error: String(e?.message || e || "settings error") });
-  }
-});
-
-router.post("/distribution/settings", async (req, res) => {
-  try {
-    if (SKIP_DB) return res.json({ ok: true }); // no-op cuando no hay DB
-
-    await ensureTable();
-    const b = req.body || {};
-    await pool.query(
-      `UPDATE distribution_settings
-       SET enabled=?, subject=?, from_name=?, button_text=?, light_bg=?, dark_bg=?, body_color_light=?, body_color_dark=?, html_body=?
-       WHERE id=1`,
-      [
-        b.enabled ? 1 : 0, b.subject || "", b.fromName || "", b.buttonText || "",
-        b.lightBg || "#143c5c", b.darkBg || "#0f2b40",
-        b.bodyColorLight || "#c69667", b.bodyColorDark || "#0f2b40",
-        b.htmlBody || ""
-      ]
-    );
-    res.json({ ok: true });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: String(e?.message || e) });
-  }
-});
-
-// ========== TIERS ==========
-router.get("/distribution/tiers", async (_req, res) => {
-  res.json([{ id: "gold_15", name: "Gold 15%" }, { id: "blue_5", name: "Blue 5%" }]);
-});
-
-// Enrollment simple (puedes persistir si quieres)
-router.get("/distribution/enrollment", async (_req, res) => {
-  res.json({ gold_15: true, blue_5: true });
-});
-router.post("/distribution/enrollment", async (_req, res) => {
-  // si necesitas persistir, guarda _req.body; por ahora devolvemos ok
-  res.json({ ok: true });
-});
-
-// ========== SEND WELCOME: delega al endpoint moderno ==========
-async function sendWelcomeEmail(memberIdOrObject) {
-  try {
-    let m = null;
-    if (memberIdOrObject && typeof memberIdOrObject === "object") {
-      m = memberIdOrObject;
-    } else if (!SKIP_DB) {
-      const [[row]] = await pool.query(
-        `SELECT id, codigoCliente, codigoCampana, nombre, apellido, email
-         FROM members WHERE id=? LIMIT 1`, [memberIdOrObject]
-      );
-      m = row;
-    }
-    if (!m || !m.email || !m.codigoCliente || !m.codigoCampana) return;
-
-    const displayName = `${m.nombre || ""} ${m.apellido || ""}`.trim();
-
-    // (si quieres, podrías leer distribution_settings aquí y pasarlo como "settings")
-    await sendWelcomeEmailHtml(
-      m.email,
-      displayName,
-      m.codigoCliente,
-      m.codigoCampana,
-      {}, // settings opcionales desde DB
-      {}
-    );
-  } catch (e) {
-    console.warn("sendWelcomeEmail error:", e?.message || e);
-  }
-}
-
-
-// ========== REGISTER BUILDER (admin) ==========
-router.get("/distribution/register-config", async (req, res) => {
-  try {
-    const tier = String(req.query.tier || "").trim();
-    if (!tier) return res.status(400).json({ ok:false, error:"tier requerido" });
-
-    if (SKIP_DB) {
-      const cfg = defaultFormForTier(tier);
-      return res.json({ ok: true, ...cfg });
-    }
-
-    await ensureTable();
-
-    // ¿ya existe config para este tier?
-    const [rows] = await pool.query(
-      `SELECT * FROM registration_forms WHERE tier_id=? LIMIT 1`, [tier]
-    );
-
-    if (rows.length) {
-      const r = rows[0];
-      return res.json({
-        ok:true,
-        tierId: r.tier_id,
-        slug: r.slug,
-        enabled: !!r.enabled,
-        title: r.title,
-        intro: r.intro,
-        buttonText: r.button_text,
-        primaryColor: r.primary_color,
-        fields: JSON.parse(r.fields_json || "[]"),
-      });
-    }
-
-    // si no existe → crear default
-    const cfg = defaultFormForTier(tier);
-    await pool.query(
-      `INSERT INTO registration_forms
-       (tier_id, slug, enabled, title, intro, button_text, primary_color, fields_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        cfg.tierId, cfg.slug, cfg.enabled ? 1 : 0,
-        cfg.title, cfg.intro, cfg.buttonText, cfg.primaryColor,
-        JSON.stringify(cfg.fields),
-      ]
-    );
-    res.json({ ok:true, ...cfg });
-  } catch (e) {
-    res.status(500).json({ ok:false, error:String(e?.message||e) });
-  }
-});
-
-
-router.post("/distribution/register-config", async (req, res) => {
-  try {
-    const b = req.body || {};
-    const tier = String(b.tierId || "").trim();
-    if (!tier) return res.status(400).json({ ok:false, error:"tierId requerido" });
-
-    if (SKIP_DB) {
-      return res.json({ ok:true, slug: makeSlug() });
-    }
-
-    await ensureTable();
-    const fields = Array.isArray(b.fields) ? b.fields : [];
-   await pool.query(
-  `INSERT INTO registration_forms
-   (tier_id, slug, enabled, title, intro, button_text, primary_color, fields_json)
-   VALUES (?, COALESCE((SELECT slug FROM registration_forms WHERE tier_id=?), ?),
-           ?, ?, ?, ?, ?, ?)
-   ON DUPLICATE KEY UPDATE
-     enabled=VALUES(enabled),
-     title=VALUES(title),
-     intro=VALUES(intro),
-     button_text=VALUES(button_text),
-     primary_color=VALUES(primary_color),
-     fields_json=VALUES(fields_json)`,
-  [
-    tier,                  // 1: tier_id
-    tier, makeSlug(),      // 2-3: COALESCE(slug existente, nuevo slug)
-    b.enabled ? 1 : 0,     // 4: enabled
-    b.title || "",         // 5: title
-    b.intro || "",         // 6: intro
-    b.buttonText || "REGISTER", // 7: button_text
-    b.primaryColor || "#8b173c", // 8: primary_color
-    JSON.stringify(fields),      // 9: fields_json
-  ]
-);
-
-
-    const [[row]] = await pool.query(`SELECT slug FROM registration_forms WHERE tier_id=?`, [tier]);
-    res.json({ ok:true, slug: row?.slug });
-  } catch (e) {
-    res.status(500).json({ ok:false, error:String(e?.message||e) });
-  }
-});
-
-router.get("/distribution/register-config-by-slug", async (req, res) => {
-  try {
-    const slug = String(req.query.slug || "").trim();
-    if (!slug) return res.status(400).json({ ok:false, error:"slug requerido" });
-
-    if (SKIP_DB) return res.status(404).json({ ok:false });
-
-    await ensureTable();
-    const [[r]] = await pool.query(`SELECT * FROM registration_forms WHERE slug=? LIMIT 1`, [slug]);
-    if (!r || !r.enabled) return res.status(404).json({ ok:false });
-
-    res.json({
-      ok:true,
-      tierId: r.tier_id,
-      slug: r.slug,
-      title: r.title,
-      intro: r.intro,
-      buttonText: r.button_text,
-      primaryColor: r.primary_color,
-      fields: JSON.parse(r.fields_json || "[]"),
-    });
-  } catch (e) {
-    res.status(500).json({ ok:false, error:String(e?.message||e) });
-  }
-});
-
-router.post("/distribution/register-submit", async (req, res) => {
-  try {
-    const b = req.body || {};
-    const slug = String(b.slug || "").trim();
-    if (!slug) return res.status(400).json({ ok:false, error:"slug requerido" });
-
-    if (SKIP_DB) {
-      // sin DB: genera datos sintéticos y responde
-      const client   = b.codigoCliente || `M-${nanoid(6).toUpperCase()}`;
-      const campaign = b.codigoCampana || "blue_5";
-      const resolveUrl = `${API_BASE}/api/wallet/resolve?client=${encodeURIComponent(client)}&campaign=${encodeURIComponent(campaign)}&source=register`;
-      return res.json({ ok:true, memberId: 0, resolveUrl, client, campaign });
-    }
-
-    await ensureTable();
-
-    const [[form]] = await pool.query(`SELECT tier_id FROM registration_forms WHERE slug=? LIMIT 1`, [slug]);
-    if (!form) return res.status(404).json({ ok:false, error:"form no encontrado" });
-    const tierId = form.tier_id;
-
-    const nombre   = b.nombre   || "";
-    const apellido = b.apellido || "";
-    const email    = b.email    || "";
-    const telefono = b.telefono || "";
-
-    const client   = b.codigoCliente || `M-${nanoid(6).toUpperCase()}`;
-    const campaign = b.codigoCampana || tierId;
-
-    const [r] = await pool.query(
-      `INSERT INTO members (codigoCliente, codigoCampana, nombre, apellido, email, telefono)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [client, campaign, nombre, apellido, email, telefono]
-    );
-
-    const memberId = r.insertId;
-    try { await sendWelcomeEmail(memberId); } catch {}
-
-    const resolveUrl = `${API_BASE}/api/wallet/resolve?client=${encodeURIComponent(client)}&campaign=${encodeURIComponent(campaign)}&source=register`;
-    res.json({ ok:true, memberId, resolveUrl, client, campaign });
-  } catch (e) {
-    res.status(500).json({ ok:false, error:String(e?.message||e) });
-  }
-});
-
+// ========== TEST EMAIL ==========
 router.post("/distribution/send-test-email", async (req, res) => {
   try {
     const {
@@ -407,39 +67,29 @@ router.post("/distribution/send-test-email", async (req, res) => {
       clientCode = "",
       campaignCode = "",
       settings = {},
-      htmlTemplate,         // opcional
+      htmlTemplate,
       buttonText,
       membershipId,
       logoUrl,
       subject,
       from,
-    } = req.body || {};
+      provider,
+    } = req.body;
 
-    if (!email) return res.status(400).json({ ok:false, error:"email requerido" });
-
-    await sendWelcomeEmailHtml(
+    const result = await sendWelcomeEmailHtml(
       email,
       displayName,
       clientCode,
       campaignCode,
       settings,
-      {
-        htmlTemplate: htmlTemplate || DEFAULT_SETTINGS.htmlBody, // <= CLAVE
-        buttonText,
-        membershipId,
-        logoUrl,
-        subject,
-        from
-      }
+      { htmlTemplate, buttonText, membershipId, logoUrl, subject, from, provider }
     );
 
-    res.json({ ok: true });
+    res.json({ ok: true, message: `Correo enviado${provider ? " con " + provider : ""}`, result });
   } catch (e) {
     console.error("send-test-email error:", e);
     res.status(500).json({ ok: false, error: e?.message || "fail" });
   }
 });
 
-
-module.exports = { router, sendWelcomeEmailHtml, sendWelcomeEmail };
-
+module.exports = { router, sendWelcomeEmailHtml };
