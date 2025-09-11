@@ -1,9 +1,9 @@
-// backend/services/renderEmail.js
-// Plantilla de email con UN solo botón "Añadir a mi Wallet" (smart link).
-// Usa {{SMART_URL}} para iOS/Android (redirige a /api/wallet/smart/:token)
-
-const escapeHtml = (s = "") =>
-  String(s).replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
+// ====== Helpers ======
+function escapeHTML(s = "") {
+  return String(s).replace(/[&<>"']/g, m => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]
+  ));
+}
 
 // ====== Ajustes por defecto ======
 const DEFAULTS = {
@@ -29,7 +29,8 @@ const DEFAULTS = {
 
   preheader: "Guarde su tarjeta en su billetera móvil y disfrute beneficios.",
 
-  // Cuerpo HTML (usa placeholders: {{DISPLAY_NAME}}, {{MEMBERSHIP_ID}}, {{SMART_URL}}, {{BUTTON_TEXT}}, {{LOGO_URL}})
+  // Cuerpo HTML (placeholders disponibles)
+  // {{DISPLAY_NAME}}, {{MEMBERSHIP_ID}}, {{SMART_URL}}, {{BUTTON_TEXT}}, {{LOGO_URL}}
   htmlBody: `
 <!-- Encabezado -->
 <div style="text-align:center; padding:18px 0 8px 0;">
@@ -67,48 +68,42 @@ function mergeSettings(overrides = {}) {
 
 /**
  * Renderiza el HTML del correo.
- * @param {object} settings - Permite sobreescribir DEFAULTS (subject, buttonText, logoUrl, etc.)
+ * @param {object} s    - settings (subject, buttonText, logoUrl, htmlBody, preheader, etc.)
  * @param {object} vars - { displayName, membershipId, smartUrl }
- * @returns {string} HTML final
  */
+function renderWalletEmail(s, { displayName, membershipId, smartUrl }) {
+  const tpl = (s?.htmlBody && s.htmlBody.trim()) ? s.htmlBody : DEFAULTS.htmlBody;
 
-function renderWalletEmail(s, { displayName, smartUrl, membershipId }) {
-  const buttonText = s.buttonText || 'Añadir a mi Wallet';
+  const htmlBody = tpl
+    .replace(/{{DISPLAY_NAME}}/g, escapeHTML(displayName || ""))
+    .replace(/{{MEMBERSHIP_ID}}/g, escapeHTML(membershipId || ""))
+    .replace(/{{SMART_URL}}/g, smartUrl || "")
+    .replace(/{{BUTTON_TEXT}}/g, escapeHTML(s.buttonText || DEFAULTS.buttonText))
+    .replace(/{{LOGO_URL}}/g, escapeHTML(s.logoUrl || DEFAULTS.logoUrl));
 
-  const body = (s.htmlBody || `
-    <p style="margin:0 0 16px 0;"><strong>Estimado/a {{DISPLAY_NAME}},</strong></p>
-    <p style="margin:0 0 16px 0;">Bienvenido al programa <em>Lealtad Alcazarén</em>. Guarde su tarjeta en su billetera móvil.</p>
-    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:16px 0;">
-      <tr>
-        <td style="background:#b91c1c;border-radius:8px;padding:12px 18px;">
-          <a href="{{SMART_URL}}" style="text-decoration:none;color:#ffffff !important;font-weight:600;display:inline-block;">
-            {{BUTTON_TEXT}}
-          </a>
-        </td>
-      </tr>
-    </table>
-    <p style="font-size:13px;margin:16px 0 0 0;">Si tienes iPhone, el enlace también abrirá Apple Wallet.</p>
-  `)
-    .replace(/{{DISPLAY_NAME}}/g, escapeHTML(displayName || ''))
-    .replace(/{{SMART_URL}}/g, smartUrl)
-    .replace(/{{BUTTON_TEXT}}/g, buttonText);
+  const preheader = escapeHTML(s.preheader || DEFAULTS.preheader);
 
   return `
 <!doctype html>
 <html>
 <head>
-<meta charset="utf-8">
-<meta name="color-scheme" content="light only">
-<meta name="supported-color-schemes" content="light">
+  <meta charset="utf-8">
+  <meta name="color-scheme" content="light only">
+  <meta name="supported-color-schemes" content="light">
 </head>
 <body style="margin:0;padding:0;background:#ffffff;">
+  <!-- preheader oculto -->
+  <div style="display:none !important;opacity:0;color:transparent;max-height:0;max-width:0;overflow:hidden;">
+    ${preheader}
+  </div>
+
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;">
     <tr>
       <td align="center">
         <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-collapse:collapse;">
           <tr>
             <td style="padding:24px;font:16px/1.5 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial,sans-serif;color:#0f2b40 !important;">
-              ${body}
+              ${htmlBody}
             </td>
           </tr>
         </table>
@@ -119,9 +114,4 @@ function renderWalletEmail(s, { displayName, smartUrl, membershipId }) {
 </html>`;
 }
 
-function escapeHTML(s) {
-  return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-}
-
-
-module.exports = { renderWalletEmail, mergeSettings, DEFAULTS };
+module.exports = { renderWalletEmail, mergeSettings };

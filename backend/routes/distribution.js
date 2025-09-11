@@ -16,6 +16,7 @@ const SKIP_DB = process.env.SKIP_DB === "true";
 
 //  Esta es la función que respeta htmlTemplate/settings
 //  Esta función respeta settings/htmlTemplate y usa un solo botón (smart link)
+//  Esta función respeta settings/htmlTemplate y usa un solo botón (smart link)
 async function sendWelcomeEmailHtml(
   to,
   displayName,
@@ -28,26 +29,30 @@ async function sendWelcomeEmailHtml(
   const token = jwt.sign({ client, campaign }, process.env.WALLET_TOKEN_SECRET, { expiresIn: "7d" });
   const smartUrl = `${API_BASE}/api/wallet/smart/${token}`;
 
-  // 2) settings/plantilla
+  // 2) settings/plantilla con fallbacks robustos
   const s = (settings && Object.keys(settings || {}).length)
-    ? mergeSettings(settings)
-    : { htmlBody: htmlTemplate, buttonText: buttonText || DEFAULT_SETTINGS.buttonText, logoUrl };
+    ? mergeSettings({ ...DEFAULT_SETTINGS, ...settings })
+    : mergeSettings({
+        ...DEFAULT_SETTINGS,
+        htmlBody: htmlTemplate || DEFAULT_SETTINGS.htmlBody,
+        buttonText: buttonText || DEFAULT_SETTINGS.buttonText,
+        logoUrl,
+        subject: subject || DEFAULT_SETTINGS.subject,
+      });
 
-  // 3) Render con smart URL (tu renderEmail.js ya espera {{SMART_URL}})
-  const html = renderWalletEmail(
-    s,
-    { displayName, membershipId, smartUrl }
-  );
+  // 3) Render con smart URL
+  const html = renderWalletEmail(s, { displayName, membershipId, smartUrl });
 
-  // 4) Enviar (elige Outlook/Gmail según disponibilidad)
+  // 4) Enviar (Outlook/Gmail según disponibilidad y defaults de mailer)
   return sendMailSmart({
-   
+    from: from || s.from || s.fromName || process.env.MAIL_FROM || undefined,
     to,
-    subject: subject || s.subject || "Su Tarjeta de Lealtad",
+    subject: s.subject || subject || "Su Tarjeta de Lealtad",
     html,
     text: `Añadir a mi Wallet: ${smartUrl}`, // fallback texto plano
   });
 }
+
 
 // ---------- Defaults cuando no hay DB ----------
 const DEFAULT_SETTINGS = {
@@ -402,13 +407,15 @@ router.post("/distribution/send-test-email", async (req, res) => {
       clientCode = "",
       campaignCode = "",
       settings = {},
-      htmlTemplate,
+      htmlTemplate,         // opcional
       buttonText,
       membershipId,
       logoUrl,
       subject,
       from,
-    } = req.body;
+    } = req.body || {};
+
+    if (!email) return res.status(400).json({ ok:false, error:"email requerido" });
 
     await sendWelcomeEmailHtml(
       email,
@@ -416,7 +423,14 @@ router.post("/distribution/send-test-email", async (req, res) => {
       clientCode,
       campaignCode,
       settings,
-      { htmlTemplate, buttonText, membershipId, logoUrl, subject, from }
+      {
+        htmlTemplate: htmlTemplate || DEFAULT_SETTINGS.htmlBody, // <= CLAVE
+        buttonText,
+        membershipId,
+        logoUrl,
+        subject,
+        from
+      }
     );
 
     res.json({ ok: true });
@@ -425,7 +439,6 @@ router.post("/distribution/send-test-email", async (req, res) => {
     res.status(500).json({ ok: false, error: e?.message || "fail" });
   }
 });
-
 
 
 module.exports = { router, sendWelcomeEmailHtml, sendWelcomeEmail };
