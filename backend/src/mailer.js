@@ -1,3 +1,4 @@
+// backend/src/mailer.js
 const nodemailer = require("nodemailer");
 
 function makeOutlook() {
@@ -26,9 +27,16 @@ const txGmail   = makeGmail();
 
 /**
  * Envía por el primer transport disponible; si falla, intenta con el segundo.
- * Prioridad: Outlook -> Gmail (cámbiala si quieres).
+ * Prioridad: Outlook -> Gmail.
  */
-async function sendMailSmart(message) {
+async function sendMailSmart(message = {}) {  // ⬅⬅⬅ default evita leer props de undefined
+  const { to, subject, html, text, from: fromIn } = message;
+
+  // Validaciones amigables (evita llamadas “vacías”)
+  if (!to) throw new Error("sendMailSmart: 'to' requerido");
+  if (!subject) throw new Error("sendMailSmart: 'subject' requerido");
+  if (!html && !text) throw new Error("sendMailSmart: 'html' o 'text' requerido");
+
   const tries = [];
 
   if (txOutlook) {
@@ -42,7 +50,7 @@ async function sendMailSmart(message) {
     tries.push({
       name: "gmail",
       tx: txGmail,
-      from: process.env.MAIL_FROM_GMAIL || undefined,
+      from: process.env.MAIL_FROM_GMAIL || process.env.MAIL_FROM || undefined,
     });
   }
 
@@ -55,7 +63,7 @@ async function sendMailSmart(message) {
     try {
       const info = await t.tx.sendMail({
         ...message,
-        from: message.from || t.from, // “from” acorde al remitente del transporte
+        from: fromIn || t.from || "PassForge <no-reply@alcazaren.com.gt>", // ⬅ fallback final
       });
       return { ok: true, via: t.name, info };
     } catch (e) {
