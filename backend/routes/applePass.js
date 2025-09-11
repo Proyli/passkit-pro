@@ -1,161 +1,73 @@
 // backend/routes/applePass.js
-const fs = require("node:fs");
 const path = require("node:path");
+const fs = require("node:fs");
 const express = require("express");
 const { PKPass } = require("passkit-generator");
 
 const router = express.Router();
 
-/* ========== Certificados & Modelo ========== */
-// Directorios candidatos (toma el primero que exista)
+/** Resuelve siempre contra la carpeta backend, sin “backend/” duplicado */
 const BASE = path.resolve(__dirname, "..");
-const CERT_DIRS = [
-  process.env.CERT_DIR,           // p.ej. /etc/secrets (Render Secret Files)
-  "/etc/secrets",
-  path.join(BASE, "certs"),
-].filter(Boolean);
-
-const CERT_DIR = CERT_DIRS.find((d) => {
-  try { return d && fs.existsSync(d); } catch { return false; }
-}) || CERT_DIRS[CERT_DIRS.length - 1];
-
-const MODEL_DIR =
-  process.env.MODEL_DIR ||
-  path.join(BASE, "passes", "alcazaren.pass");
-
-// Nombres candidatos (acepta diferentes convenciones)
-const WWDR_CANDIDATES = ["wwdr.pem", "AppleWWDR.pem", "WWDR.pem"];
-const SIGNER_CERT_CANDIDATES = [
-  process.env.SIGNER_CERT_FILE,
-  "signerCert.pem",
-  "pass_cert.pem",
-  "certificate.pem",
-  "cert.pem",
-];
-const SIGNER_KEY_CANDIDATES = [
-  process.env.SIGNER_KEY_FILE,
-  "signerKey.pem",
-  "pass_private.key",
-  "private.key",
-  "key.pem",
-];
-
-// Utilidad: encuentra el primer archivo existente en CERT_DIR
-function pickFile(candidates) {
-  for (const name of candidates.filter(Boolean)) {
-    const p = path.join(CERT_DIR, name);
-    if (fs.existsSync(p)) return p;
-  }
-  return null;
-}
-
-const WWDR_PATH       = pickFile(WWDR_CANDIDATES);
-const SIGNER_CERT_PATH = pickFile(SIGNER_CERT_CANDIDATES);
-const SIGNER_KEY_PATH  = pickFile(SIGNER_KEY_CANDIDATES);
-
-// Validaciones tempranas (lanzan error si falta algo crítico)
-if (!WWDR_PATH)        throw new Error(`WWDR no encontrado en ${CERT_DIR}. Probé: ${WWDR_CANDIDATES.join(", ")}`);
-if (!SIGNER_CERT_PATH) throw new Error(`Certificado de firma no encontrado en ${CERT_DIR}. Probé: ${SIGNER_CERT_CANDIDATES.join(", ")}`);
-if (!SIGNER_KEY_PATH)  throw new Error(`Llave privada no encontrada en ${CERT_DIR}. Probé: ${SIGNER_KEY_CANDIDATES.join(", ")}`);
-if (!fs.existsSync(MODEL_DIR)) throw new Error(`Modelo PassKit no encontrado: ${MODEL_DIR}`);
-
-const wwdr       = fs.readFileSync(WWDR_PATH);
-const signerCert = fs.readFileSync(SIGNER_CERT_PATH);
-const signerKey  = fs.readFileSync(SIGNER_KEY_PATH);
-const signerKeyPassphrase =
-  process.env.SIGNER_KEY_PASSPHRASE ||
-  process.env.PASS_KEY_PASSPHRASE   ||
-  process.env.PASS_CERT_PASSWORD    ||
-  undefined;
+const CERT_DIR  = process.env.CERT_DIR  || path.join(BASE, "certs");
+const MODEL_DIR = process.env.MODEL_DIR || path.join(BASE, "passes", "alcazaren.pass");
 
 console.log("[applePass] CERT_DIR:", CERT_DIR);
 console.log("[applePass] MODEL_DIR:", MODEL_DIR);
-console.log("[applePass] WWDR:", path.basename(WWDR_PATH));
-console.log("[applePass] signerCert:", path.basename(SIGNER_CERT_PATH));
-console.log("[applePass] signerKey:", path.basename(SIGNER_KEY_PATH));
 
-/* ========== Helper para generar el .pkpass ========== */
-async function buildPkPass({ membershipId, displayName }) {
-  const pass = await PKPass.from(
-    {
-      model: MODEL_DIR,
-      certificates: { wwdr, signerCert, signerKey, signerKeyPassphrase },
-    },
-    {
-      serialNumber: membershipId,
+/** (opcional pero útil) Validaciones al arrancar */
+if (!fs.existsSync(CERT_DIR))                     throw new Error(`Certs dir no existe: ${CERT_DIR}`);
+if (!fs.existsSync(path.join(CERT_DIR,"AppleWWDR.pem")))  throw new Error("Falta AppleWWDR.pem");
+if (!fs.existsSync(path.join(CERT_DIR,"pass_cert.pem")))  throw new Error("Falta pass_cert.pem");
+if (!fs.existsSync(path.join(CERT_DIR,"pass_private.key"))) throw new Error("Falta pass_private.key");
+if (!fs.existsSync(MODEL_DIR))                    throw new Error(`Modelo PassKit no encontrado: ${MODEL_DIR}`);
+if (!fs.existsSync(path.join(MODEL_DIR,"pass.json")))      throw new Error("Falta pass.json en el modelo");
 
-      // CODE128 (no QR)
-      barcodes: [
-        {
-          format: "PKBarcodeFormatCode128",
-          message: `PK|${membershipId}|ALCAZAREN`,
-          messageEncoding: "iso-8859-1",
-          altText: membershipId,
-        },
-      ],
+const wwdr       = fs.readFileSync(path.join(CERT_DIR, "AppleWWDR.pem"));
+const signerCert = fs.readFileSync(path.join(CERT_DIR, "pass_cert.pem"));
+const signerKey  = fs.readFileSync(path.join(CERT_DIR, "pass_private.key"));
+const signerKeyPassphrase = process.env.PASS_KEY_PASSPHRASE || undefined;
 
-      // Campos básicos (usa tu modelo .pass para imagen/colores)
-      storeCard: {
-        primaryFields: [
-          { key: "title", label: "Lealtad Alcazarén", value: "Lealtad Alcazarén" },
-        ],
-        secondaryFields: [
-          { key: "name", label: "Name", value: displayName || "Cliente" },
-        ],
-        auxiliaryFields: [
-          {
-            key: "info",
-            label: "Information",
-            value:
-              "Disfruta un 5% de ahorro en cada compra. Tu lealtad merece un beneficio exclusivo. Aplican restricciones.",
-          },
-        ],
-        backFields: [
-          { key: "terms", label: "Términos", value: "Aplican restricciones." },
-        ],
-      },
-    }
-  );
-
-  return pass.getAsBuffer();
-}
-
-/* ========== Rutas ========== */
-// Tu ruta original con :serial
 router.get("/apple/pass/:serial", async (req, res) => {
   try {
-    const displayName  = req.query.displayName || req.query.name || "Cliente";
-    const membershipId = req.query.membershipId || req.query.mid || req.params.serial;
+    const displayName  = (req.query.displayName || req.query.name || "Cliente").toString();
+    const membershipId = (req.query.membershipId || req.query.mid || req.params.serial).toString();
 
-    const buf = await buildPkPass({ membershipId, displayName });
+    const pass = await PKPass.from(
+      {
+        model: MODEL_DIR,
+        certificates: { wwdr, signerCert, signerKey, signerKeyPassphrase },
+      },
+      {
+        serialNumber: membershipId,
+        barcodes: [
+          {
+            format: "PKBarcodeFormatCode128",
+            message: `PK|${membershipId}|ALCAZAREN`,
+            messageEncoding: "iso-8859-1",
+            altText: membershipId,
+          },
+        ],
+        storeCard: {
+          primaryFields: [{ key: "title", label: "Lealtad Alcazarén", value: "Lealtad Alcazarén" }],
+          secondaryFields: [{ key: "name", label: "Name", value: displayName }],
+          auxiliaryFields: [{
+            key: "info",
+            label: "Information",
+            value: "Disfruta un 5% de ahorro en cada compra. Tu lealtad merece un beneficio exclusivo. Aplican restricciones.",
+          }],
+          backFields: [{ key: "terms", label: "Términos", value: "Aplican restricciones." }],
+        },
+      }
+    );
 
     res
       .status(200)
       .type("application/vnd.apple.pkpass")
-      .set("Content-Disposition", 'attachment; filename="alcazaren.pkpass"')
-      .send(buf);
+      .set("Content-Disposition", `attachment; filename="alcazaren-${membershipId}.pkpass"`)
+      .send(pass.getAsBuffer());
   } catch (e) {
     console.error("apple/pass error:", e);
-    res.status(500).json({ ok: false, error: "No se pudo generar el pase" });
-  }
-});
-
-// Alias sin :serial, usando query params (por compatibilidad)
-router.get("/apple/pkpass", async (req, res) => {
-  try {
-    const displayName  = req.query.displayName || req.query.name || "Cliente";
-    const membershipId = req.query.membershipId || req.query.mid || req.query.serial || "MID-0001";
-
-    const buf = await buildPkPass({ membershipId, displayName });
-
-    res
-      .status(200)
-      .type("application/vnd.apple.pkpass")
-      .set("Content-Disposition", 'attachment; filename="alcazaren.pkpass"')
-      .send(buf);
-  } catch (e) {
-    console.error("apple/pkpass error:", e);
-    res.status(500).json({ ok: false, error: "No se pudo generar el pase" });
+    res.status(500).json({ error: e.message || "No se pudo generar el pase" });
   }
 });
 
