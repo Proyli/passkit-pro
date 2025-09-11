@@ -6,26 +6,42 @@ const { PKPass } = require("passkit-generator");
 
 const router = express.Router();
 
-/** Resuelve siempre contra la carpeta backend, sin “backend/” duplicado */
+// Base local
 const BASE = path.resolve(__dirname, "..");
-const CERT_DIR  = process.env.CERT_DIR  || path.join(BASE, "certs");
+
+// Usa env si existe; si no, pruebo /etc/secrets; y si tampoco, backend/certs
+const CERT_DIR  = process.env.CERT_DIR  || "/etc/secrets" || path.join(BASE, "certs");
 const MODEL_DIR = process.env.MODEL_DIR || path.join(BASE, "passes", "alcazaren.pass");
 
-console.log("[applePass] CERT_DIR:", CERT_DIR);
-console.log("[applePass] MODEL_DIR:", MODEL_DIR);
+console.log("CERT_DIR:", CERT_DIR);
+console.log("MODEL_DIR:", MODEL_DIR);
 
-/** (opcional pero útil) Validaciones al arrancar */
-if (!fs.existsSync(CERT_DIR))                     throw new Error(`Certs dir no existe: ${CERT_DIR}`);
-if (!fs.existsSync(path.join(CERT_DIR,"AppleWWDR.pem")))  throw new Error("Falta AppleWWDR.pem");
-if (!fs.existsSync(path.join(CERT_DIR,"pass_cert.pem")))  throw new Error("Falta pass_cert.pem");
-if (!fs.existsSync(path.join(CERT_DIR,"pass_private.key"))) throw new Error("Falta pass_private.key");
-if (!fs.existsSync(MODEL_DIR))                    throw new Error(`Modelo PassKit no encontrado: ${MODEL_DIR}`);
-if (!fs.existsSync(path.join(MODEL_DIR,"pass.json")))      throw new Error("Falta pass.json en el modelo");
+// helper para elegir el primer archivo que exista entre varias opciones
+function pickFile(dir, ...names) {
+  for (const n of names) {
+    const p = path.join(dir, n);
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
+}
 
-const wwdr       = fs.readFileSync(path.join(CERT_DIR, "AppleWWDR.pem"));
-const signerCert = fs.readFileSync(path.join(CERT_DIR, "pass_cert.pem"));
-const signerKey  = fs.readFileSync(path.join(CERT_DIR, "pass_private.key"));
+// Acepta ambas convenciones de nombres
+const wwdrPath       = pickFile(CERT_DIR, "AppleWWDR.pem", "wwdr.pem");
+const signerCertPath = pickFile(CERT_DIR, "pass_cert.pem", "signerCert.pem");
+const signerKeyPath  = pickFile(CERT_DIR, "pass_private.key", "signerKey.pem");
+
+if (!wwdrPath)       throw new Error("Falta AppleWWDR.pem/wwdr.pem");
+if (!signerCertPath) throw new Error("Falta pass_cert.pem/signerCert.pem");
+if (!signerKeyPath)  throw new Error("Falta pass_private.key/signerKey.pem");
+if (!fs.existsSync(MODEL_DIR)) throw new Error(`Modelo PassKit no encontrado: ${MODEL_DIR}`);
+
+const wwdr       = fs.readFileSync(wwdrPath);
+const signerCert = fs.readFileSync(signerCertPath);
+const signerKey  = fs.readFileSync(signerKeyPath);
 const signerKeyPassphrase = process.env.PASS_KEY_PASSPHRASE || undefined;
+
+// … el resto del archivo (ruta /apple/pass/:serial) queda igual …
+
 
 router.get("/apple/pass/:serial", async (req, res) => {
   try {
