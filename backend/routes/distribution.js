@@ -1,4 +1,3 @@
-// backend/routes/distribution.js
 const express = require("express");
 const router = express.Router();
 const { pool } = require("../src/db");
@@ -27,7 +26,7 @@ const DEFAULT_SETTINGS = {
     '<p><a href="{{SMART_URL}}"><strong>{{BUTTON_TEXT}}</strong></a></p>',
 };
 
-// ========== SEND WELCOME ==========
+// ========== SEND WELCOME: HTML ==========
 async function sendWelcomeEmailHtml(
   to,
   displayName,
@@ -56,6 +55,22 @@ async function sendWelcomeEmailHtml(
 
   console.log("📬 sendMailSmart result:", result);
   return result;
+}
+
+// ========== SEND WELCOME: wrapper para memberController ==========
+async function sendWelcomeEmail(memberObj) {
+  if (!memberObj) return;
+
+  const displayName = `${memberObj.nombre || ""} ${memberObj.apellido || ""}`.trim();
+
+  return sendWelcomeEmailHtml(
+    memberObj.email,
+    displayName,
+    memberObj.codigoCliente,
+    memberObj.codigoCampana,
+    {}, // settings opcionales
+    {}
+  );
 }
 
 // ========== TEST EMAIL ==========
@@ -92,4 +107,4 @@ router.post("/distribution/send-test-email", async (req, res) => {
   }
 });
 
-module.exports = { router, sendWelcomeEmailHtml };
+module.exports = { router, sendWelcomeEmailHtml, sendWelcomeEmail };
