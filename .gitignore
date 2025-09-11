@@ -39,3 +39,8 @@ desktop.ini
 **/.env
 backend/.env
 backend/.env
+backend/.env
+.env
+**/.env
+backend/certs/*
+!backend/certs/README.md

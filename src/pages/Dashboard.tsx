@@ -404,13 +404,15 @@ const Dashboard = () => {
         </div>
 
         {/* Grid de pases */}
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {passes.map((pass, index) => (
-            <div key={pass.id} style={{ animationDelay: `${index * 100}ms` }}>
-              <PassCard pass={pass} onDuplicate={handleDuplicate} onDelete={handleDelete} />
-            </div>
-          ))}
-        </div>
+        {/* Grid de pases */}
+<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+  {passes.map((pass, index) => (
+    <div key={pass.id} style={{ animationDelay: `${index * 100}ms` }}>
+      <PassCard compact pass={pass} onDuplicate={handleDuplicate} onDelete={handleDelete} />
+    </div>
+  ))}
+</div>
+
 
         {/* Empty state */}
         {passes.length === 0 && (

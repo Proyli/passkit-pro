@@ -4,6 +4,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { QRCodeSVG } from "qrcode.react";
 import JsBarcode from "jsbarcode";
+//import Code128Pane from "@/components/Code128Pane";
+
 
 type PassType = "coupon" | "event" | "loyalty";
 type PassStatus = "active" | "inactive" | "expired";
@@ -30,6 +32,14 @@ interface QrCodeModalProps {
 const buildPayload = (clientCode: string, campaignCode: string) =>
   `PK|${clientCode}|${campaignCode}`;
 
+const makeSvgResponsive = (svg: SVGSVGElement) => {
+  const bbox = svg.getBBox();
+  svg.setAttribute("viewBox", `0 0 ${bbox.width} ${bbox.height}`);
+  svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+  svg.removeAttribute("width");
+  svg.removeAttribute("height");
+};
+
 export function QrCodeModal({
   isOpen,
   onClose,
@@ -44,6 +54,8 @@ export function QrCodeModal({
 
  const barcodeSvgRef = useRef<SVGSVGElement | null>(null);
 const qrWrapperRef = useRef<HTMLDivElement | null>(null); // ⬅️ nuevo
+// arriba del componente
+const barcodeBoxRef = useRef<HTMLDivElement | null>(null);
 
 
   // Sincroniza con props cuando cambian
@@ -73,22 +85,41 @@ const qrWrapperRef = useRef<HTMLDivElement | null>(null); // ⬅️ nuevo
   // Valor final que se pinta: QR usa walletUrl; Code128 usa payload
   const valueToRender = mode === "qr" ? walletUrl : payload;
 
-  // Pinta el Code128 cuando corresponde
-  useEffect(() => {
-    if (mode !== "code128" || !barcodeSvgRef.current) return;
-    try {
-      JsBarcode(barcodeSvgRef.current, valueToRender || "-", {
-        format: "CODE128",
-        displayValue: false, // sin texto debajo
-        lineColor: "#111",
-        height: 84,
-        margin: 8,
-      });
-    } catch (e) {
-      console.error("JsBarcode error:", e);
-    }
-  }, [mode, valueToRender]);
+   useEffect(() => {
+  if (mode !== "code128" || !barcodeSvgRef.current) return;
+  const svg = barcodeSvgRef.current;
 
+  // Calcula un width “óptimo” en px por módulo según el ancho del contenedor
+  let moduleWidth = 1.4; // fallback
+  try {
+    const boxW = barcodeBoxRef.current?.clientWidth ?? 320;
+
+    // Estimación rápida de módulos totales en Code128:
+    // 11 módulos por símbolo + start/stop/check (≈ 35 módulos),
+    // y un pequeño quiet zone relativo
+    const totalModules = 11 * (valueToRender?.length ?? 0) + 35;
+    const computed = Math.floor((boxW * 0.95) / totalModules);
+
+    // límites razonables para scannear bien
+    moduleWidth = Math.max(1, Math.min(2, computed));
+  } catch {}
+
+  try {
+    JsBarcode(svg, valueToRender || "-", {
+      format: "CODE128",
+      displayValue: false,
+      lineColor: "#111",
+      height: 82,   // puedes ajustar 76–86
+      margin: 0,    // sin bordes extra (el wrapper ya controla el layout)
+      width: moduleWidth,
+    });
+
+    // que el SVG sea responsive dentro del wrapper
+    makeSvgResponsive(svg);
+  } catch (e) {
+    console.error("JsBarcode error:", e);
+  }
+}, [mode, valueToRender]);
 
 
   const downloadSvgAsPng = (svg: SVGElement, name: string, size = 640) => {
@@ -194,7 +225,9 @@ const qrWrapperRef = useRef<HTMLDivElement | null>(null); // ⬅️ nuevo
   </div>
 ) : (
   // Code128 con payload "PK|cliente|campaña"
-  <svg ref={barcodeSvgRef} />
+   <div className="w-full max-w-[320px] overflow-hidden">
+    <svg ref={barcodeSvgRef} className="w-full h-auto block" />
+  </div>
 )}
 
       </div>

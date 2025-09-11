@@ -4,6 +4,9 @@ const express = require("express");
 const cors = require("cors");
 require("dotenv").config({ path: path.join(__dirname, ".env") });
 
+/* ==== DB ==== */
+const db = require("./models");
+
 /* ==== Rutas ==== */
 const memberRoutes       = require("./routes/memberRoutes");
 const authRoutes         = require("./routes/authRoutes");
@@ -14,13 +17,11 @@ const designRoutes       = require("./routes/designRoutes");
 const walletRoutes       = require(path.join(__dirname, "src", "routes", "wallet"));
 const analyticsRoutes    = require("./src/routes/analytics");
 const { router: distributionRouter } = require("./routes/distribution");
-
-/* ==== DB ==== */
-const db = require("./models");
+const applePassRoutes    = require("./routes/applePass");
 
 /* ==== App ==== */
-const app = express();
-app.set("trust proxy", 1); // Render/Proxies
+const app = express();               // <-- crear app ANTES de usarla
+app.set("trust proxy", 1);
 
 // CORS con whitelist opcional: CORS_ORIGINS="https://tu-frontend.com,https://otro.com"
 const whitelist = String(process.env.CORS_ORIGINS || "")
@@ -50,17 +51,18 @@ app.use("/api",         walletRoutes);
 app.use("/api",         barcodeRouter);
 app.use("/api",         analyticsRoutes);
 app.use("/api",         distributionRouter);
+app.use("/api",         applePassRoutes);
 
 /* ---- Extras útiles ---- */
-// 1) Raíz: ping rápido
-app.get("/", (_req, res) => res.status(200).send("PassForge backend up"));
-// 2) Healthcheck (Render lo usa)
-app.get("/health", (_req, res) => res.status(200).send("OK"));
-// 3) 404 handler (después de las rutas)
+app.get("/", (_req, res) => res.status(200).send("PassForge backend up")); // ping rápido
+app.get("/health", (_req, res) => res.status(200).send("OK"));             // healthcheck
+
+// 404 handler (después de las rutas)
 app.use((req, res, _next) => {
   res.status(404).json({ ok: false, message: "Not Found" });
 });
-// 4) Error handler
+
+// Error handler
 app.use((err, _req, res, _next) => {
   console.error("Unhandled error:", err);
   res.status(err.status || 500).json({
@@ -88,6 +90,17 @@ async function start() {
   } catch (err) {
     console.error("⚠️  Falló la conexión a DB, pero el servidor seguirá:", err.message);
   }
+
+  // (Opcional) chequeo de certificados Apple si los necesitas ahora
+  console.log("ENV CHECK → CERT_DIR:", process.env.CERT_DIR);
+  console.log("ENV CHECK → MODEL_DIR:", process.env.MODEL_DIR);
+  try {
+    const fs = require("fs");
+    const CERTS = process.env.CERT_DIR || path.join(__dirname, "certs");
+    console.log("exists wwdr.pem?      ", fs.existsSync(path.join(CERTS, "wwdr.pem")));
+    console.log("exists signerCert.pem?", fs.existsSync(path.join(CERTS, "signerCert.pem")));
+    console.log("exists signerKey.pem? ", fs.existsSync(path.join(CERTS, "signerKey.pem")));
+  } catch {}
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`✅ API escuchando en puerto ${PORT}`);

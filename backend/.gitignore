@@ -1,0 +1,25 @@
+
+# Certificados y llaves privadas
+certs/*
+!certs/README.md
+
+# Node
+node_modules/
+npm-debug.log*
+package-lock.json
+
+# Entorno/secretos
+.env
+backend/.env
+certs/
+backend/certs/
+keys/
+backend/keys/
+*.pem
+*.p12
+*.key
+*.crt
+
+# Artefactos locales
+uploads/
+

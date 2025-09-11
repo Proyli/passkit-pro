@@ -25,7 +25,7 @@ import PublicRegister from "@/pages/PublicRegister";
 // Páginas Designer (usa rutas relativas)
 import DesignerLayout from "./pages/Designer";
 import DesignerApple from "./pages/Designer/Apple";
-import DesignerGoogle from "./pages/Designer/Google";
+import DesignerGoogle from "./pages/Designer/components/Google";
 import DesignerRegister from "./pages/Designer/Register";
 import DesignerDataFields from "./pages/Designer/DataFields";
 import DesignerSettings from "./pages/Designer/Settings";

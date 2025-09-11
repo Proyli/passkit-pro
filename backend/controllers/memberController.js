@@ -3,7 +3,8 @@ const db = require("../models");
 const Member = db.Member;
 
 // importa el servicio de correo
-const { sendWelcomeEmail } = require("../services/distribution");
+const { sendWelcomeEmail } = require("../routes/distribution");
+
 
 // Obtener todos los miembros
 exports.getAllMembers = async (_req, res) => {

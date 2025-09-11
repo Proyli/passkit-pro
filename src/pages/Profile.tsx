@@ -5,6 +5,18 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useProfileStore } from "@/store/profileStore";
 
+// === Tier options → mapean el select a codigoCampana ===
+const TIER_OPTIONS = [
+  { value: "blue",  label: "Blue 5%",  campaign: "blue_5"  },
+  { value: "gold",  label: "Gold 15%", campaign: "gold_15" },
+  { value: "silver",label: "Silver",   campaign: "blue_5"  }, // por ahora se comportan como blue
+  { value: "bronze",label: "Bronze",   campaign: "blue_5"  },
+];
+
+const mapTierToCampaign = (v: string) =>
+  TIER_OPTIONS.find(t => t.value === v)?.campaign ?? "";
+
+
 // Carga diferida para que un error en PassList no rompa Profile
 const PassList = lazy(() => import("./PassList"));
 
@@ -51,14 +63,25 @@ const Profile: React.FC = () => {
     ...(profileData as Partial<FormData> | undefined),
   });
 
+  // justo debajo de useState<FormData>(...)
+const [campaignManual, setCampaignManual] = useState<boolean>(
+  Boolean((profileData as any)?.codigoCampana)
+);
+
   const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
-  ) => {
-    const { name, value } = e.target;
-    const newData = { ...formData, [name]: value };
-    setFormData(newData);
-    setProfileData(newData);
-  };
+  e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+) => {
+  const { name, value } = e.target;
+
+  if (name === "codigoCampana" && !campaignManual) {
+    setCampaignManual(true);
+  }
+
+  const newData = { ...formData, [name]: value };
+  setFormData(newData);
+  setProfileData(newData);
+};
+
 
   const handleGuardar = async () => {
     const nuevoCliente = {
@@ -70,7 +93,7 @@ const Profile: React.FC = () => {
       const res = await fetch(`${API_BASE}/members`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(nuevoCliente),
+        body: JSON.stringify(nuevoCliente),                
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
@@ -120,29 +143,42 @@ const Profile: React.FC = () => {
               onChange={handleChange}
             />
           </div>
-          <div>
-            <Label>Código de la campaña</Label>
-            <Input
-              name="codigoCampana"
-              value={formData.codigoCampana}
-              onChange={handleChange}
-            />
-          </div>
+          {/* Código de la campaña */}
+        <div>
+          <Label>Código de la campaña</Label>
+          <Input
+            name="codigoCampana"
+            value={formData.codigoCampana}
+            onChange={handleChange}
+            // opcional: placeholder="CP502"
+          />
+        </div>
+
+
+          {/* Tipo de cliente */}
           <div>
             <Label>Tipo de cliente</Label>
             <select
               name="tipoCliente"
               value={formData.tipoCliente}
-              onChange={handleChange}
+              onChange={(e) => {
+                const tipo = e.target.value;
+                // ✅ solo actualiza el tipo; NO modifica codigoCampana
+                const next = { ...formData, tipoCliente: tipo };
+                setFormData(next);
+                setProfileData(next);
+              }}
               className="w-full border rounded-md px-3 py-2"
             >
               <option value="">Selecciona un tipo</option>
-              <option value="Black">Black</option>
-              <option value="Gold">Gold</option>
-              <option value="Silver">Silver</option>
-              <option value="Bronze">Bronze</option>
+              {TIER_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
             </select>
           </div>
+
           <div>
             <Label>Email</Label>
             <Input name="email" value={formData.email} onChange={handleChange} />
