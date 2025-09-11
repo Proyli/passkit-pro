@@ -13,7 +13,11 @@ const barcodeRouter      = require("./routes/barcode");
 const designRoutes       = require("./routes/designRoutes");
 const walletRoutes       = require(path.join(__dirname, "src", "routes", "wallet"));
 const analyticsRoutes    = require("./src/routes/analytics");
-const { router: distributionRouter } = require("./routes/distribution");
+const distribution = require("./routes/distribution");
+const distributionRouter = distribution.router || distribution;
+console.log("[mount] distributionRouter present?", !!distributionRouter);
+app.use("/api", distributionRouter);
+
 const applePassRoutes = require("./routes/applePass");
 
 /* ==== DB ==== */
@@ -50,7 +54,7 @@ app.use("/api/designs", designRoutes);
 app.use("/api",         walletRoutes);
 app.use("/api",         barcodeRouter);
 app.use("/api",         analyticsRoutes);
-app.use("/api",         distributionRouter);
+
 //app.use("/api", require("./routes/authRoutes"));
 app.use("/api", applePassRoutes);
 
