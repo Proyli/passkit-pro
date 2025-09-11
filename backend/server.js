@@ -51,7 +51,7 @@ app.use("/api",         walletRoutes);
 app.use("/api",         barcodeRouter);
 app.use("/api",         analyticsRoutes);
 app.use("/api",         distributionRouter);
-app.use("/api", require("./routes/authRoutes"));
+//app.use("/api", require("./routes/authRoutes"));
 app.use("/api", applePassRoutes);
 
 /* ---- Extras útiles ---- */
@@ -91,6 +91,18 @@ async function start() {
   } catch (err) {
     console.error("⚠️  Falló la conexión a DB, pero el servidor seguirá:", err.message);
   }
+
+    console.log("ENV CHECK → CERT_DIR:", process.env.CERT_DIR);
+console.log("ENV CHECK → MODEL_DIR:", process.env.MODEL_DIR);
+try {
+  const fs = require("fs");
+  const path = require("path");
+  const CERTS = process.env.CERT_DIR || path.join(__dirname, "certs");
+  console.log("exists wwdr.pem?      ", fs.existsSync(path.join(CERTS, "wwdr.pem")));
+  console.log("exists signerCert.pem?", fs.existsSync(path.join(CERTS, "signerCert.pem")));
+  console.log("exists signerKey.pem? ", fs.existsSync(path.join(CERTS, "signerKey.pem")));
+} catch {}
+
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`✅ API escuchando en puerto ${PORT}`);

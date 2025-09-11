@@ -1,5 +1,3 @@
-// backend/src/routes/wallet.js
-// backend/src/routes/wallet.js (imports)
 const { classIdForTier } = require("../helpers/tier"); 
 const express = require("express");
 const jwt = require("jsonwebtoken");
@@ -7,8 +5,25 @@ const { pool } = require("../db");
 const fs = require("fs");
 const path = require("path");
 
-// ✅ usa el export correcto
-const { PKPass } = require("passkit-generator");
+// ✅ forma correcta (elige ESTA y usa Pass.from)
+const { Pass } = require("passkit-generator");
+
+// ----------------- Paths certificados y modelo -----------------
+const CERTS = process.env.CERT_DIR
+  ? process.env.CERT_DIR                 // Render: /etc/secrets
+  : path.resolve(__dirname, "../../certs"); // Local: backend/certs
+
+const MODEL = process.env.MODEL_DIR
+  ? path.resolve(process.env.MODEL_DIR)      // si lo mandas por env
+  : path.resolve(__dirname, "../../passes/alcazaren.pass"); // backend/passes/alcazaren.pass
+
+console.log("[wallet] CERTS =", CERTS);
+console.log("[wallet] MODEL =", MODEL);
+["wwdr.pem","signerCert.pem","signerKey.pem"].forEach(f=>{
+  console.log(`[wallet] exists ${f}?`, fs.existsSync(path.join(CERTS,f)));
+});
+console.log("[wallet] model exists?", fs.existsSync(MODEL));
+
 
 // ----------------- Utils -----------------
 const sanitize = (s) => String(s).replace(/[^\w.-]/g, "_");
@@ -181,7 +196,7 @@ router.get("/wallet/ios/:token", async (req, res) => {
   try {
     const { client, campaign } = jwt.verify(req.params.token, SECRET);
 
-    // (Opcional) enriquecer con DB
+    // enriquecer DB (igual que ya tienes) ...
     let externalId = client;
     let displayName = client;
     try {
@@ -194,19 +209,15 @@ router.get("/wallet/ios/:token", async (req, res) => {
       }
     } catch {}
 
-    // ✅ rutas por defecto pensadas para Render
-    const CERTS = process.env.CERT_DIR  || "/etc/secrets";
-    const MODEL = process.env.MODEL_DIR || path.resolve(process.cwd(), "passes/alcazaren.pass");
-
-    // Iconos obligatorios (icon.png, icon@2x.png dentro de MODEL)
+    // Validación mínima de assets
     const icon1x = path.join(MODEL, "icon.png");
     const icon2x = path.join(MODEL, "icon@2x.png");
     if (!fs.existsSync(icon1x) || !fs.existsSync(icon2x)) {
       return res.status(500).type("text").send("Faltan icon.png e icon@2x.png en MODEL_DIR");
     }
 
-    // Cargar plantilla + certificados desde SECRET FILES
-    const pass = await PKPass.from({
+    // Generar pass
+    const pass = await Pass.from({
       model: MODEL,
       certificates: {
         wwdr: path.join(CERTS, "wwdr.pem"),
@@ -216,7 +227,6 @@ router.get("/wallet/ios/:token", async (req, res) => {
       },
     });
 
-    // Metadatos del pase
     pass.set("formatVersion", 1);
     pass.set("passTypeIdentifier", process.env.APPLE_PASS_TYPE_ID);
     pass.set("teamIdentifier", process.env.APPLE_TEAM_ID);
@@ -225,7 +235,6 @@ router.get("/wallet/ios/:token", async (req, res) => {
     pass.set("serialNumber", serial);
     pass.set("description", "Tarjeta de Lealtad Alcazaren");
 
-    // Colores / campos
     pass.set("foregroundColor", "rgb(255,255,255)");
     pass.set("labelColor", "rgb(255,255,255)");
     pass.set("backgroundColor", "#8B173C");
@@ -233,7 +242,6 @@ router.get("/wallet/ios/:token", async (req, res) => {
     pass.primaryFields.add({ key: "name", label: "Nombre", value: displayName });
     pass.secondaryFields.add({ key: "code", label: "Código", value: externalId });
 
-    // Código de barras
     pass.setBarcodes({
       format: "PKBarcodeFormatCode128",
       message: externalId,
@@ -250,8 +258,6 @@ router.get("/wallet/ios/:token", async (req, res) => {
     return res.status(500).send(e?.message || "pkpass error");
   }
 });
-
-
 
 // ===============================================================
 // NUEVO: GET /wallet/resolve
