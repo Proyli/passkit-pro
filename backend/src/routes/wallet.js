@@ -1,16 +1,14 @@
 // backend/src/routes/wallet.js
-// backend/src/routes/wallet.js
+// backend/src/routes/wallet.js (imports)
 const { classIdForTier } = require("../helpers/tier"); 
 const express = require("express");
 const jwt = require("jsonwebtoken");
 const { pool } = require("../db");
-//const { GoogleAuth } = require("google-auth-library");
-//const nodemailer = require("nodemailer");
-const { template: PassTemplate } = require("passkit-generator");
 const fs = require("fs");
 const path = require("path");
-const PKPass = require("passkit-generator");
 
+// ✅ usa el export correcto
+const { PKPass } = require("passkit-generator");
 
 // ----------------- Utils -----------------
 const sanitize = (s) => String(s).replace(/[^\w.-]/g, "_");
@@ -183,22 +181,31 @@ router.get("/wallet/ios/:token", async (req, res) => {
   try {
     const { client, campaign } = jwt.verify(req.params.token, SECRET);
 
-    // Enriquecer con DB (opcional)
+    // (Opcional) enriquecer con DB
     let externalId = client;
     let displayName = client;
     try {
       const r = await findMemberFlexible(client, campaign);
       if (r) {
-        externalId = r.external_id || client;
+        externalId  = r.external_id || client;
         const fn = r.nombre || r.first_name || "";
         const ln = r.apellido || r.last_name || "";
         displayName = `${String(fn||"").trim()} ${String(ln||"").trim()}`.trim() || client;
       }
     } catch {}
 
-    const CERTS = process.env.CERT_DIR || path.join(__dirname, "../../certs");
-    const MODEL = process.env.MODEL_DIR || path.join(__dirname, "../passes/alcazaren.pass");
+    // ✅ rutas por defecto pensadas para Render
+    const CERTS = process.env.CERT_DIR  || "/etc/secrets";
+    const MODEL = process.env.MODEL_DIR || path.resolve(process.cwd(), "passes/alcazaren.pass");
 
+    // Iconos obligatorios (icon.png, icon@2x.png dentro de MODEL)
+    const icon1x = path.join(MODEL, "icon.png");
+    const icon2x = path.join(MODEL, "icon@2x.png");
+    if (!fs.existsSync(icon1x) || !fs.existsSync(icon2x)) {
+      return res.status(500).type("text").send("Faltan icon.png e icon@2x.png en MODEL_DIR");
+    }
+
+    // Cargar plantilla + certificados desde SECRET FILES
     const pass = await PKPass.from({
       model: MODEL,
       certificates: {
@@ -209,6 +216,7 @@ router.get("/wallet/ios/:token", async (req, res) => {
       },
     });
 
+    // Metadatos del pase
     pass.set("formatVersion", 1);
     pass.set("passTypeIdentifier", process.env.APPLE_PASS_TYPE_ID);
     pass.set("teamIdentifier", process.env.APPLE_TEAM_ID);
@@ -217,6 +225,7 @@ router.get("/wallet/ios/:token", async (req, res) => {
     pass.set("serialNumber", serial);
     pass.set("description", "Tarjeta de Lealtad Alcazaren");
 
+    // Colores / campos
     pass.set("foregroundColor", "rgb(255,255,255)");
     pass.set("labelColor", "rgb(255,255,255)");
     pass.set("backgroundColor", "#8B173C");
@@ -224,6 +233,7 @@ router.get("/wallet/ios/:token", async (req, res) => {
     pass.primaryFields.add({ key: "name", label: "Nombre", value: displayName });
     pass.secondaryFields.add({ key: "code", label: "Código", value: externalId });
 
+    // Código de barras
     pass.setBarcodes({
       format: "PKBarcodeFormatCode128",
       message: externalId,
@@ -233,7 +243,7 @@ router.get("/wallet/ios/:token", async (req, res) => {
 
     const buffer = await pass.asBuffer();
     res.setHeader("Content-Type", "application/vnd.apple.pkpass");
-    res.setHeader("Content-Disposition", `attachment; filename="${sanitize(serial)}.pkpass"`);
+    res.setHeader("Content-Disposition", `inline; filename="${sanitize(serial)}.pkpass"`);
     return res.send(buffer);
   } catch (e) {
     console.error("ios pkpass error:", e);
@@ -275,38 +285,23 @@ router.get("/wallet/resolve", async (req, res) => {
       }
     } catch {}
 
-    // ---- Google Wallet (Android o si se fuerza google) ----
-    if (forced === "google" || (!forced && !isiOS)) {
-      const tier = (tipoCliente || req.query.tier || "blue").toLowerCase();
-      const saveUrl = buildGoogleSaveUrl({ client, campaign, externalId, displayName, tier });
-      return res.redirect(302, saveUrl);
+    // ✅ iOS (o forzado apple) -> redirige a /wallet/ios/:token (genera pkpass)
+    if (forced === "apple" || isiOS) {
+      const iosToken = jwt.sign({ client, campaign }, SECRET, { expiresIn: "15m" });
+      const appleUrl = `${baseUrl(req)}/api/wallet/ios/${iosToken}`;
+      return res.redirect(302, appleUrl);
     }
 
-    // ---- Apple Wallet (iOS o si se fuerza apple) ----
-    // TODO: aquí debes generar y devolver el .pkpass real
-    return res
-      .status(200)
-      .set("Content-Type", "text/html; charset=utf-8")
-      .send(`<!doctype html>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Añadir a Apple Wallet</title>
-<style>
-  body{font:16px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#fff;color:#111;padding:24px}
-  .card{max-width:560px;margin:0 auto;border:1px solid #e5e7eb;border-radius:16px;padding:24px;background:#fff}
-  h1{font-size:20px;margin:0 0 12px}
-  p{margin:0 0 10px;line-height:1.5}
-  a.btn{display:inline-block;padding:10px 14px;border-radius:10px;background:#111;color:#fff;text-decoration:none}
-</style>
-<div class="card">
-  <h1>Apple Wallet</h1>
-  <p>Para iPhone debemos entregar un archivo <b>.pkpass</b>. Esta ruta aún no lo genera.</p>
-  <p>Mientras tanto, puede abrir el enlace de Google Wallet desde un dispositivo Android para guardar su tarjeta.</p>
-</div>`);
+    // ✅ Android/Google (o forzado google) -> Save to Wallet
+    const tier = (tipoCliente || req.query.tier || "blue").toLowerCase();
+    const saveUrl = buildGoogleSaveUrl({ client, campaign, externalId, displayName, tier });
+    return res.redirect(302, saveUrl);
   } catch (e) {
     console.error("wallet/resolve error:", e?.message || e);
     return res.status(500).send("resolve failed");
   }
 });
+
 
 
 // =================================================================
