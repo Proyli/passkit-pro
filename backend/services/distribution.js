@@ -1,4 +1,3 @@
-// backend/services/distribution.js
 const nodemailer = require("nodemailer");
 const jwt = require("jsonwebtoken");
 const db = require("../models");
@@ -7,34 +6,41 @@ const Member = db.Member;
 const SECRET = process.env.WALLET_TOKEN_SECRET || "changeme";
 const BASE   = process.env.PUBLIC_BASE_URL || "http://localhost:3000";
 
-// ---------- SMTP ----------
-const SMTP_HOST    = process.env.SMTP_HOST || "smtp.office365.com";
-const SMTP_PORT    = Number(process.env.SMTP_PORT || 587);
-const SMTP_SECURE  = String(process.env.SMTP_SECURE || "false") === "true"; // true => 465
-const SMTP_USER    = process.env.SMTP_USER;
-const SMTP_PASS    = process.env.SMTP_PASS;
-
-// From seguro: igual a SMTP_USER si no defines SMTP_FROM
-const SAFE_FROM = process.env.SMTP_FROM || `"Distribuidora Alcazaren" <${SMTP_USER}>`;
-
-const transporter = nodemailer.createTransport({
-  host: SMTP_HOST,
-  port: SMTP_PORT,
-  secure: SMTP_SECURE,        // false con 587 (STARTTLS), true con 465
-  requireTLS: !SMTP_SECURE,   // fuerza STARTTLS cuando uses 587
-  auth: SMTP_USER && SMTP_PASS ? { user: SMTP_USER, pass: SMTP_PASS } : undefined,
-  tls: { minVersion: "TLSv1.2" },
-});
-
-transporter.verify()
-  .then(() => console.log("✅ SMTP listo:", SMTP_HOST, SMTP_PORT, SMTP_SECURE ? "SSL" : "STARTTLS"))
-  .catch(err => console.error("❌ SMTP error:", err.message));
+/**
+ * Crea un transporter dinámico según el tipo (outlook/gmail)
+ */
+function createTransporter(type = "outlook") {
+  if (type === "gmail") {
+    return nodemailer.createTransport({
+      host: process.env.GMAIL_SMTP_HOST,
+      port: Number(process.env.GMAIL_SMTP_PORT || 465),
+      secure: true,
+      auth: {
+        user: process.env.GMAIL_SMTP_USER,
+        pass: process.env.GMAIL_SMTP_PASS,
+      },
+    });
+  } else {
+    return nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT || 587),
+      secure: String(process.env.SMTP_SECURE || "false") === "true",
+      requireTLS: true,
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+      tls: { minVersion: "TLSv1.2" },
+    });
+  }
+}
 
 /**
  * Puede recibir el objeto miembro { id, codigoCliente, codigoCampana, nombre, apellido, email }
  * o solo un número con el memberId.
+ * Se puede pasar "provider" = "outlook" | "gmail"
  */
-async function sendWelcomeEmail(memberOrId) {
+async function sendWelcomeEmail(memberOrId, provider = "outlook") {
   let m = memberOrId;
 
   if (typeof memberOrId === "number") {
@@ -52,54 +58,35 @@ async function sendWelcomeEmail(memberOrId) {
   const appleUrl  = `${BASE}/api/wallet/ios/${token}`;
   const googleUrl = `${BASE}/api/wallet/google/${token}`;
 
-  const lightBg = "#c69667";
-  const darkBg  = "#0f3451";
-  const btnBg   = "#8b173c";
-  const btnTxt  = "#ffffff";
-
   const html = `
-  <meta name="color-scheme" content="light dark">
-  <meta name="supported-color-schemes" content="light dark">
-  <style>
-    .wrap { font-family: Inter, Arial, sans-serif; margin:0; padding:0; }
-    .body { background:${lightBg}; color:#111; padding:24px; border-radius:8px; }
-    .title { font-size:22px; font-weight:700; margin:0 0 16px 0; }
-    .small { color:#444; font-size:13px; }
-    .btn { display:inline-block; padding:12px 18px; border-radius:8px; text-decoration:none; font-weight:600; }
-    .btn-primary { background:${btnBg}; color:${btnTxt}; }
-    .btn-outline { border:1px solid #111; color:#111; }
-    .buttons { display:flex; gap:10px; margin:18px 0; }
-    @media (prefers-color-scheme: dark) {
-      .body { background:${darkBg}; color:#fff; }
-      .small { color:#CBD5E1; }
-      .btn-outline { border:1px solid #fff; color:#fff; }
-    }
-  </style>
-
-  <div class="wrap">
-    <h2 class="title">Su Tarjeta de Lealtad</h2>
-    <div class="body">
+    <div style="font-family: Arial, sans-serif;">
+      <h2>Su Tarjeta de Lealtad</h2>
       <p><strong>Estimado${m.nombre ? " " + m.nombre : ""},</strong></p>
+      <p>Bienvenido a nuestro programa <em>Lealtad Alcazarén</em>.</p>
       <p>
-        Bienvenido a nuestro programa <em>Lealtad Alcazarén</em>.
-        Puede guardar su tarjeta digital en Apple Wallet o Google Wallet y disfrutar de sus beneficios.
+        <a href="${appleUrl}">Guardar en Apple Wallet</a> |
+        <a href="${googleUrl}">Guardar en Google Wallet</a>
       </p>
-      <div class="buttons">
-        <a class="btn btn-outline" href="${appleUrl}">Guardar en Apple Wallet</a>
-        <a class="btn btn-primary" href="${googleUrl}">Guardar en Google Wallet</a>
-      </div>
-      <p class="small">El enlace expira en 15 minutos.</p>
-      <p class="small">Distribuidora Alcazaren</p>
+      <p style="font-size:12px;color:#666;">El enlace expira en 15 minutos.</p>
     </div>
-  </div>
   `;
 
-  await transporter.sendMail({
-    from: SAFE_FROM,        // ← SIEMPRE corporativo/SMTP
+  // Seleccionar el transporter correcto
+  const transporter = createTransporter(provider);
+
+  const from =
+    provider === "gmail"
+      ? process.env.MAIL_FROM_GMAIL || `"Distribuidora Alcazarén" <${process.env.GMAIL_SMTP_USER}>`
+      : process.env.MAIL_FROM || `"PassForge" <${process.env.SMTP_USER}>`;
+
+  const info = await transporter.sendMail({
+    from,
     to: m.email,
     subject: "Tu tarjeta de lealtad",
     html,
   });
+
+  console.log("📬 Enviado con", provider, "->", info.response);
 }
 
 module.exports = { sendWelcomeEmail };
