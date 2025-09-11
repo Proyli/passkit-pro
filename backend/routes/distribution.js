@@ -50,7 +50,7 @@ async function sendWelcomeEmailHtml(
     subject: subject || s.subject || "Su Tarjeta de Lealtad",
     html,
     text: `Añadir a mi Wallet: ${smartUrl}`,
-    provider,
+    provider, // 👈 usa "outlook" o "gmail"
   });
 
   console.log("📬 sendMailSmart result:", result);
@@ -58,7 +58,7 @@ async function sendWelcomeEmailHtml(
 }
 
 // ========== SEND WELCOME: wrapper para memberController ==========
-async function sendWelcomeEmail(memberObj) {
+async function sendWelcomeEmail(memberObj, provider = "outlook") {
   if (!memberObj) return;
 
   const displayName = `${memberObj.nombre || ""} ${memberObj.apellido || ""}`.trim();
@@ -69,7 +69,7 @@ async function sendWelcomeEmail(memberObj) {
     memberObj.codigoCliente,
     memberObj.codigoCampana,
     {}, // settings opcionales
-    {}
+    { provider } // 👈 aquí decides: "gmail" o "outlook"
   );
 }
 
