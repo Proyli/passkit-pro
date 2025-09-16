@@ -47,6 +47,29 @@ function baseUrl(req) {
   return process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get("host")}`;
 }
 
+// --- Helpers de banner y textos para Google Wallet ---
+function getHeroUrl(req) {
+  // Usa el .env si existe; si no, sirve la imagen local del /public
+  const envUrl = (process.env.GW_HERO || "").trim();
+  if (envUrl) return envUrl;
+  return `${baseUrl(req)}/public/hero-alcazaren.jpeg`; // tu archivo
+}
+
+function getInfoText(tier) {
+  const t = String(tier || "").toLowerCase();
+  if (t.includes("gold") || t.includes("15")) {
+    return (
+      process.env.GW_INFO_GOLD ||
+      "Vive la experiencia premium con un 15% menos.\nTu lealtad eleva cada brindis.\n\nAplican restricciones."
+    );
+  }
+  return (
+    process.env.GW_INFO_BLUE ||
+    "Ahorra en cada compra y acumula beneficios.\nTu lealtad suma.\n\nAplican restricciones."
+  );
+}
+
+
 // ----------------- ENV -----------------
 const SA_EMAIL = process.env.GOOGLE_SA_EMAIL; // wallet-svc@...iam.gserviceaccount.com
 const SECRET   = process.env.WALLET_TOKEN_SECRET || "changeme";
@@ -129,34 +152,52 @@ function pickClassIdByCampaign(campaign) {
 
 // ------ Helper: construir Save URL (Google Wallet) ------
 // ------ Helper: construir Save URL (Google Wallet) ------
-// ------ Helper: construir Save URL (Google Wallet) ------
-function buildGoogleSaveUrl({ client, campaign, externalId, displayName, tier }) {
+function buildGoogleSaveUrl(req, { client, campaign, externalId, displayName, tier }) {
   const issuer = process.env.GOOGLE_WALLET_ISSUER_ID;
   if (!issuer) throw new Error("Falta GOOGLE_WALLET_ISSUER_ID");
   if (!SA_EMAIL || !PRIVATE_KEY) throw new Error("Faltan GOOGLE_SA_EMAIL o PRIVATE_KEY");
 
   const objectId = `${issuer}.${sanitize(`${client}-${campaign}`)}`;
-
-  // classId por TIER (gold/blue). classIdForTier devuelve issuer.classId-suffix
   const classRef = classIdForTier((tier || "blue").toLowerCase());
-
   const codeValue = externalId || client;
+
+  const heroUri = getHeroUrl(req);
+  const infoText = getInfoText(tier);
 
   const loyaltyObject = {
     id: objectId,
     classId: classRef,
     state: "ACTIVE",
-    accountId:  codeValue,
+
+    accountId: codeValue,
     accountName: displayName || codeValue,
 
-    // Bloque "Name" como en el mock
+    // “Name” visible como fila
     infoModuleData: {
       labelValueRows: [
         { columns: [{ label: "Name", value: displayName || codeValue }] }
       ]
     },
 
-    // CODE 128 como en el mock
+    // Banner inferior (tamaño recomendado 1200x630, tu .jpeg está OK)
+    imageModulesData: [
+      {
+        id: "alcazaren_hero",
+        mainImage: {
+          sourceUri: { uri: heroUri },
+          contentDescription: {
+            defaultValue: { language: "es", value: "Celebremos juntos" }
+          }
+        }
+      }
+    ],
+
+    // Bloque de texto “Information”
+    textModulesData: [
+      { header: "Information", body: infoText }
+    ],
+
+    // Código de barras (CODE_128)
     barcode: { type: "CODE_128", value: codeValue, alternateText: codeValue }
   };
 
@@ -168,6 +209,7 @@ function buildGoogleSaveUrl({ client, campaign, externalId, displayName, tier })
 
   return `https://pay.google.com/gp/v/save/${saveToken}`;
 }
+
 
 
 function makeSmartLink(req, googleSaveUrl, appleUrl) {
@@ -231,6 +273,14 @@ router.get("/wallet/ios/:token", async (req, res) => {
     if (!fs.existsSync(icon1x) || !fs.existsSync(icon2x)) {
       return res.status(500).type("text").send("Faltan icon.png e icon@2x.png en MODEL_DIR");
     }
+
+    // Verificación defensiva para evitar "Cannot read properties of undefined (reading 'from')"
+if (!Pass || typeof Pass.from !== "function") {
+  return res
+    .status(500)
+    .type("text")
+    .send("passkit-generator no disponible en el servidor (Pass.from no existe). Revisa dependencias.");
+}
 
     // Generar pass
     const pass = await Pass.from({
@@ -316,7 +366,7 @@ router.get("/wallet/resolve", async (req, res) => {
 
     // ✅ Android/Google (o forzado google) -> Save to Wallet
     const tier = (tipoCliente || req.query.tier || "blue").toLowerCase();
-    const saveUrl = buildGoogleSaveUrl({ client, campaign, externalId, displayName, tier });
+    const saveUrl = buildGoogleSaveUrl(req, { client, campaign, externalId, displayName, tier });
     return res.redirect(302, saveUrl);
   } catch (e) {
     console.error("wallet/resolve error:", e?.message || e);
@@ -573,7 +623,7 @@ router.get("/wallet/smart/:token", async (req, res) => {
     // Android/Google Wallet → usa tier (preferencia: DB, luego query/body, luego "blue")
     const tier = (tipoCliente || req.body?.tier || req.query?.tier || "blue").toLowerCase();
 
-    const googleSaveUrl = buildGoogleSaveUrl({
+    const googleSaveUrl = buildGoogleSaveUrl(req, {
       client,
       campaign,
       externalId,
