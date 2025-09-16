@@ -257,14 +257,13 @@ async function findMemberFlexible(client, campaign) {
   return rows?.[0] || null;
 }
 
-
-// -------------------- Placeholder iOS (.pkpass más adelante) --------------------
+// -------------------- Apple Wallet (.pkpass con passkit-generator v3) --------------------
 router.get("/wallet/ios/:token", async (req, res) => {
   try {
     const { client, campaign } = jwt.verify(req.params.token, SECRET);
 
-    // enriquecer DB (igual que ya tienes) ...
-    let externalId = client;
+    // Enriquecer datos desde DB
+    let externalId  = client;
     let displayName = client;
     try {
       const r = await findMemberFlexible(client, campaign);
@@ -276,22 +275,21 @@ router.get("/wallet/ios/:token", async (req, res) => {
       }
     } catch {}
 
-    // Validación mínima de assets
+    // Validar assets mínimos del modelo
     const icon1x = path.join(MODEL, "icon.png");
     const icon2x = path.join(MODEL, "icon@2x.png");
     if (!fs.existsSync(icon1x) || !fs.existsSync(icon2x)) {
       return res.status(500).type("text").send("Faltan icon.png e icon@2x.png en MODEL_DIR");
     }
 
-    // Verificación defensiva para evitar "Cannot read properties of undefined (reading 'from')"
-if (!Pass || typeof Pass.from !== "function") {
-  return res
-    .status(500)
-    .type("text")
-    .send("passkit-generator no disponible en el servidor (Pass.from no existe). Revisa dependencias.");
-}
+    // Guardas defensivas por si la librería no está
+    if (!Pass || typeof Pass.from !== "function") {
+      return res.status(501).type("text").send("Apple Wallet no disponible en este servidor");
+    }
 
-    // Generar pass
+    const serial = `${sanitize(client)}-${sanitize(campaign)}`;
+
+    // 👉 v3: todo va en overrides (NO usar pass.set)
     const pass = await Pass.from({
       model: MODEL,
       certificates: {
@@ -300,28 +298,35 @@ if (!Pass || typeof Pass.from !== "function") {
         signerKey: path.join(CERTS, "signerKey.pem"),
         signerKeyPassphrase: process.env.APPLE_CERT_PASSWORD || undefined,
       },
-    });
+      overrides: {
+        // Metadatos obligatorios
+        passTypeIdentifier: process.env.APPLE_PASS_TYPE_ID,
+        teamIdentifier: process.env.APPLE_TEAM_ID,
+        organizationName: process.env.APPLE_ORG_NAME || "Distribuidora Alcazaren",
+        description: "Tarjeta de Lealtad Alcazaren",
+        serialNumber: serial,
 
-    pass.set("formatVersion", 1);
-    pass.set("passTypeIdentifier", process.env.APPLE_PASS_TYPE_ID);
-    pass.set("teamIdentifier", process.env.APPLE_TEAM_ID);
-    pass.set("organizationName", process.env.APPLE_ORG_NAME || "Distribuidora Alcazaren");
-    const serial = `${sanitize(client)}-${sanitize(campaign)}`;
-    pass.set("serialNumber", serial);
-    pass.set("description", "Tarjeta de Lealtad Alcazaren");
+        // Colores del pase
+        foregroundColor: "rgb(255,255,255)",
+        labelColor: "rgb(255,255,255)",
+        backgroundColor: "#8B173C",
 
-    pass.set("foregroundColor", "rgb(255,255,255)");
-    pass.set("labelColor", "rgb(255,255,255)");
-    pass.set("backgroundColor", "#8B173C");
+        // Campos visibles
+        primaryFields: [
+          { key: "name", label: "Nombre", value: displayName }
+        ],
+        secondaryFields: [
+          { key: "code", label: "Código", value: externalId }
+        ],
 
-    pass.primaryFields.add({ key: "name", label: "Nombre", value: displayName });
-    pass.secondaryFields.add({ key: "code", label: "Código", value: externalId });
-
-    pass.setBarcodes({
-      format: "PKBarcodeFormatCode128",
-      message: externalId,
-      messageEncoding: "iso-8859-1",
-      altText: externalId,
+        // Código de barras
+        barcodes: [{
+          format: "PKBarcodeFormatCode128",
+          message: externalId,
+          messageEncoding: "iso-8859-1",
+          altText: externalId
+        }],
+      }
     });
 
     const buffer = await pass.asBuffer();
@@ -329,10 +334,11 @@ if (!Pass || typeof Pass.from !== "function") {
     res.setHeader("Content-Disposition", `inline; filename="${sanitize(serial)}.pkpass"`);
     return res.send(buffer);
   } catch (e) {
-    console.error("ios pkpass error:", e);
-    return res.status(500).send(e?.message || "pkpass error");
+    console.error("ios pkpass error:", e?.message || e);
+    return res.status(500).type("text").send(e?.message || "pkpass error");
   }
 });
+
 
 // ===============================================================
 // NUEVO: GET /wallet/resolve
