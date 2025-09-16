@@ -5,8 +5,24 @@ const { pool } = require("../db");
 const fs = require("fs");
 const path = require("path");
 
-// ✅ forma correcta (elige ESTA y usa Pass.from)
-const { Pass } = require("passkit-generator");
+// Carga robusta de passkit-generator (soporta Pass, PKPass o default)
+let _passlib;
+try {
+  _passlib = require("passkit-generator");
+} catch (e) {
+  console.error("❌ No se pudo cargar 'passkit-generator':", e?.message || e);
+  _passlib = {};
+}
+const Pass =
+  _passlib.Pass ||           // algunas versiones exportan Pass
+  _passlib.PKPass ||         // otras exportan PKPass
+  _passlib.default || null;  // y otras exportan default
+
+if (!Pass || typeof Pass.from !== "function") {
+  console.error("❌ 'passkit-generator' no expone Pass.from/PKPass.from. Revisa versión instalada.");
+}
+
+
 
 // ----------------- Paths certificados y modelo -----------------
 const CERTS = process.env.CERT_DIR
