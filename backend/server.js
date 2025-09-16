@@ -1,5 +1,6 @@
 // backend/server.js
 const path = require("path");
+const fs = require("fs");
 const express = require("express");
 const cors = require("cors");
 require("dotenv").config({ path: path.join(__dirname, ".env") });
@@ -20,7 +21,7 @@ const { router: distributionRouter } = require("./routes/distribution");
 const applePassRoutes    = require("./routes/applePass");
 
 /* ==== App ==== */
-const app = express();               // <-- crear app ANTES de usarla
+const app = express();
 app.set("trust proxy", 1);
 
 // CORS con whitelist opcional: CORS_ORIGINS="https://tu-frontend.com,https://otro.com"
@@ -39,7 +40,26 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.use(express.json({ limit: "2mb" }));
-app.use("/public", express.static(path.join(__dirname, "public")));
+
+/* ==== STATIC: servir /public y raíz ==== */
+const PUBLIC_DIR = path.join(__dirname, "public");
+console.log("[STATIC] public dir exists:", fs.existsSync(PUBLIC_DIR), PUBLIC_DIR);
+console.log("[STATIC] hero exists:", fs.existsSync(path.join(PUBLIC_DIR, "hero-alcazaren.jpeg")));
+
+// Disponible en https://.../hero-alcazaren.jpeg
+app.use(express.static(PUBLIC_DIR));
+// Disponible en https://.../public/hero-alcazaren.jpeg
+app.use("/public", express.static(PUBLIC_DIR));
+
+// Ruta de diagnóstico (lista archivos en /public)
+app.get("/__static", (_req, res) => {
+  try {
+    const files = fs.readdirSync(PUBLIC_DIR);
+    res.json({ ok: true, files });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
 
 /* ==== Rutas API ==== */
 app.use("/api/members", memberRoutes);
@@ -95,7 +115,6 @@ async function start() {
   console.log("ENV CHECK → CERT_DIR:", process.env.CERT_DIR);
   console.log("ENV CHECK → MODEL_DIR:", process.env.MODEL_DIR);
   try {
-    const fs = require("fs");
     const CERTS = process.env.CERT_DIR || path.join(__dirname, "certs");
     console.log("exists wwdr.pem?      ", fs.existsSync(path.join(CERTS, "wwdr.pem")));
     console.log("exists signerCert.pem?", fs.existsSync(path.join(CERTS, "signerCert.pem")));
