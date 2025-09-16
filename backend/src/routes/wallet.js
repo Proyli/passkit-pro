@@ -45,17 +45,20 @@ console.log("[wallet] model exists?", fs.existsSync(MODEL));
 
 // ----------------- Utils -----------------
 const sanitize = (s) => String(s).replace(/[^\w.-]/g, "_");
-function baseUrl(req) {
-  return process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get("host")}`;
+// 🔒 Antibalas: SIEMPRE usa .env (sin barra final). No dependas de req.
+function baseUrl() {
+  const env = String(process.env.PUBLIC_BASE_URL || "").trim();
+  return env.replace(/\/+$/, ""); // quita barra final por si acaso
 }
 
+
 // --- Helpers de banner y textos para Google Wallet ---
-function getHeroUrl(req) {
-  // Usa el .env si existe; si no, sirve la imagen local del /public
+function getHeroUrl() {
   const envUrl = (process.env.GW_HERO || "").trim();
   if (envUrl) return envUrl;
-  return `${baseUrl(req)}/public/hero-alcazaren.jpeg`; // tu archivo
+  return `${baseUrl()}/public/hero-alcazaren.jpeg`;
 }
+
 
 function getInfoText(tier) {
   const t = String(tier || "").toLowerCase();
@@ -635,6 +638,8 @@ router.post("/wallet/email", async (req, res) => {
     const token    = jwt.sign({ client, campaign }, SECRET, { expiresIn: "2d" });
     const smartUrl = `${baseUrl(req)}/api/wallet/smart/${token}`;
 
+    // 👇 Log para verificar que apunta a tu dominio y no a render.com
+console.log("[email] SMART_URL =>", smartUrl);
     // --- Render del correo (usa tu template) ---
     const settings = mergeSettings(); // overrides opcionales
     const html = renderWalletEmail(settings, {
