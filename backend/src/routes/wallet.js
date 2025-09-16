@@ -4,6 +4,10 @@ const jwt = require("jsonwebtoken");
 const { pool } = require("../db");
 const fs = require("fs");
 const path = require("path");
+const { sendMailSmart } = require("../mailer");
+const { renderWalletEmail, mergeSettings } = require("../../services/renderEmail");
+const crypto = require("crypto");
+
 
 // Carga robusta de passkit-generator (soporta Pass, PKPass o default)
 let _passlib;
@@ -21,8 +25,6 @@ const Pass =
 if (!Pass || typeof Pass.from !== "function") {
   console.error("❌ 'passkit-generator' no expone Pass.from/PKPass.from. Revisa versión instalada.");
 }
-
-
 
 // ----------------- Paths certificados y modelo -----------------
 const CERTS = process.env.CERT_DIR
@@ -151,54 +153,56 @@ function pickClassIdByCampaign(campaign) {
 
 
 // ------ Helper: construir Save URL (Google Wallet) ------
-// ------ Helper: construir Save URL (Google Wallet) ------
 function buildGoogleSaveUrl(req, { client, campaign, externalId, displayName, tier }) {
   const issuer = process.env.GOOGLE_WALLET_ISSUER_ID;
   if (!issuer) throw new Error("Falta GOOGLE_WALLET_ISSUER_ID");
   if (!SA_EMAIL || !PRIVATE_KEY) throw new Error("Faltan GOOGLE_SA_EMAIL o PRIVATE_KEY");
 
-  const objectId = `${issuer}.${sanitize(`${client}-${campaign}`)}`;
-  const classRef = classIdForTier((tier || "blue").toLowerCase());
-  const codeValue = externalId || client;
+  // ⚠️ Requerimos externalId: si no hay, no creamos pase (así nunca cae a 'client')
+  const codeValue = String(externalId || "").trim();
+  if (!codeValue) throw new Error("No hay externalId para el miembro.");
 
-  const heroUri  = getHeroUrl(req);     // -> https://backend-passforge.onrender.com/public/hero-alcazaren.jpeg
-  const infoText = getInfoText(tier);
-  const origin   = baseUrl(req);        // -> https://backend-passforge.onrender.com (o el que tengas en .env)
+  const tierNorm = String(tier || "blue").toLowerCase();
+
+  // ID técnico del objeto (no visible para el usuario), limpio y sin "navidad"
+  const objectId = `${issuer}.${sanitize(`${codeValue}-${tierNorm}`)}`;
+
+  // Clase según tier (blue/gold)
+  const classRef = classIdForTier(tierNorm);
+
+  // Imagen hero (abajo). Usa GW_HERO o /public/hero-alcazaren.jpeg
+  const heroUri  = getHeroUrl(req);
+  const origin   = baseUrl(req); // para 'origins' del JWT
 
   const loyaltyObject = {
     id: objectId,
     classId: classRef,
     state: "ACTIVE",
 
+    // 👇 Esto es lo que se ve debajo del código
     accountId: codeValue,
+    // accountName puede quedar como el nombre o igual al codeValue; no se muestra debajo del barcode
     accountName: displayName || codeValue,
 
-    infoModuleData: {
-      labelValueRows: [
-        { columns: [{ label: "Name", value: displayName || codeValue }] }
-      ]
-    },
+    // Sin filas extra ("Name"...)
+    infoModuleData: { labelValueRows: [] },
 
+    // Hero inferior
     imageModulesData: [
       {
         id: "alcazaren_hero",
-        mainImage: {
-          sourceUri: { uri: heroUri },
-          contentDescription: {
-            defaultValue: { language: "es", value: "Celebremos juntos" }
-          }
-        }
+        mainImage: { sourceUri: { uri: heroUri } }
       }
     ],
 
-    textModulesData: [
-      { header: "Information", body: infoText }
-    ],
+    // Sin textos extra (no "Information")
+    textModulesData: [],
 
-    barcode: { type: "CODE_128", value: codeValue, alternateText: codeValue }
+    // Código de barras (lo que escanea y lo que se muestra como texto alterno)
+    barcode: { type: "CODE_128", value: codeValue, alternateText: codeValue },
   };
 
-  // === JWT con ORIGINS ===
+  // JWT con origins (necesario para el flujo web/Gmail)
   const saveToken = jwt.sign(
     {
       iss: SA_EMAIL,
@@ -206,8 +210,8 @@ function buildGoogleSaveUrl(req, { client, campaign, externalId, displayName, ti
       typ: "savetowallet",
       payload: {
         loyaltyObjects: [loyaltyObject],
-        origins: [origin]   // <<-- CLAVE para que el flujo web funcione bien
-      }
+        origins: [origin],
+      },
     },
     PRIVATE_KEY,
     { algorithm: "RS256" }
@@ -215,8 +219,6 @@ function buildGoogleSaveUrl(req, { client, campaign, externalId, displayName, ti
 
   return `https://pay.google.com/gp/v/save/${saveToken}`;
 }
-
-
 
 
 function makeSmartLink(req, googleSaveUrl, appleUrl) {
@@ -386,7 +388,6 @@ router.get("/wallet/resolve", async (req, res) => {
 // =================================================================
 // (Compat) GET /wallet/google/:token -> genera Save URL y redirige
 // =================================================================
-
 router.get("/wallet/google/:token", async (req, res) => {
   try {
     const { client, campaign } = jwt.verify(req.params.token, SECRET);
@@ -398,39 +399,33 @@ router.get("/wallet/google/:token", async (req, res) => {
       return res.status(500).json({ message: "Faltan GOOGLE_SA_EMAIL o PRIVATE_KEY" });
     }
 
-    // Enriquecer desde DB (para externalId, displayName y tipoCliente/tier)
+    // enriquecer datos desde DB
     let externalId  = client;
     let displayName = client;
     let tipoCliente = null;
     try {
       const r = await findMemberFlexible(client, campaign);
       if (r) {
-        externalId = r.external_id || client;
+        externalId  = r.external_id || client;
         const fn = r.nombre || r.first_name || "";
         const ln = r.apellido || r.last_name || "";
         displayName = `${String(fn||"").trim()} ${String(ln||"").trim()}`.trim() || client;
-        tipoCliente = r.tipoCliente || null; // "gold" / "blue"
+        tipoCliente = r.tipoCliente || null;
       }
     } catch {}
 
-    // tier: DB > query > default
     const tier = (tipoCliente || req.query.tier || "blue").toLowerCase();
 
-    // 👉 Usa el constructor unificado (incluye imageModulesData + textModulesData + origins)
+    // 👉 usa buildGoogleSaveUrl (ya mete hero + textos + origins)
     const saveUrl = buildGoogleSaveUrl(req, { client, campaign, externalId, displayName, tier });
 
     if (req.query.raw === "1") return res.json({ platform: "google", saveUrl, tier });
     return res.redirect(302, saveUrl);
   } catch (e) {
-    const status  = e?.response?.status || 401;
-    const details = e?.response?.data || e?.message || String(e);
-    console.error("wallet/google error:", details);
-    return res.status(status).json({ message: "Token inválido/vencido o error en Google Wallet", details });
+    console.error("wallet/google error:", e?.message || e);
+    return res.status(401).json({ message: "Token inválido/vencido o error en Google Wallet", details: e?.message });
   }
 });
-
-
-
 
 // -------------------- UI unificada: QR + Barras (opcional) --------------------
 router.get("/wallet/codes", async (req, res) => {
@@ -601,6 +596,76 @@ router.get("/wallet/smart/:token", async (req, res) => {
     const details = e?.response?.data || e?.message || String(e);
     console.error("wallet/smart error:", details);
     return res.status(status).json({ message: "Token inválido/vencido", details });
+  }
+});
+
+// POST /api/wallet/email  → envía el correo con el smart link
+router.post("/wallet/email", async (req, res) => {
+  try {
+    const client   = String(req.body.client   || "");
+    const campaign = String(req.body.campaign || "");
+    const to       = String(req.body.to       || "");
+    if (!client || !campaign || !to) {
+      return res.status(400).json({ ok:false, message:"Falta client/campaign/to" });
+    }
+
+    // --- Buscar datos del miembro ---
+    let externalId = null;
+    let displayName = client;
+    try {
+      const r = await findMemberFlexible(client, campaign);
+      if (r) {
+        externalId = r.external_id || null;
+        const fn = r.nombre || r.first_name || "";
+        const ln = r.apellido || r.last_name || "";
+        displayName = `${String(fn||"").trim()} ${String(ln||"").trim()}`.trim() || client;
+      }
+    } catch {}
+
+    if (!externalId) {
+      return res.status(400).json({ ok:false, message:"No hay externalId para el miembro." });
+    }
+
+    // --- Smart link (redirige a iOS/Google) ---
+    const token    = jwt.sign({ client, campaign }, SECRET, { expiresIn: "2d" });
+    const smartUrl = `${baseUrl(req)}/api/wallet/smart/${token}`;
+
+    // --- Render del correo (usa tu template) ---
+    const settings = mergeSettings(); // overrides opcionales
+    const html = renderWalletEmail(settings, {
+      displayName,
+      membershipId: externalId,
+      smartUrl,
+    });
+
+    // Subject y messageId únicos → evita “Mostrar texto citado” en Gmail
+    const stamp = new Date().toISOString().replace(/[:T]/g, "-").slice(0,16);
+    const subject   = `${settings.subject} • ${displayName || externalId} • ${stamp}`;
+    const messageId = `<${crypto.randomBytes(9).toString("hex")}@alcazaren.com.gt>`;
+
+    // --- Enviar (Outlook → fallback Gmail) ---
+    await sendMailSmart({
+      to,
+      subject,
+      html,
+      text:
+        `Su Tarjeta de Lealtad\n\n` +
+        `Hola ${displayName || ""}, guarde su tarjeta en su billetera digital.\n\n` +
+        `Añadir a mi Wallet: ${smartUrl}\n\n` +
+        `Este es un correo automático. No responda a este mensaje.`,
+      messageId,
+      inReplyTo: undefined,
+      references: undefined,
+      headers: {
+        "Auto-Submitted": "auto-generated",
+        "X-Auto-Response-Suppress": "All",
+      },
+    });
+
+    return res.status(200).json({ ok:true, to, smartUrl });
+  } catch (e) {
+    console.error("send wallet email error:", e?.message || e);
+    return res.status(500).json({ ok:false, error: String(e?.message || e) });
   }
 });
 
