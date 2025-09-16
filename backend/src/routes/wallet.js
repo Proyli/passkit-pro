@@ -386,23 +386,22 @@ router.get("/wallet/resolve", async (req, res) => {
 // =================================================================
 // (Compat) GET /wallet/google/:token -> genera Save URL y redirige
 // =================================================================
-// En wallet.js
+
 router.get("/wallet/google/:token", async (req, res) => {
   try {
-    const payload = jwt.verify(req.params.token, SECRET);
-    const { client, campaign } = payload;
+    const { client, campaign } = jwt.verify(req.params.token, SECRET);
 
-    const issuer = process.env.GOOGLE_WALLET_ISSUER_ID;
-    if (!issuer) return res.status(500).json({ message: "Falta GOOGLE_WALLET_ISSUER_ID" });
+    if (!process.env.GOOGLE_WALLET_ISSUER_ID) {
+      return res.status(500).json({ message: "Falta GOOGLE_WALLET_ISSUER_ID" });
+    }
     if (!SA_EMAIL || !PRIVATE_KEY) {
       return res.status(500).json({ message: "Faltan GOOGLE_SA_EMAIL o PRIVATE_KEY" });
     }
 
-    // ===== lee datos del miembro: external_id, nombre Y tipoCliente (tier) =====
-    let externalId = client;
+    // Enriquecer desde DB (para externalId, displayName y tipoCliente/tier)
+    let externalId  = client;
     let displayName = client;
     let tipoCliente = null;
-
     try {
       const r = await findMemberFlexible(client, campaign);
       if (r) {
@@ -410,60 +409,17 @@ router.get("/wallet/google/:token", async (req, res) => {
         const fn = r.nombre || r.first_name || "";
         const ln = r.apellido || r.last_name || "";
         displayName = `${String(fn||"").trim()} ${String(ln||"").trim()}`.trim() || client;
-        tipoCliente = r.tipoCliente || null;
+        tipoCliente = r.tipoCliente || null; // "gold" / "blue"
       }
     } catch {}
 
+    // tier: DB > query > default
+    const tier = (tipoCliente || req.query.tier || "blue").toLowerCase();
 
-    // ===== elegir la CLASS: 1) por tier, 2) por campaign, 3) default =====
-    const klassFromTier = pickClassIdByTier(tipoCliente);
-    const klass = klassFromTier || pickClassIdByCampaign(campaign) || process.env.GOOGLE_WALLET_CLASS_ID;
-    if (!klass) return res.status(500).json({ message: "Falta GOOGLE_WALLET_CLASS_ID(_GOLD/_BLUE)" });
+    // 👉 Usa el constructor unificado (incluye imageModulesData + textModulesData + origins)
+    const saveUrl = buildGoogleSaveUrl(req, { client, campaign, externalId, displayName, tier });
 
-    const classRef = `${issuer}.${klass}`;
-
-    // === resto de tu código igual (con externalId/displayName) ===
-    const objectId = `${issuer}.${sanitize(`${client}-${campaign}`)}`;
-    const codeValue = externalId;
-
-    const BASE = baseUrl(req);
-    const barcodeImgUrl  = `${BASE}/api/barcode/${encodeURIComponent(codeValue)}.png`;
-    const barcodeFullUrl = `${BASE}/api/wallet/barcode/full?value=${encodeURIComponent(codeValue)}`;
-    const codesUrl       = `${BASE}/api/wallet/codes?client=${encodeURIComponent(client)}&campaign=${encodeURIComponent(campaign)}`;
-
-    const loyaltyObject = {
-      id: objectId,
-      classId: classRef,
-      state: "ACTIVE",
-      accountId: externalId,
-      accountName: displayName,
-      barcode: { type: "QR_CODE", value: codeValue, alternateText: externalId },
-      imageModulesData: [
-        {
-          id: "barcode_img",
-          mainImage: {
-            sourceUri: { uri: barcodeImgUrl },
-            contentDescription: { defaultValue: { language: "es", value: "Código de barras" } }
-          }
-        }
-      ],
-      textModulesData: displayName ? [{ header: "Nombre", body: displayName }] : [],
-      linksModuleData: {
-        uris: [
-          { id: "codes_ui",    description: "Mostrar mi código",                    uri: codesUrl },
-          { id: "barcode_full", description: "Código de barras (pantalla completa)", uri: barcodeFullUrl }
-        ]
-      }
-    };
-
-    const saveToken = jwt.sign(
-      { iss: SA_EMAIL, aud: "google", typ: "savetowallet", payload: { loyaltyObjects: [loyaltyObject] } },
-      PRIVATE_KEY,
-      { algorithm: "RS256" }
-    );
-
-    const saveUrl = `https://pay.google.com/gp/v/save/${saveToken}`;
-    if (req.query.raw === "1") return res.json({ platform: "google", saveUrl, objectId, loyaltyObject });
+    if (req.query.raw === "1") return res.json({ platform: "google", saveUrl, tier });
     return res.redirect(302, saveUrl);
   } catch (e) {
     const status  = e?.response?.status || 401;
@@ -472,6 +428,7 @@ router.get("/wallet/google/:token", async (req, res) => {
     return res.status(status).json({ message: "Token inválido/vencido o error en Google Wallet", details });
   }
 });
+
 
 
 
