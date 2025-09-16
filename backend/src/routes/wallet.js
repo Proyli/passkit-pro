@@ -161,8 +161,9 @@ function buildGoogleSaveUrl(req, { client, campaign, externalId, displayName, ti
   const classRef = classIdForTier((tier || "blue").toLowerCase());
   const codeValue = externalId || client;
 
-  const heroUri = getHeroUrl(req);
+  const heroUri  = getHeroUrl(req);     // -> https://backend-passforge.onrender.com/public/hero-alcazaren.jpeg
   const infoText = getInfoText(tier);
+  const origin   = baseUrl(req);        // -> https://backend-passforge.onrender.com (o el que tengas en .env)
 
   const loyaltyObject = {
     id: objectId,
@@ -172,14 +173,12 @@ function buildGoogleSaveUrl(req, { client, campaign, externalId, displayName, ti
     accountId: codeValue,
     accountName: displayName || codeValue,
 
-    // “Name” visible como fila
     infoModuleData: {
       labelValueRows: [
         { columns: [{ label: "Name", value: displayName || codeValue }] }
       ]
     },
 
-    // Banner inferior (tamaño recomendado 1200x630, tu .jpeg está OK)
     imageModulesData: [
       {
         id: "alcazaren_hero",
@@ -192,23 +191,31 @@ function buildGoogleSaveUrl(req, { client, campaign, externalId, displayName, ti
       }
     ],
 
-    // Bloque de texto “Information”
     textModulesData: [
       { header: "Information", body: infoText }
     ],
 
-    // Código de barras (CODE_128)
     barcode: { type: "CODE_128", value: codeValue, alternateText: codeValue }
   };
 
+  // === JWT con ORIGINS ===
   const saveToken = jwt.sign(
-    { iss: SA_EMAIL, aud: "google", typ: "savetowallet", payload: { loyaltyObjects: [loyaltyObject] } },
+    {
+      iss: SA_EMAIL,
+      aud: "google",
+      typ: "savetowallet",
+      payload: {
+        loyaltyObjects: [loyaltyObject],
+        origins: [origin]   // <<-- CLAVE para que el flujo web funcione bien
+      }
+    },
     PRIVATE_KEY,
     { algorithm: "RS256" }
   );
 
   return `https://pay.google.com/gp/v/save/${saveToken}`;
 }
+
 
 
 
