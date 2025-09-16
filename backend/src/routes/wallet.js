@@ -257,12 +257,12 @@ async function findMemberFlexible(client, campaign) {
   return rows?.[0] || null;
 }
 
-// -------------------- Apple Wallet (.pkpass con passkit-generator v3) --------------------
+// -------------------- iOS (.pkpass con passkit-generator v3) --------------------
 router.get("/wallet/ios/:token", async (req, res) => {
   try {
     const { client, campaign } = jwt.verify(req.params.token, SECRET);
 
-    // Enriquecer datos desde DB
+    // Enriquecer datos desde la DB (igual que ya tenías)
     let externalId  = client;
     let displayName = client;
     try {
@@ -275,67 +275,66 @@ router.get("/wallet/ios/:token", async (req, res) => {
       }
     } catch {}
 
-    // Validar assets mínimos del modelo
+    // Validación mínima de assets del modelo
     const icon1x = path.join(MODEL, "icon.png");
     const icon2x = path.join(MODEL, "icon@2x.png");
     if (!fs.existsSync(icon1x) || !fs.existsSync(icon2x)) {
       return res.status(500).type("text").send("Faltan icon.png e icon@2x.png en MODEL_DIR");
     }
 
-    // Guardas defensivas por si la librería no está
-    if (!Pass || typeof Pass.from !== "function") {
-      return res.status(501).type("text").send("Apple Wallet no disponible en este servidor");
-    }
+    // Cargar certificados como Buffer (v3 los prefiere así)
+    const wwdr      = fs.readFileSync(path.join(CERTS, "wwdr.pem"));
+    const signerCert= fs.readFileSync(path.join(CERTS, "signerCert.pem"));
+    const signerKey = fs.readFileSync(path.join(CERTS, "signerKey.pem"));
 
+    // ⚠️ v3: usar PKPass.from({ model, certificates }, { props })
     const serial = `${sanitize(client)}-${sanitize(campaign)}`;
-
-    // 👉 v3: todo va en overrides (NO usar pass.set)
-    const pass = await Pass.from({
-      model: MODEL,
-      certificates: {
-        wwdr: path.join(CERTS, "wwdr.pem"),
-        signerCert: path.join(CERTS, "signerCert.pem"),
-        signerKey: path.join(CERTS, "signerKey.pem"),
-        signerKeyPassphrase: process.env.APPLE_CERT_PASSWORD || undefined,
+    const pass = await Pass.from(
+      {
+        model: MODEL, // ruta a tu carpeta .pass (plantilla)
+        certificates: {
+          wwdr,
+          signerCert,
+          signerKey,
+          signerKeyPassphrase: process.env.APPLE_CERT_PASSWORD || undefined,
+        },
       },
-      overrides: {
-        // Metadatos obligatorios
+      {
+        // ---- PROPS DEL PASS (antes se llamaban "overrides") ----
+        formatVersion: 1,
         passTypeIdentifier: process.env.APPLE_PASS_TYPE_ID,
-        teamIdentifier: process.env.APPLE_TEAM_ID,
-        organizationName: process.env.APPLE_ORG_NAME || "Distribuidora Alcazaren",
-        description: "Tarjeta de Lealtad Alcazaren",
-        serialNumber: serial,
+        teamIdentifier:     process.env.APPLE_TEAM_ID,
+        organizationName:   process.env.APPLE_ORG_NAME || "Distribuidora Alcazaren",
+        description:        "Tarjeta de Lealtad Alcazaren",
+        serialNumber:       serial,
 
-        // Colores del pase
         foregroundColor: "rgb(255,255,255)",
-        labelColor: "rgb(255,255,255)",
+        labelColor:      "rgb(255,255,255)",
         backgroundColor: "#8B173C",
 
-        // Campos visibles
-        primaryFields: [
-          { key: "name", label: "Nombre", value: displayName }
-        ],
-        secondaryFields: [
-          { key: "code", label: "Código", value: externalId }
-        ],
-
-        // Código de barras
+        // En v3 se usa "barcodes" (no "barcode")
         barcodes: [{
           format: "PKBarcodeFormatCode128",
           message: externalId,
           messageEncoding: "iso-8859-1",
-          altText: externalId
+          altText: externalId,
         }],
       }
-    });
+    );
 
-    const buffer = await pass.asBuffer();
+    // Campos (API igual que v2)
+    pass.primaryFields.add({ key: "name", label: "Nombre", value: displayName });
+    pass.secondaryFields.add({ key: "code", label: "Código", value: externalId });
+
+    // v3: exportar como Buffer
+    const buffer = await pass.getAsBuffer();
+
     res.setHeader("Content-Type", "application/vnd.apple.pkpass");
     res.setHeader("Content-Disposition", `inline; filename="${sanitize(serial)}.pkpass"`);
     return res.send(buffer);
   } catch (e) {
     console.error("ios pkpass error:", e?.message || e);
-    return res.status(500).type("text").send(e?.message || "pkpass error");
+    return res.status(500).send(e?.message || "pkpass error");
   }
 });
 
