@@ -607,6 +607,9 @@ router.get("/wallet/smart/:token", async (req, res) => {
   }
 });
 
+// valida PUBLIC_BASE_URL
+baseUrl();
+
 // POST /api/wallet/email  → envía el correo con el smart link
 router.post("/wallet/email", async (req, res) => {
   try {

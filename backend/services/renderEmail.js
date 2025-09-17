@@ -54,21 +54,24 @@ function mergeSettings(overrides = {}) {
   return { ...DEFAULTS, ...(overrides || {}) };
 }
 
-/** Renderiza el HTML final del correo con preheader oculto */
 function renderWalletEmail(s, { displayName, membershipId, smartUrl }) {
   const tpl = (s?.htmlBody && s.htmlBody.trim()) ? s.htmlBody : DEFAULTS.htmlBody;
+
+  // ✅ Validación dura: smartUrl debe ser absoluta
+  if (!smartUrl || !/^https?:\/\//i.test(smartUrl)) {
+    throw new Error("renderWalletEmail: smartUrl inválida o vacía (debe ser absoluta https://)");
+  }
 
   const htmlBody = tpl
     .replace(/{{DISPLAY_NAME}}/g, escapeHTML(displayName || ""))
     .replace(/{{MEMBERSHIP_ID}}/g, escapeHTML(membershipId || ""))
-    .replace(/{{SMART_URL}}/g, smartUrl || "")
+    .replace(/{{SMART_URL}}/g, smartUrl) // ← se inserta tal cual (absoluto)
     .replace(/{{BUTTON_TEXT}}/g, escapeHTML(s.buttonText || DEFAULTS.buttonText))
     .replace(/{{LOGO_URL}}/g, escapeHTML(s.logoUrl || DEFAULTS.logoUrl));
 
   const preheader = escapeHTML(s.preheader || DEFAULTS.preheader);
 
-  return `
-<!doctype html>
+  return `<!doctype html>
 <html>
 <head>
   <meta charset="utf-8">
@@ -79,23 +82,19 @@ function renderWalletEmail(s, { displayName, membershipId, smartUrl }) {
   <div style="display:none !important;opacity:0;color:transparent;max-height:0;max-width:0;overflow:hidden;">
     ${preheader}
   </div>
-
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;">
-    <tr>
-      <td align="center">
-        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-collapse:collapse;">
-          <tr>
-            <td style="padding:24px;font:16px/1.5 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial,sans-serif;color:#0f2b40 !important;">
-              ${htmlBody}
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
+    <tr><td align="center">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-collapse:collapse;">
+        <tr><td style="padding:24px;font:16px/1.5 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial,sans-serif;color:#0f2b40 !important;">
+          ${htmlBody}
+        </td></tr>
+      </table>
+    </td></tr>
   </table>
 </body>
 </html>`;
 }
+
 
 /** Helper listo para usar desde rutas/servicios */
 async function sendWalletEmail({ to, displayName, membershipId, smartUrl, overrides = {} }) {
