@@ -265,7 +265,7 @@ router.get("/wallet/ios/:token", async (req, res) => {
   try {
     const { client, campaign } = jwt.verify(req.params.token, SECRET);
 
-    // Enriquecer datos desde la DB (igual que ya tenías)
+    // --- Datos del miembro (nombre + externalId) ---
     let externalId  = client;
     let displayName = client;
     try {
@@ -278,23 +278,23 @@ router.get("/wallet/ios/:token", async (req, res) => {
       }
     } catch {}
 
-    // Validación mínima de assets del modelo
+    // --- Validación mínima del modelo (.pass) ---
     const icon1x = path.join(MODEL, "icon.png");
     const icon2x = path.join(MODEL, "icon@2x.png");
     if (!fs.existsSync(icon1x) || !fs.existsSync(icon2x)) {
       return res.status(500).type("text").send("Faltan icon.png e icon@2x.png en MODEL_DIR");
     }
 
-    // Cargar certificados como Buffer (v3 los prefiere así)
-    const wwdr      = fs.readFileSync(path.join(CERTS, "wwdr.pem"));
-    const signerCert= fs.readFileSync(path.join(CERTS, "signerCert.pem"));
-    const signerKey = fs.readFileSync(path.join(CERTS, "signerKey.pem"));
+    // --- Certificados (Buffers) ---
+    const wwdr       = fs.readFileSync(path.join(CERTS, "wwdr.pem"));
+    const signerCert = fs.readFileSync(path.join(CERTS, "signerCert.pem"));
+    const signerKey  = fs.readFileSync(path.join(CERTS, "signerKey.pem"));
 
-    // ⚠️ v3: usar PKPass.from({ model, certificates }, { props })
+    // --- Construcción del pass (v3) ---
     const serial = `${sanitize(client)}-${sanitize(campaign)}`;
     const pass = await Pass.from(
       {
-        model: MODEL, // ruta a tu carpeta .pass (plantilla)
+        model: MODEL,
         certificates: {
           wwdr,
           signerCert,
@@ -303,7 +303,7 @@ router.get("/wallet/ios/:token", async (req, res) => {
         },
       },
       {
-        // ---- PROPS DEL PASS (antes se llamaban "overrides") ----
+        // Propiedades del pass
         formatVersion: 1,
         passTypeIdentifier: process.env.APPLE_PASS_TYPE_ID,
         teamIdentifier:     process.env.APPLE_TEAM_ID,
@@ -315,7 +315,7 @@ router.get("/wallet/ios/:token", async (req, res) => {
         labelColor:      "rgb(255,255,255)",
         backgroundColor: "#8B173C",
 
-        // En v3 se usa "barcodes" (no "barcode")
+        // v3 usa "barcodes"
         barcodes: [{
           format: "PKBarcodeFormatCode128",
           message: externalId,
@@ -325,21 +325,49 @@ router.get("/wallet/ios/:token", async (req, res) => {
       }
     );
 
-    // Campos (API igual que v2)
-    pass.primaryFields.add({ key: "name", label: "Nombre", value: displayName });
-    pass.secondaryFields.add({ key: "code", label: "Código", value: externalId });
+    // --- Campos (v3) con detección de estilo y fallback v2 ---
+    const pf = { key: "name", label: "Nombre", value: displayName };
+    const sf = { key: "code", label: "Código", value: externalId };
 
-    // v3: exportar como Buffer
+    // Detecta estilo común (StoreCard/Generic/EventTicket/BoardingPass)
+    const style =
+      pass.storeCard     ? "storeCard"   :
+      pass.generic       ? "generic"     :
+      pass.eventTicket   ? "eventTicket" :
+      pass.boardingPass  ? "boardingPass": null;
+
+    if (style && pass[style]) {
+      pass[style].primaryFields   = Array.isArray(pass[style].primaryFields)   ? pass[style].primaryFields   : [];
+      pass[style].secondaryFields = Array.isArray(pass[style].secondaryFields) ? pass[style].secondaryFields : [];
+      pass[style].primaryFields.push(pf);
+      pass[style].secondaryFields.push(sf);
+    } else if (pass?.primaryFields?.add) {
+      // Fallback API antigua (v2)
+      pass.primaryFields.add(pf);
+      pass.secondaryFields.add(sf);
+    } else {
+      // v3 sin estilo expuesto: usa arreglos top-level
+      pass.primaryFields   = Array.isArray(pass.primaryFields)   ? pass.primaryFields   : [];
+      pass.secondaryFields = Array.isArray(pass.secondaryFields) ? pass.secondaryFields : [];
+      pass.primaryFields.push(pf);
+      pass.secondaryFields.push(sf);
+    }
+
+    // --- Exportar y responder ---
     const buffer = await pass.getAsBuffer();
 
-    res.setHeader("Content-Type", "application/vnd.apple.pkpass");
-    res.setHeader("Content-Disposition", `inline; filename="${sanitize(serial)}.pkpass"`);
+    res.set({
+      "Content-Type": "application/vnd.apple.pkpass",
+      "Content-Disposition": `attachment; filename="${sanitize(serial)}.pkpass"`,
+      "Cache-Control": "no-store"
+    });
     return res.send(buffer);
   } catch (e) {
     console.error("ios pkpass error:", e?.message || e);
-    return res.status(500).send(e?.message || "pkpass error");
+    return res.status(500).type("text").send(e?.message || "pkpass error");
   }
 });
+
 
 
 // ===============================================================
