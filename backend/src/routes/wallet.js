@@ -265,9 +265,10 @@ router.get("/wallet/ios/:token", async (req, res) => {
   try {
     const { client, campaign } = jwt.verify(req.params.token, SECRET);
 
-    // --- Datos del miembro (nombre + externalId) ---
+    // --- Datos del miembro (externalId, nombre, y tier desde DB) ---
     let externalId  = client;
     let displayName = client;
+    let tipoCliente = null; // "gold" | "blue"
     try {
       const r = await findMemberFlexible(client, campaign);
       if (r) {
@@ -275,22 +276,29 @@ router.get("/wallet/ios/:token", async (req, res) => {
         const fn = r.nombre || r.first_name || "";
         const ln = r.apellido || r.last_name || "";
         displayName = `${String(fn||"").trim()} ${String(ln||"").trim()}`.trim() || client;
+        tipoCliente = r.tipoCliente || null;
       }
     } catch {}
 
-    // --- Validación mínima del modelo (.pass) ---
+    // --- Modelo (chequeo mínimo de iconos) ---
     const icon1x = path.join(MODEL, "icon.png");
     const icon2x = path.join(MODEL, "icon@2x.png");
     if (!fs.existsSync(icon1x) || !fs.existsSync(icon2x)) {
       return res.status(500).type("text").send("Faltan icon.png e icon@2x.png en MODEL_DIR");
     }
 
-    // --- Certificados (Buffers) ---
+    // --- Certificados ---
     const wwdr       = fs.readFileSync(path.join(CERTS, "wwdr.pem"));
     const signerCert = fs.readFileSync(path.join(CERTS, "signerCert.pem"));
     const signerKey  = fs.readFileSync(path.join(CERTS, "signerKey.pem"));
 
-    // --- Construcción del pass (v3) ---
+    // --- Tema por tier (gold / blue) ---
+    const tier = String(tipoCliente || req.query.tier || "blue").toLowerCase();
+    const theme = (tier.includes("gold") || tier.includes("15"))
+      ? { bg: "#E88B20", fg: "rgb(255,255,255)", label: "rgb(255,255,255)" } // gold
+      : { bg: "#1F4AB8", fg: "rgb(255,255,255)", label: "rgb(255,255,255)" }; // blue
+
+    // --- Construcción del pass ---
     const serial = `${sanitize(client)}-${sanitize(campaign)}`;
     const pass = await Pass.from(
       {
@@ -303,7 +311,6 @@ router.get("/wallet/ios/:token", async (req, res) => {
         },
       },
       {
-        // Propiedades del pass
         formatVersion: 1,
         passTypeIdentifier: process.env.APPLE_PASS_TYPE_ID,
         teamIdentifier:     process.env.APPLE_TEAM_ID,
@@ -311,25 +318,24 @@ router.get("/wallet/ios/:token", async (req, res) => {
         description:        "Tarjeta de Lealtad Alcazaren",
         serialNumber:       serial,
 
-        foregroundColor: "rgb(255,255,255)",
-        labelColor:      "rgb(255,255,255)",
-        backgroundColor: "#8B173C",
+        foregroundColor: theme.fg,
+        labelColor:      theme.label,
+        backgroundColor: theme.bg,
 
-        // v3 usa "barcodes"
+        // Código de barras
         barcodes: [{
           format: "PKBarcodeFormatCode128",
-          message: externalId,
+          message: String(externalId || "").normalize("NFKD").replace(/[^\x00-\x7F]/g, ""),
           messageEncoding: "iso-8859-1",
           altText: externalId,
-        }],
+        }]
       }
     );
 
-    // --- Campos (v3) con detección de estilo y fallback v2 ---
+    // --- Campos visibles (sustituir arrays para evitar residuos del modelo) ---
     const pf = { key: "name", label: "Nombre", value: displayName };
     const sf = { key: "code", label: "Código", value: externalId };
 
-    // Detecta estilo común (StoreCard/Generic/EventTicket/BoardingPass)
     const style =
       pass.storeCard     ? "storeCard"   :
       pass.generic       ? "generic"     :
@@ -337,25 +343,23 @@ router.get("/wallet/ios/:token", async (req, res) => {
       pass.boardingPass  ? "boardingPass": null;
 
     if (style && pass[style]) {
-      pass[style].primaryFields   = Array.isArray(pass[style].primaryFields)   ? pass[style].primaryFields   : [];
-      pass[style].secondaryFields = Array.isArray(pass[style].secondaryFields) ? pass[style].secondaryFields : [];
-      pass[style].primaryFields.push(pf);
-      pass[style].secondaryFields.push(sf);
-    } else if (pass?.primaryFields?.add) {
-      // Fallback API antigua (v2)
-      pass.primaryFields.add(pf);
-      pass.secondaryFields.add(sf);
+      pass[style].primaryFields   = [pf];
+      pass[style].secondaryFields = [sf];
+      pass[style].auxiliaryFields = [];
+      pass[style].headerFields    = [];
     } else {
-      // v3 sin estilo expuesto: usa arreglos top-level
-      pass.primaryFields   = Array.isArray(pass.primaryFields)   ? pass.primaryFields   : [];
-      pass.secondaryFields = Array.isArray(pass.secondaryFields) ? pass.secondaryFields : [];
-      pass.primaryFields.push(pf);
-      pass.secondaryFields.push(sf);
+      pass.primaryFields   = [pf];
+      pass.secondaryFields = [sf];
     }
 
-    // --- Exportar y responder ---
-    const buffer = await pass.getAsBuffer();
+    // --- Texto largo al dorso (igual que Google) ---
+    const infoTxt = getInfoText(tier);
+    if (infoTxt) {
+      pass.backFields = [{ key:"info", label:"Información", value: infoTxt }];
+    }
 
+    // --- Responder .pkpass ---
+    const buffer = await pass.getAsBuffer();
     res.set({
       "Content-Type": "application/vnd.apple.pkpass",
       "Content-Disposition": `attachment; filename="${sanitize(serial)}.pkpass"`,
@@ -367,7 +371,6 @@ router.get("/wallet/ios/:token", async (req, res) => {
     return res.status(500).type("text").send(e?.message || "pkpass error");
   }
 });
-
 
 
 // ===============================================================
