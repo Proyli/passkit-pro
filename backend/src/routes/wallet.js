@@ -406,11 +406,14 @@ router.get("/wallet/resolve", async (req, res) => {
     } catch {}
 
     // ✅ iOS (o forzado apple) -> redirige a /wallet/ios/:token (genera pkpass)
-    if (forced === "apple" || isiOS) {
-      const iosToken = jwt.sign({ client, campaign }, SECRET, { expiresIn: "15m" });
-      const appleUrl = `${baseUrl(req)}/api/wallet/ios/${iosToken}`;
-      return res.redirect(302, appleUrl);
-    }
+if (forced === "apple" || isiOS) {
+  const iosToken = jwt.sign({ client, campaign }, SECRET, { expiresIn: "15m" });
+  // reenviar tier si viene en la query
+  const extraTier = req.query.tier ? `?tier=${encodeURIComponent(req.query.tier)}` : "";
+  const appleUrl  = `${baseUrl(req)}/api/wallet/ios/${iosToken}${extraTier}`;
+  return res.redirect(302, appleUrl);
+}
+
 
     // ✅ Android/Google (o forzado google) -> Save to Wallet
     const tier = (tipoCliente || req.query.tier || "blue").toLowerCase();
@@ -613,10 +616,13 @@ router.get("/wallet/smart/:token", async (req, res) => {
 
     // iOS → endpoint de Apple (.pkpass)
     if (isApple) {
-      const iosToken = jwt.sign({ client, campaign }, SECRET, { expiresIn: "15m" });
-      const appleUrl = `${baseUrl(req)}/api/wallet/ios/${iosToken}`;
-      return res.redirect(302, appleUrl);
-    }
+    const iosToken = jwt.sign({ client, campaign }, SECRET, { expiresIn: "15m" });
+    const tier = req.query?.tier || req.body?.tier;
+    const extraTier = tier ? `?tier=${encodeURIComponent(tier)}` : "";
+    const appleUrl = `${baseUrl(req)}/api/wallet/ios/${iosToken}${extraTier}`;
+    return res.redirect(302, appleUrl);
+  }
+
 
     // Android/Google Wallet → usa tier (preferencia: DB, luego query/body, luego "blue")
     const tier = (tipoCliente || req.body?.tier || req.query?.tier || "blue").toLowerCase();
