@@ -268,7 +268,7 @@ router.get("/wallet/ios/:token", async (req, res) => {
   try {
     const { client, campaign } = jwt.verify(req.params.token, SECRET);
 
-    // --- Datos del miembro (externalId, nombre, y tier desde DB) ---
+    // --- Datos del miembro (externalId, nombre y tier desde BD si aplica) ---
     let externalId  = client;
     let displayName = client;
     let tipoCliente = null; // "gold" | "blue"
@@ -295,14 +295,16 @@ router.get("/wallet/ios/:token", async (req, res) => {
     const signerCert = fs.readFileSync(path.join(CERTS, "signerCert.pem"));
     const signerKey  = fs.readFileSync(path.join(CERTS, "signerKey.pem"));
 
-    // --- Tema por tier (gold / blue) ---
+    // --- Tema por tier (puedes forzar con ?tier=gold|blue) ---
     const tier = String(tipoCliente || req.query.tier || "blue").toLowerCase();
     const theme = (tier.includes("gold") || tier.includes("15"))
-      ? { bg: "#E88B20", fg: "rgb(255,255,255)", label: "rgb(255,255,255)" } // gold
-      : { bg: "#1F4AB8", fg: "rgb(255,255,255)", label: "rgb(255,255,255)" }; // blue
+      ? { bg: "#E88B20", fg: "rgb(255,255,255)", label: "rgb(255,255,255)" } // GOLD
+      : { bg: "#1F4AB8", fg: "rgb(255,255,255)", label: "rgb(255,255,255)" }; // BLUE
 
-    // --- Construcción del pass ---
-    const serial = `${sanitize(client)}-${sanitize(campaign)}`;
+    // --- Serial con tier para evitar caché si cambias de color ---
+    const serial = `${sanitize(client)}-${sanitize(campaign)}-${tier}`;
+
+    // --- Construcción del pass: campos dentro de storeCard (se ven en la hoja de agregar) ---
     const pass = await Pass.from(
       {
         model: MODEL,
@@ -331,29 +333,22 @@ router.get("/wallet/ios/:token", async (req, res) => {
           message: String(externalId || "").normalize("NFKD").replace(/[^\x00-\x7F]/g, ""),
           messageEncoding: "iso-8859-1",
           altText: externalId,
-        }]
+        }],
+
+        storeCard: {
+          headerFields: [
+            { key: "tier", label: "Nivel", value: (tier.includes("gold") ? "GOLD 15%" : "BLUE 5%") }
+          ],
+          primaryFields: [
+            { key: "name", label: "Nombre", value: displayName }
+          ],
+          secondaryFields: [
+            { key: "code", label: "Código", value: externalId }
+          ],
+          auxiliaryFields: []
+        }
       }
     );
-
-    // --- Campos visibles (sustituir arrays para evitar residuos del modelo) ---
-    const pf = { key: "name", label: "Nombre", value: displayName };
-    const sf = { key: "code", label: "Código", value: externalId };
-
-    const style =
-      pass.storeCard     ? "storeCard"   :
-      pass.generic       ? "generic"     :
-      pass.eventTicket   ? "eventTicket" :
-      pass.boardingPass  ? "boardingPass": null;
-
-    if (style && pass[style]) {
-      pass[style].primaryFields   = [pf];
-      pass[style].secondaryFields = [sf];
-      pass[style].auxiliaryFields = [];
-      pass[style].headerFields    = [];
-    } else {
-      pass.primaryFields   = [pf];
-      pass.secondaryFields = [sf];
-    }
 
     // --- Texto largo al dorso (igual que Google) ---
     const infoTxt = getInfoText(tier);
@@ -374,7 +369,6 @@ router.get("/wallet/ios/:token", async (req, res) => {
     return res.status(500).type("text").send(e?.message || "pkpass error");
   }
 });
-
 
 // ===============================================================
 // NUEVO: GET /wallet/resolve
