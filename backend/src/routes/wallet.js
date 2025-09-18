@@ -199,7 +199,10 @@ function buildGoogleSaveUrl(req, { client, campaign, externalId, displayName, ti
     ],
 
     // Sin textos extra (no "Information")
-    textModulesData: [],
+    textModulesData: [
+  { header: "Information", body: getInfoText(tierNorm) }
+],
+
 
     // Código de barras (lo que escanea y lo que se muestra como texto alterno)
     barcode: { type: "CODE_128", value: codeValue, alternateText: codeValue },
@@ -622,7 +625,6 @@ router.get("/wallet/smart/:token", async (req, res) => {
     const appleUrl = `${baseUrl(req)}/api/wallet/ios/${iosToken}${extraTier}`;
     return res.redirect(302, appleUrl);
   }
-
 
     // Android/Google Wallet → usa tier (preferencia: DB, luego query/body, luego "blue")
     const tier = (tipoCliente || req.body?.tier || req.query?.tier || "blue").toLowerCase();
