@@ -74,6 +74,23 @@ function getInfoText(tier) {
   );
 }
 
+function normalizeTier(s) {
+  const t = String(s || "").toLowerCase();
+  if (t.includes("gold") || t.includes("15")) return "gold";
+  if (t.includes("blue") || t.includes("5"))  return "blue";
+  return "";
+}
+
+// DB manda; si DB no trae, usa query/body; si nada, blue
+function tierFromSources({ tipoCliente, queryTier, bodyTier }) {
+  return (
+    normalizeTier(tipoCliente) ||
+    normalizeTier(queryTier)    ||
+    normalizeTier(bodyTier)     ||
+    "blue"
+  );
+}
+
 
 // ----------------- ENV -----------------
 const SA_EMAIL = process.env.GOOGLE_SA_EMAIL; // wallet-svc@...iam.gserviceaccount.com
@@ -167,64 +184,76 @@ function buildGoogleSaveUrl(req, { client, campaign, externalId, displayName, ti
 
   const tierNorm = String(tier || "blue").toLowerCase();
 
-  // ID técnico del objeto (no visible para el usuario), limpio y sin "navidad"
-  const objectId = `${issuer}.${sanitize(`${codeValue}-${tierNorm}`)}`;
+  // ID técnico del objeto (no visible para el usuario)
+  const objectId = `${issuer}.${sanitize(`${codeValue}-${(campaign||"").toLowerCase()}-${tierNorm}`)}`;
 
   // Clase según tier (blue/gold)
   const classRef = classIdForTier(tierNorm);
 
   // Imagen hero (abajo). Usa GW_HERO o /public/hero-alcazaren.jpeg
-  const heroUri  = getHeroUrl(req);
-  const origin   = baseUrl(req); // para 'origins' del JWT
+  const heroUri = getHeroUrl();  // en vez de getHeroUrl(req)
+const origin  = baseUrl();     // ya que baseUrl() tampoco recibe req
 
-  const loyaltyObject = {
-    id: objectId,
-    classId: classRef,
-    state: "ACTIVE",
 
-    // 👇 Esto es lo que se ve debajo del código
-    accountId: codeValue,
-    // accountName puede quedar como el nombre o igual al codeValue; no se muestra debajo del barcode
-    accountName: displayName || codeValue,
+  // justo antes del loyaltyObject:
+const tierLabel = tierNorm === "gold" ? "GOLD 15%" : "BLUE 5%";
 
-    // Sin filas extra ("Name"...)
-    infoModuleData: { labelValueRows: [] },
+// reemplaza TODO tu loyaltyObject por esto:
+const loyaltyObject = {
+  id: objectId,
+  classId: classRef,
+  state: "ACTIVE",
 
-    // Hero inferior
-    imageModulesData: [
-      {
-        id: "alcazaren_hero",
-        mainImage: { sourceUri: { uri: heroUri } }
-      }
+  // lo que lee el escáner y el texto bajo el código
+  accountId:   codeValue,
+  accountName: displayName || codeValue,
+
+  // BLOQUES VISIBLES (como en la 2da imagen)
+  infoModuleData: {
+    labelValueRows: [
+      { columns: [{ label: "Nombre", value: displayName || codeValue }] },
+      { columns: [{ label: "Nivel",  value: tierLabel }] },
+      { columns: [{ label: "Código", value: codeValue }] }
     ],
+    showLastUpdateTime: false
+  },
 
-    // Sin textos extra (no "Information")
-    textModulesData: [
-  { header: "Information", body: getInfoText(tierNorm) }
-],
+  imageModulesData: [
+    { id: "alcazaren_hero", mainImage: { sourceUri: { uri: heroUri } } }
+  ],
 
+  textModulesData: [
+    { header: "Información", body: getInfoText(tierNorm) }
+  ],
 
-    // Código de barras (lo que escanea y lo que se muestra como texto alterno)
-    barcode: { type: "CODE_128", value: codeValue, alternateText: codeValue },
-  };
+  // opcional: un link a términos o a tu web
+  linksModuleData: {
+    uris: [
+      { uri: `${origin}/public/terminos`, description: "Términos y condiciones" }
+    ]
+  },
 
-  // JWT con origins (necesario para el flujo web/Gmail)
-  const saveToken = jwt.sign(
-    {
-      iss: SA_EMAIL,
-      aud: "google",
-      typ: "savetowallet",
-      payload: {
-        loyaltyObjects: [loyaltyObject],
-        origins: [origin],
-      },
+  // código de barras
+  barcode: { type: "CODE_128", value: codeValue, alternateText: codeValue },
+};
+// JWT con origins (necesario para el flujo web/Gmail)
+const saveToken = jwt.sign(
+  {
+    iss: SA_EMAIL,
+    aud: "google",
+    typ: "savetowallet",
+    payload: {
+      loyaltyObjects: [loyaltyObject],
+      origins: [origin],
     },
-    PRIVATE_KEY,
-    { algorithm: "RS256" }
-  );
+  },
+  PRIVATE_KEY,
+  { algorithm: "RS256" }
+);
 
-  return `https://pay.google.com/gp/v/save/${saveToken}`;
+return `https://pay.google.com/gp/v/save/${saveToken}`;
 }
+
 
 
 function makeSmartLink(req, googleSaveUrl, appleUrl) {
@@ -413,9 +442,24 @@ if (forced === "apple" || isiOS) {
 
 
     // ✅ Android/Google (o forzado google) -> Save to Wallet
-    const tier = (tipoCliente || req.query.tier || "blue").toLowerCase();
+    const tier = tierFromSources({
+      tipoCliente,
+      queryTier: req.query.tier,
+      bodyTier:  req.body?.tier
+    });
+
+    // ⬇️ INSERTA AQUÍ
+console.log(
+  "[resolve] client=", client,
+  "campaign=", campaign,
+  "tipoCliente(DB)=", tipoCliente,
+  "tierFinal=", tier,
+  "classRef=", classIdForTier(tier)
+);
+
     const saveUrl = buildGoogleSaveUrl(req, { client, campaign, externalId, displayName, tier });
     return res.redirect(302, saveUrl);
+
   } catch (e) {
     console.error("wallet/resolve error:", e?.message || e);
     return res.status(500).send("resolve failed");
@@ -453,13 +497,13 @@ router.get("/wallet/google/:token", async (req, res) => {
       }
     } catch {}
 
-    const tier = (tipoCliente || req.query.tier || "blue").toLowerCase();
+    const tier = tierFromSources({
+  tipoCliente,
+  queryTier: req.query.tier
+});
+const saveUrl = buildGoogleSaveUrl(req, { client, campaign, externalId, displayName, tier });
+return res.redirect(302, saveUrl);
 
-    // 👉 usa buildGoogleSaveUrl (ya mete hero + textos + origins)
-    const saveUrl = buildGoogleSaveUrl(req, { client, campaign, externalId, displayName, tier });
-
-    if (req.query.raw === "1") return res.json({ platform: "google", saveUrl, tier });
-    return res.redirect(302, saveUrl);
   } catch (e) {
     console.error("wallet/google error:", e?.message || e);
     return res.status(401).json({ message: "Token inválido/vencido o error en Google Wallet", details: e?.message });
@@ -621,17 +665,23 @@ router.get("/wallet/smart/:token", async (req, res) => {
   }
 
     // Android/Google Wallet → usa tier (preferencia: DB, luego query/body, luego "blue")
-    const tier = (tipoCliente || req.body?.tier || req.query?.tier || "blue").toLowerCase();
+    const tier = tierFromSources({
+    tipoCliente,
+    queryTier: req.query?.tier,
+    bodyTier:  req.body?.tier
+  });
+  console.log(
+  "[smart] client=", client,
+  "campaign=", campaign,
+  "tipoCliente(DB)=", tipoCliente,
+  "tierFinal=", tier,
+  "classRef=", classIdForTier(tier)
+);
 
-    const googleSaveUrl = buildGoogleSaveUrl(req, {
-      client,
-      campaign,
-      externalId,
-      displayName,
-      tier
-    });
 
-    return res.redirect(302, googleSaveUrl);
+  const googleSaveUrl = buildGoogleSaveUrl(req, { client, campaign, externalId, displayName, tier });
+  return res.redirect(302, googleSaveUrl);
+
   } catch (e) {
     const status  = e?.response?.status || 401;
     const details = e?.response?.data || e?.message || String(e);
