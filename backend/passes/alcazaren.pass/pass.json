@@ -1,8 +1,8 @@
 {
   "formatVersion": 1,
-  "passTypeIdentifier": "pass.com.alcazaren.loyalty",
+  "passTypeIdentifier": "pass.com.local.alcazaren.viployaltycard",
   "teamIdentifier": "5DWY4L69C8",
-  "organizationName": "Alcazarén",
+  "organizationName": "Distribuidora Alcazaren",
   "description": "Tarjeta de Lealtad (demo)",
   "logoText": "Alcazarén",
   "foregroundColor": "rgb(255,255,255)",
@@ -10,11 +10,7 @@
   "serialNumber": "SERIAL-PLACEHOLDER",
   "storeCard": {
     "primaryFields": [
-      {
-        "key": "points",
-        "label": "Puntos",
-        "value": "150"
-      }
+      { "key": "points", "label": "Puntos", "value": "150" }
     ]
   },
   "barcodes": [
