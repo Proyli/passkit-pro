@@ -333,9 +333,11 @@ router.get("/wallet/ios/:token", async (req, res) => {
 
     // --- Tema por tier (puedes forzar con ?tier=gold|blue) ---
     const tier = String(tipoCliente || req.query.tier || "blue").toLowerCase();
+    // ⬅️ AÑADE ESTA LÍNEA
+const tierLabel = tier.includes("gold") ? "GOLD 15%" : "BLUE 5%";
     const theme = (tier.includes("gold") || tier.includes("15"))
-      ? { bg: "#E88B20", fg: "rgb(255,255,255)", label: "rgb(255,255,255)" } // GOLD
-      : { bg: "#1F4AB8", fg: "rgb(255,255,255)", label: "rgb(255,255,255)" }; // BLUE
+      ? { bg: "#f3b46bff", fg: "rgb(255,255,255)", label: "rgb(255,255,255)" } // GOLD
+      : { bg: "#3763d3ff", fg: "rgb(255,255,255)", label: "rgb(255,255,255)" }; // BLUE
 
     // --- Serial con tier para evitar caché si cambias de color ---
     const serial = `${sanitize(client)}-${sanitize(campaign)}-${tier}`;
