@@ -171,14 +171,6 @@ function pickClassIdByCampaign(campaign) {
   return process.env.GOOGLE_WALLET_CLASS_ID; // fallback
 }
 
-const ISSUER = process.env.GOOGLE_WALLET_ISSUER_ID;
-
-function classIdForTier(tierNorm) {
-  const cls = tierNorm === 'gold'
-    ? process.env.GOOGLE_WALLET_CLASS_ID_GOLD
-    : process.env.GOOGLE_WALLET_CLASS_ID_BLUE;
-  return `${ISSUER}.${cls}`;
-}
 
 // ------ Helper: construir Save URL (Google Wallet) ------
 function buildGoogleSaveUrl(req, { client, campaign, externalId, displayName, tier }) {
@@ -227,7 +219,7 @@ const loyaltyObject = {
   // BLOQUES VISIBLES
   infoModuleData: {
     labelValueRows: [
-      { columns: [{ label: "Nombre", value: displayName || codeValue }] },
+      { columns: [{ label: "Nombre", value: displayNameFinal }] },
       { columns: [{ label: "Nivel",  value: tierLabel }] },
       { columns: [{ label: "Código", value: codeValue }] }
     ],
