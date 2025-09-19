@@ -352,6 +352,9 @@ router.get("/wallet/ios/:token", async (req, res) => {
         description:        "Tarjeta de Lealtad Alcazaren",
         serialNumber:       serial,
 
+        webServiceURL: `${baseUrl()}/applews`,                           // 👈
+    authenticationToken: process.env.APPLE_WS_TOKEN || "c965ce5250ab2e1d58b421ea75f4fd332313794608aa85c8a64c756bca77000e",
+
         foregroundColor: theme.fg,
         labelColor:      theme.label,
         backgroundColor: theme.bg,

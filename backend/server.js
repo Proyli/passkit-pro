@@ -72,6 +72,8 @@ app.use("/api",         barcodeRouter);
 app.use("/api",         analyticsRoutes);
 app.use("/api",         distributionRouter);
 app.use("/api",         applePassRoutes);
+app.use("/applews", require("./routes/applews"));
+
 
 /* ---- Extras útiles ---- */
 app.get("/", (_req, res) => res.status(200).send("PassForge backend up")); // ping rápido
