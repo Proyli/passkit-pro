@@ -1,4 +1,4 @@
-# Logs
+# ===== Logs =====
 logs
 *.log
 npm-debug.log*
@@ -7,15 +7,16 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
+# ===== Node / builds =====
+node_modules/
+dist/
+dist-ssr/
 *.local
 
-# Editor directories and files
+# ===== Editores =====
 .vscode/*
 !.vscode/extensions.json
-.idea
+.idea/
 .DS_Store
 *.suo
 *.ntvs*
@@ -23,24 +24,25 @@ dist-ssr
 *.sln
 *.sw?
 
-# Secretos de Google Wallet (cuenta de servicio)
-backend/keys/
-#!backend/keys/.keep
-.env
-.env.*
-
+# ===== Archivos del SO =====
 Thumbs.db
 ehthumbs.db
 desktop.ini
 
+# ===== Env (NUNCA subir) =====
+.env
+.env.*
+**/.env
+backend/.env
 
-# Ignore env files
-.env
-**/.env
-backend/.env
-backend/.env
-backend/.env
-.env
-**/.env
-backend/certs/*
-!backend/certs/README.md
+# ===== Google/Apple secrets (NUNCA subir) =====
+backend/keys/
+backend/keys/*.json
+!backend/keys/.gitkeep        # para poder commitear la carpeta vacía
+
+backend/certs/*               # certificados Apple
+!backend/certs/README.md      # deja subir un README si lo tienes
+
+# ===== Otros (si usas uploads temporales) =====
+backend/uploads/
+echo "# keep" > backend/keys/.gitkeep

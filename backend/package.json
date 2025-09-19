@@ -6,7 +6,7 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "wallet:style": "node scripts/wallet/styleLikeMock.js",
-    "set:rtn": "node scripts/set_rtn.js"
+    "set:rtn": "node -r dotenv/config scripts/set_rtn.js dotenv_config_path=./.env"
   },
   "keywords": [],
   "author": "",
