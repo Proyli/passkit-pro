@@ -171,6 +171,14 @@ function pickClassIdByCampaign(campaign) {
   return process.env.GOOGLE_WALLET_CLASS_ID; // fallback
 }
 
+const ISSUER = process.env.GOOGLE_WALLET_ISSUER_ID;
+
+function classIdForTier(tierNorm) {
+  const cls = tierNorm === 'gold'
+    ? process.env.GOOGLE_WALLET_CLASS_ID_GOLD
+    : process.env.GOOGLE_WALLET_CLASS_ID_BLUE;
+  return `${ISSUER}.${cls}`;
+}
 
 // ------ Helper: construir Save URL (Google Wallet) ------
 function buildGoogleSaveUrl(req, { client, campaign, externalId, displayName, tier }) {
@@ -184,6 +192,12 @@ function buildGoogleSaveUrl(req, { client, campaign, externalId, displayName, ti
 
   const tierNorm = String(tier || "blue").toLowerCase();
 
+  // 👉 Construir displayName a partir de client.nombre + client.apellido si no vino
+const displayNameFinal =
+  [client?.nombre, client?.apellido]
+    .filter(Boolean)
+    .join(" ")
+    .trim() || displayName || codeValue; // fallback
   // ID técnico del objeto (no visible para el usuario)
   const objectId = `${issuer}.${sanitize(`${codeValue}-${(campaign||"").toLowerCase()}-${tierNorm}`)}`;
 
@@ -198,17 +212,19 @@ const origin  = baseUrl();     // ya que baseUrl() tampoco recibe req
   // justo antes del loyaltyObject:
 const tierLabel = tierNorm === "gold" ? "GOLD 15%" : "BLUE 5%";
 
-// reemplaza TODO tu loyaltyObject por esto:
 const loyaltyObject = {
   id: objectId,
   classId: classRef,
   state: "ACTIVE",
 
+  // 👉 fuerza el color del pase por tier
+  hexBackgroundColor: tierNorm === "gold" ? "#D4AF37" : "#2350C6",
+
   // lo que lee el escáner y el texto bajo el código
   accountId:   codeValue,
-  accountName: displayName || codeValue,
+  accountName: displayNameFinal,
 
-  // BLOQUES VISIBLES (como en la 2da imagen)
+  // BLOQUES VISIBLES
   infoModuleData: {
     labelValueRows: [
       { columns: [{ label: "Nombre", value: displayName || codeValue }] },
@@ -226,16 +242,15 @@ const loyaltyObject = {
     { header: "Información", body: getInfoText(tierNorm) }
   ],
 
-  // opcional: un link a términos o a tu web
   linksModuleData: {
     uris: [
       { uri: `${origin}/public/terminos`, description: "Términos y condiciones" }
     ]
   },
 
-  // código de barras
-  barcode: { type: "CODE_128", value: codeValue, alternateText: codeValue },
+  barcode: { type: "CODE_128", value: codeValue, alternateText: externalId },
 };
+
 // JWT con origins (necesario para el flujo web/Gmail)
 const saveToken = jwt.sign(
   {
@@ -353,8 +368,7 @@ router.get("/wallet/ios/:token", async (req, res) => {
         serialNumber:       serial,
 
         webServiceURL: `${baseUrl()}/applews`,                           // 👈
-    authenticationToken: process.env.APPLE_WS_TOKEN || "c965ce5250ab2e1d58b421ea75f4fd332313794608aa85c8a64c756bca77000e",
-
+    authenticationToken: process.env.APPLE_WS_TOKEN, 
         foregroundColor: theme.fg,
         labelColor:      theme.label,
         backgroundColor: theme.bg,
@@ -369,7 +383,7 @@ router.get("/wallet/ios/:token", async (req, res) => {
 
         storeCard: {
           headerFields: [
-            { key: "tier", label: "Nivel", value: (tier.includes("gold") ? "GOLD 15%" : "BLUE 5%") }
+            { key: "tier", label: "Nivel", value: tierLabel }
           ],
           primaryFields: [
             { key: "name", label: "Nombre", value: displayName }
