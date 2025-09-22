@@ -66,24 +66,35 @@ function getHeroUrl() {
   return `${baseUrl()}/public/hero-alcazaren.jpeg`;
 }
 
-function normalizeTier(s) {
-  const t = String(s || "").trim().toLowerCase();
+// Reemplaza tu normalizeTier y tierFromAll por esto:
 
-  // match exacto (con o sin %)
-  if (/^(gold|golden|dorado|oro|15|15%)$/.test(t)) return "gold";
-  if (/^(blue|azul|5|5%)$/.test(t)) return "blue";
+function normalizeTier(s, { loose = false } = {}) {
+  const t = String(s || "").trim().toLowerCase();
+  if (!t) return "";
+
+  // exacto (para query/body)
+  const exactGold = /^(gold|golden|dorado|oro|15|15%)$/i;
+  const exactBlue = /^(blue|azul|5|5%)$/i;
+
+  // flexible (para BD: admite "gold 15%", "gold - 15%", etc.)
+  const looseGold = /(gold|golden|dorado|oro|15)/i;
+  const looseBlue = /(blue|azul|5)/i;
+
+  if (loose ? looseGold.test(t) : exactGold.test(t)) return "gold";
+  if (loose ? looseBlue.test(t) : exactBlue.test(t)) return "blue";
   return "";
 }
 
-function tierFromAll({ tipoCliente, campaign, queryTier, bodyTier }) {
-  // DB -> query -> body -> (NO usar campaign como fallback) -> blue
+// DB -> query -> body -> blue
+function tierFromAll({ tipoCliente, queryTier, bodyTier }) {
   return (
-    normalizeTier(tipoCliente) ||
-    normalizeTier(queryTier)   ||
-    normalizeTier(bodyTier)    ||
+    normalizeTier(tipoCliente, { loose: true }) || // <- BD flexible ("Gold 15%")
+    normalizeTier(queryTier) ||                    // <- exacto
+    normalizeTier(bodyTier)  ||                    // <- exacto
     "blue"
   );
 }
+
 function getInfoText(tier) {
   const t = String(tier || "").toLowerCase();
   if (t === "gold") {
@@ -144,7 +155,12 @@ if (!PRIVATE_KEY) console.warn("⚠️  PRIVATE_KEY vacío. Google Wallet fallar
 const router = express.Router();
 
 // ===================== Salud =====================
-router.get("/healthz", (_req, res) => res.status(200).send("ok"));
+// ===================== Salud =====================
+router.get("/healthz", (req, res) => {
+  res.set("x-app-rev", process.env.WALLET_OBJECT_REV || "dev");
+  res.status(200).send("ok");
+});
+
 
 // ===================== DB Helper =====================
 async function tryQuery(sql, params) {
