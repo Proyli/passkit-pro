@@ -1,4 +1,5 @@
-const { classIdForTier } = require("../helpers/tier"); 
+// src/routes/wallet.js
+const { classIdForTier } = require("../helpers/tier");
 const express = require("express");
 const jwt = require("jsonwebtoken");
 const { pool } = require("../db");
@@ -8,8 +9,7 @@ const { sendMailSmart } = require("../mailer");
 const { renderWalletEmail, mergeSettings } = require("../../services/renderEmail");
 const crypto = require("crypto");
 
-
-// Carga robusta de passkit-generator (soporta Pass, PKPass o default)
+// ===================== Passkit (Apple) =====================
 let _passlib;
 try {
   _passlib = require("passkit-generator");
@@ -18,22 +18,23 @@ try {
   _passlib = {};
 }
 const Pass =
-  _passlib.Pass ||           // algunas versiones exportan Pass
-  _passlib.PKPass ||         // otras exportan PKPass
-  _passlib.default || null;  // y otras exportan default
+  _passlib.Pass ||
+  _passlib.PKPass ||
+  _passlib.default ||
+  null;
 
 if (!Pass || typeof Pass.from !== "function") {
   console.error("❌ 'passkit-generator' no expone Pass.from/PKPass.from. Revisa versión instalada.");
 }
 
-// ----------------- Paths certificados y modelo -----------------
+// ===================== Paths / Modelo =====================
 const CERTS = process.env.CERT_DIR
   ? process.env.CERT_DIR                 // Render: /etc/secrets
-  : path.resolve(__dirname, "../../certs"); // Local: backend/certs
+  : path.resolve(__dirname, "../../certs"); // Local
 
 const MODEL = process.env.MODEL_DIR
-  ? path.resolve(process.env.MODEL_DIR)      // si lo mandas por env
-  : path.resolve(__dirname, "../../passes/alcazaren.pass"); // backend/passes/alcazaren.pass
+  ? path.resolve(process.env.MODEL_DIR)
+  : path.resolve(__dirname, "../../passes/alcazaren.pass");
 
 console.log("[wallet] CERTS =", CERTS);
 console.log("[wallet] MODEL =", MODEL);
@@ -42,27 +43,38 @@ console.log("[wallet] MODEL =", MODEL);
 });
 console.log("[wallet] model exists?", fs.existsSync(MODEL));
 
-
-// ----------------- Utils -----------------
+// ===================== Utils =====================
 const sanitize = (s) => String(s).replace(/[^\w.-]/g, "_");
-// 🔒 Antibalas: SIEMPRE usa .env (sin barra final). No dependas de req.
+
 function baseUrl() {
   const env = String(process.env.PUBLIC_BASE_URL || "").trim();
-  return env.replace(/\/+$/, ""); // quita barra final por si acaso
+  return env.replace(/\/+$/, "");
 }
 
+const GOLD_HEX  = "#DAA520";      // Google
+const BLUE_HEX  = "#2350C6";
+const GOLD_RGB  = "rgb(218,165,32)"; // Apple
+const BLUE_RGB  = "rgb(35,80,198)";
 
-// --- Helpers de banner y textos para Google Wallet ---
 function getHeroUrl() {
   const envUrl = (process.env.GW_HERO || "").trim();
   if (envUrl) return envUrl;
   return `${baseUrl()}/public/hero-alcazaren.jpeg`;
 }
 
+function normalizeTier(s) {
+  const t = String(s || "").toLowerCase();
+  if (t.includes("gold") || t.includes("15")) return "gold";
+  if (t.includes("blue") || t.includes("5"))  return "blue";
+  return "blue";
+}
+function tierFromSources({ tipoCliente, queryTier, bodyTier }) {
+  return normalizeTier(tipoCliente || queryTier || bodyTier || "blue");
+}
 
 function getInfoText(tier) {
   const t = String(tier || "").toLowerCase();
-  if (t.includes("gold") || t.includes("15")) {
+  if (t === "gold") {
     return (
       process.env.GW_INFO_GOLD ||
       "Vive la experiencia premium con un 15% menos.\nTu lealtad eleva cada brindis.\n\nAplican restricciones."
@@ -74,33 +86,22 @@ function getInfoText(tier) {
   );
 }
 
-function normalizeTier(s) {
-  const t = String(s || "").toLowerCase();
-  if (t.includes("gold") || t.includes("15")) return "gold";
-  if (t.includes("blue") || t.includes("5"))  return "blue";
-  return "";
+function getDisplayName(row) {
+  if (!row) return null;
+  const f = row.firstname ?? row.first_name ?? row.nombre ?? row.name ?? "";
+  const l = row.lastname  ?? row.last_name  ?? row.apellido ?? "";
+  const full = `${String(f||"").trim()} ${String(l||"").trim()}`.trim();
+  return full || null;
 }
 
-// DB manda; si DB no trae, usa query/body; si nada, blue
-function tierFromSources({ tipoCliente, queryTier, bodyTier }) {
-  return (
-    normalizeTier(tipoCliente) ||
-    normalizeTier(queryTier)    ||
-    normalizeTier(bodyTier)     ||
-    "blue"
-  );
-}
-
-
-// ----------------- ENV -----------------
-const SA_EMAIL = process.env.GOOGLE_SA_EMAIL; // wallet-svc@...iam.gserviceaccount.com
-const SECRET   = process.env.WALLET_TOKEN_SECRET || "changeme";
-const SKIP_DB  = process.env.SKIP_DB === "true";
+// ===================== ENV Google =====================
+const SA_EMAIL  = process.env.GOOGLE_SA_EMAIL; // wallet-svc@...iam.gserviceaccount.com
+const SECRET    = process.env.WALLET_TOKEN_SECRET || "changeme";
+const SKIP_DB   = process.env.SKIP_DB === "true";
 
 console.log("[wallet] SECRET prefix:", String(SECRET || "none").slice(0, 10));
 
-
-// ----------------- PRIVATE KEY (var o archivo) -----------------
+// ---- Service Account private key (var o archivo) ----
 const DEFAULT_KEY_PATH = "./keys/wallet-sa.json";
 const KEY_PATH = process.env.GOOGLE_WALLET_KEY_PATH || DEFAULT_KEY_PATH;
 
@@ -128,150 +129,15 @@ if (!PRIVATE_KEY) {
 }
 if (!PRIVATE_KEY) console.warn("⚠️  PRIVATE_KEY vacío. Google Wallet fallará.");
 
-// ----------------- Router -----------------
 const router = express.Router();
 
-// Salud (útil para pings)
+// ===================== Salud =====================
 router.get("/healthz", (_req, res) => res.status(200).send("ok"));
 
-// -------- helpers de datos de miembro --------
-function getDisplayName(row) {
-  if (!row) return null;
-  const f = row.firstname ?? row.first_name ?? row.nombre ?? row.name ?? "";
-  const l = row.lastname ?? row.last_name ?? row.apellido ?? "";
-  const full = `${String(f||"").trim()} ${String(l||"").trim()}`.trim();
-  return full || null;
-}
-function getExternalId(row){
-  return row?.external_id ?? row?.externalId ?? row?.external ?? null;
-}
-
-function pickClassIdByTier(tier) {
-  const t = String(tier || "").toLowerCase();
-  if (!t) return null;
-  if (t.includes("gold") || t.includes("15")) {
-    return process.env.GOOGLE_WALLET_CLASS_ID_GOLD || process.env.GOOGLE_WALLET_CLASS_ID;
-  }
-  if (t.includes("blue") || t.includes("5")) {
-    return process.env.GOOGLE_WALLET_CLASS_ID_BLUE || process.env.GOOGLE_WALLET_CLASS_ID;
-  }
-  return null; // otras variantes aún no mapeadas
-}
-
-
-// -------- elegir CLASS según campaña/tier --------
-function pickClassIdByCampaign(campaign) {
-  const c = String(campaign || "").toLowerCase();
-  if (c.includes("gold") || c.includes("15")) {
-    return process.env.GOOGLE_WALLET_CLASS_ID_GOLD || process.env.GOOGLE_WALLET_CLASS_ID;
-  }
-  if (c.includes("blue") || c.includes("5")) {
-    return process.env.GOOGLE_WALLET_CLASS_ID_BLUE || process.env.GOOGLE_WALLET_CLASS_ID;
-  }
-  return process.env.GOOGLE_WALLET_CLASS_ID; // fallback
-}
-
-
-// ------ Helper: construir Save URL (Google Wallet) ------
-function buildGoogleSaveUrl(req, { client, campaign, externalId, displayName, tier }) {
-  const issuer = process.env.GOOGLE_WALLET_ISSUER_ID;
-  if (!issuer) throw new Error("Falta GOOGLE_WALLET_ISSUER_ID");
-  if (!SA_EMAIL || !PRIVATE_KEY) throw new Error("Faltan GOOGLE_SA_EMAIL o PRIVATE_KEY");
-
-  // ⚠️ Requerimos externalId: si no hay, no creamos pase (así nunca cae a 'client')
-  const codeValue = String(externalId || "").trim();
-  if (!codeValue) throw new Error("No hay externalId para el miembro.");
-
-  const tierNorm = String(tier || "blue").toLowerCase();
-
-  // 👉 Construir displayName a partir de client.nombre + client.apellido si no vino
-const displayNameFinal =
-  [client?.nombre, client?.apellido]
-    .filter(Boolean)
-    .join(" ")
-    .trim() || displayName || codeValue; // fallback
-  // ID técnico del objeto (no visible para el usuario)
-  const objectId = `${issuer}.${sanitize(`${codeValue}-${(campaign||"").toLowerCase()}-${tierNorm}`)}`;
-
-  // Clase según tier (blue/gold)
-  const classRef = classIdForTier(tierNorm);
-
-  // Imagen hero (abajo). Usa GW_HERO o /public/hero-alcazaren.jpeg
-  const heroUri = getHeroUrl();  // en vez de getHeroUrl(req)
-const origin  = baseUrl();     // ya que baseUrl() tampoco recibe req
-
-
-  // justo antes del loyaltyObject:
-const tierLabel = tierNorm === "gold" ? "GOLD 15%" : "BLUE 5%";
-
-const loyaltyObject = {
-  id: objectId,
-  classId: classRef,
-  state: "ACTIVE",
-
-  // 👉 fuerza el color del pase por tier
-  hexBackgroundColor: tierNorm === "gold" ? "#D4AF37" : "#2350C6",
-
-  // lo que lee el escáner y el texto bajo el código
-  accountId:   codeValue,
-  accountName: displayNameFinal,
-
-  // BLOQUES VISIBLES
-  infoModuleData: {
-    labelValueRows: [
-      { columns: [{ label: "Nombre", value: displayNameFinal }] },
-      { columns: [{ label: "Nivel",  value: tierLabel }] },
-      { columns: [{ label: "Código", value: codeValue }] }
-    ],
-    showLastUpdateTime: false
-  },
-
-  imageModulesData: [
-    { id: "alcazaren_hero", mainImage: { sourceUri: { uri: heroUri } } }
-  ],
-
-  textModulesData: [
-    { header: "Información", body: getInfoText(tierNorm) }
-  ],
-
-  linksModuleData: {
-    uris: [
-      { uri: `${origin}/public/terminos`, description: "Términos y condiciones" }
-    ]
-  },
-
-  barcode: { type: "CODE_128", value: codeValue, alternateText: externalId },
-};
-
-// JWT con origins (necesario para el flujo web/Gmail)
-const saveToken = jwt.sign(
-  {
-    iss: SA_EMAIL,
-    aud: "google",
-    typ: "savetowallet",
-    payload: {
-      loyaltyObjects: [loyaltyObject],
-      origins: [origin],
-    },
-  },
-  PRIVATE_KEY,
-  { algorithm: "RS256" }
-);
-
-return `https://pay.google.com/gp/v/save/${saveToken}`;
-}
-
-
-
-function makeSmartLink(req, googleSaveUrl, appleUrl) {
-  const token = jwt.sign({ g: googleSaveUrl, a: appleUrl }, SECRET, { expiresIn: "7d" });
-  return `${baseUrl(req)}/api/wallet/smart/${token}`;
-}
-
+// ===================== DB Helper =====================
 async function findMemberFlexible(client, campaign) {
   if (SKIP_DB) return null;
 
-  // 1) intento estricto (cliente + campaña)
   let [rows] = await pool.query(
     `SELECT external_id, nombre, apellido, first_name, last_name, tipoCliente, codigoCliente, codigoCampana
        FROM members
@@ -280,7 +146,6 @@ async function findMemberFlexible(client, campaign) {
   );
   if (rows?.[0]) return rows[0];
 
-  // 2) si campaña viene vacía o es igual al cliente → busca sólo por cliente
   [rows] = await pool.query(
     `SELECT external_id, nombre, apellido, first_name, last_name, tipoCliente, codigoCliente, codigoCampana
        FROM members
@@ -289,7 +154,6 @@ async function findMemberFlexible(client, campaign) {
   );
   if (rows?.[0]) return rows[0];
 
-  // 3) último recurso: por campaña (por si la escribieron igual al cliente)
   [rows] = await pool.query(
     `SELECT external_id, nombre, apellido, first_name, last_name, tipoCliente, codigoCliente, codigoCampana
        FROM members
@@ -299,50 +163,115 @@ async function findMemberFlexible(client, campaign) {
   return rows?.[0] || null;
 }
 
-// -------------------- iOS (.pkpass con passkit-generator v3) --------------------
+// ===================== Google: construir Save URL =====================
+function buildGoogleSaveUrl({ client, campaign, externalId, displayName, tier }) {
+  const issuer = process.env.GOOGLE_WALLET_ISSUER_ID;
+  if (!issuer) throw new Error("Falta GOOGLE_WALLET_ISSUER_ID");
+  if (!SA_EMAIL || !PRIVATE_KEY) throw new Error("Faltan GOOGLE_SA_EMAIL o PRIVATE_KEY");
+
+  const codeValue = String(externalId || "").trim();
+  if (!codeValue) throw new Error("No hay externalId para el miembro.");
+
+  const tierNorm  = normalizeTier(tier);
+  const objectId  = `${issuer}.${sanitize(`${codeValue}-${(campaign||"").toLowerCase()}-${tierNorm}`)}`;
+  const classRef  = classIdForTier(tierNorm);
+  const heroUri   = getHeroUrl();
+  const origin    = baseUrl();
+  const tierLabel = tierNorm === "gold" ? "GOLD 15%" : "BLUE 5%";
+
+  const loyaltyObject = {
+    id: objectId,
+    classId: classRef,
+    state: "ACTIVE",
+
+    // 🔥 Color por tier (Google sí requiere HEX)
+    hexBackgroundColor: tierNorm === "gold" ? GOLD_HEX : BLUE_HEX,
+
+    // Identidad visible
+    accountId:   codeValue,                     // lo que escanean
+    accountName: displayName || codeValue,      // lo que ven como nombre
+
+    // Bloques visibles
+    infoModuleData: {
+      labelValueRows: [
+        { columns: [{ label: "Nombre", value: displayName || codeValue }] },
+        { columns: [{ label: "Nivel",  value: tierLabel }] },
+        { columns: [{ label: "Código", value: codeValue }] }
+      ],
+      showLastUpdateTime: false
+    },
+
+    imageModulesData: [
+      { id: "alcazaren_hero", mainImage: { sourceUri: { uri: heroUri } } }
+    ],
+
+    textModulesData: [
+      { header: "Información", body: getInfoText(tierNorm) }
+    ],
+
+    linksModuleData: {
+      uris: [
+        { uri: `${origin}/public/terminos`, description: "Términos y condiciones" }
+      ]
+    },
+
+    barcode: { type: "CODE_128", value: codeValue, alternateText: externalId },
+  };
+
+  const saveToken = jwt.sign(
+    {
+      iss: SA_EMAIL,
+      aud: "google",
+      typ: "savetowallet",
+      payload: { loyaltyObjects: [loyaltyObject], origins: [origin] },
+    },
+    PRIVATE_KEY,
+    { algorithm: "RS256" }
+  );
+
+  return `https://pay.google.com/gp/v/save/${saveToken}`;
+}
+
+// ===================== iOS (.pkpass) =====================
 router.get("/wallet/ios/:token", async (req, res) => {
   try {
     const { client, campaign } = jwt.verify(req.params.token, SECRET);
 
-    // --- Datos del miembro (externalId, nombre y tier desde BD si aplica) ---
+    // Datos del miembro
     let externalId  = client;
     let displayName = client;
-    let tipoCliente = null; // "gold" | "blue"
+    let tipoCliente = null;
     try {
       const r = await findMemberFlexible(client, campaign);
       if (r) {
         externalId  = r.external_id || client;
-        const fn = r.nombre || r.first_name || "";
-        const ln = r.apellido || r.last_name || "";
-        displayName = `${String(fn||"").trim()} ${String(ln||"").trim()}`.trim() || client;
+        displayName = getDisplayName(r) || client;
         tipoCliente = r.tipoCliente || null;
       }
     } catch {}
 
-    // --- Modelo (chequeo mínimo de iconos) ---
+    // Modelo e iconos mínimos
     const icon1x = path.join(MODEL, "icon.png");
     const icon2x = path.join(MODEL, "icon@2x.png");
     if (!fs.existsSync(icon1x) || !fs.existsSync(icon2x)) {
       return res.status(500).type("text").send("Faltan icon.png e icon@2x.png en MODEL_DIR");
     }
 
-    // --- Certificados ---
+    // Certificados
     const wwdr       = fs.readFileSync(path.join(CERTS, "wwdr.pem"));
     const signerCert = fs.readFileSync(path.join(CERTS, "signerCert.pem"));
     const signerKey  = fs.readFileSync(path.join(CERTS, "signerKey.pem"));
 
-    // --- Tema por tier (puedes forzar con ?tier=gold|blue) ---
-    const tier = String(tipoCliente || req.query.tier || "blue").toLowerCase();
-    // ⬅️ AÑADE ESTA LÍNEA
-const tierLabel = tier.includes("gold") ? "GOLD 15%" : "BLUE 5%";
-    const theme = (tier.includes("gold") || tier.includes("15"))
-      ? { bg: "#f3b46bff", fg: "rgb(255,255,255)", label: "rgb(255,255,255)" } // GOLD
-      : { bg: "#3763d3ff", fg: "rgb(255,255,255)", label: "rgb(255,255,255)" }; // BLUE
+    // Tier y colores Apple (RGB)
+    const tier = normalizeTier(tipoCliente || req.query.tier || "blue");
+    const tierLabel = tier === "gold" ? "GOLD 15%" : "BLUE 5%";
+    const theme = (tier === "gold")
+      ? { bg: GOLD_RGB, fg: "rgb(255,255,255)", label: "rgb(255,255,255)" }
+      : { bg: BLUE_RGB, fg: "rgb(255,255,255)", label: "rgb(255,255,255)" };
 
-    // --- Serial con tier para evitar caché si cambias de color ---
+    // Serial incluye tier para forzar refresco si cambias color
     const serial = `${sanitize(client)}-${sanitize(campaign)}-${tier}`;
 
-    // --- Construcción del pass: campos dentro de storeCard (se ven en la hoja de agregar) ---
     const pass = await Pass.from(
       {
         model: MODEL,
@@ -361,42 +290,36 @@ const tierLabel = tier.includes("gold") ? "GOLD 15%" : "BLUE 5%";
         description:        "Tarjeta de Lealtad Alcazaren",
         serialNumber:       serial,
 
-        webServiceURL: `${baseUrl()}/applews`,                           // 👈
-    authenticationToken: process.env.APPLE_WS_TOKEN, 
+        webServiceURL: `${baseUrl()}/applews`,
+        authenticationToken: process.env.APPLE_WS_TOKEN,
+
         foregroundColor: theme.fg,
         labelColor:      theme.label,
-        backgroundColor: theme.bg,
+        backgroundColor: theme.bg, // 🔥 Apple usa RGB
 
         // Código de barras
         barcodes: [{
           format: "PKBarcodeFormatCode128",
           message: String(externalId || "").normalize("NFKD").replace(/[^\x00-\x7F]/g, ""),
           messageEncoding: "iso-8859-1",
-          altText: externalId,
+          altText: externalId, // se ve debajo
         }],
 
+        // Campos visibles
         storeCard: {
-          headerFields: [
-            { key: "tier", label: "Nivel", value: tierLabel }
-          ],
-          primaryFields: [
-            { key: "name", label: "Nombre", value: displayName }
-          ],
-          secondaryFields: [
-            { key: "code", label: "Código", value: externalId }
-          ],
+          headerFields:    [{ key: "tier", label: "Nivel", value: tierLabel }],
+          primaryFields:   [{ key: "name", label: "Nombre", value: displayName }],
+          secondaryFields: [{ key: "code", label: "Código", value: externalId }],
           auxiliaryFields: []
         }
       }
     );
 
-    // --- Texto largo al dorso (igual que Google) ---
+    // Texto al dorso
     const infoTxt = getInfoText(tier);
-    if (infoTxt) {
-      pass.backFields = [{ key:"info", label:"Información", value: infoTxt }];
-    }
+    if (infoTxt) pass.backFields = [{ key:"info", label:"Información", value: infoTxt }];
 
-    // --- Responder .pkpass ---
+    // Responder .pkpass
     const buffer = await pass.getAsBuffer();
     res.set({
       "Content-Type": "application/vnd.apple.pkpass",
@@ -410,78 +333,51 @@ const tierLabel = tier.includes("gold") ? "GOLD 15%" : "BLUE 5%";
   }
 });
 
-// ===============================================================
-// NUEVO: GET /wallet/resolve
-// Decide destino segun ?platform=apple|google y/o User-Agent
-//  - Android / google -> redirige a https://pay.google.com/gp/v/save/<JWT>
-//  - iOS / apple      -> (por ahora) página informativa (reemplaza por .pkpass cuando lo tengas)
-// ===============================================================
+// ===================== Resolve (UA / platform) =====================
 router.get("/wallet/resolve", async (req, res) => {
   try {
     const client   = String(req.query.client   || "");
     const campaign = String(req.query.campaign || "");
-    const forced   = String(req.query.platform || "").toLowerCase(); // apple | google | ""
+    const forced   = String(req.query.platform || "").toLowerCase();
     if (!client || !campaign) return res.status(400).send("missing client/campaign");
 
     const ua    = String(req.get("user-agent") || "");
     const isiOS = /iPhone|iPad|iPod/i.test(ua);
 
-    // --- enriquecer con DB: external_id, nombre/apellido, tipoCliente ---
+    // Enriquecer datos
     let externalId  = client;
     let displayName = client;
     let tipoCliente = null;
-
     try {
       const r = await findMemberFlexible(client, campaign);
       if (r) {
-        externalId = r.external_id || client;
-        const fn = r.nombre || r.first_name || "";
-        const ln = r.apellido || r.last_name || "";
-        displayName = `${String(fn||"").trim()} ${String(ln||"").trim()}`.trim() || client;
+        externalId  = r.external_id || client;
+        displayName = getDisplayName(r) || client;
         tipoCliente = r.tipoCliente || null;
       }
     } catch {}
 
-    // ✅ iOS (o forzado apple) -> redirige a /wallet/ios/:token (genera pkpass)
-if (forced === "apple" || isiOS) {
-  const iosToken = jwt.sign({ client, campaign }, SECRET, { expiresIn: "15m" });
-  // reenviar tier si viene en la query
-  const extraTier = req.query.tier ? `?tier=${encodeURIComponent(req.query.tier)}` : "";
-  const appleUrl  = `${baseUrl(req)}/api/wallet/ios/${iosToken}${extraTier}`;
-  return res.redirect(302, appleUrl);
-}
+    // iOS → .pkpass
+    if (forced === "apple" || isiOS) {
+      const iosToken  = jwt.sign({ client, campaign }, SECRET, { expiresIn: "15m" });
+      const extraTier = req.query.tier ? `?tier=${encodeURIComponent(req.query.tier)}` : "";
+      const appleUrl  = `${baseUrl()}/api/wallet/ios/${iosToken}${extraTier}`;
+      return res.redirect(302, appleUrl);
+    }
 
+    // Android/Google → Save URL
+    const tier = tierFromSources({ tipoCliente, queryTier: req.query.tier, bodyTier: req.body?.tier });
+    console.log("[resolve]", { client, campaign, tipoCliente, tier, classRef: classIdForTier(tier) });
 
-    // ✅ Android/Google (o forzado google) -> Save to Wallet
-    const tier = tierFromSources({
-      tipoCliente,
-      queryTier: req.query.tier,
-      bodyTier:  req.body?.tier
-    });
-
-    // ⬇️ INSERTA AQUÍ
-console.log(
-  "[resolve] client=", client,
-  "campaign=", campaign,
-  "tipoCliente(DB)=", tipoCliente,
-  "tierFinal=", tier,
-  "classRef=", classIdForTier(tier)
-);
-
-    const saveUrl = buildGoogleSaveUrl(req, { client, campaign, externalId, displayName, tier });
+    const saveUrl = buildGoogleSaveUrl({ client, campaign, externalId, displayName, tier });
     return res.redirect(302, saveUrl);
-
   } catch (e) {
     console.error("wallet/resolve error:", e?.message || e);
     return res.status(500).send("resolve failed");
   }
 });
 
-
-
-// =================================================================
-// (Compat) GET /wallet/google/:token -> genera Save URL y redirige
-// =================================================================
+// ===================== Compat: Google con token =====================
 router.get("/wallet/google/:token", async (req, res) => {
   try {
     const { client, campaign } = jwt.verify(req.params.token, SECRET);
@@ -493,7 +389,7 @@ router.get("/wallet/google/:token", async (req, res) => {
       return res.status(500).json({ message: "Faltan GOOGLE_SA_EMAIL o PRIVATE_KEY" });
     }
 
-    // enriquecer datos desde DB
+    // DB
     let externalId  = client;
     let displayName = client;
     let tipoCliente = null;
@@ -501,27 +397,21 @@ router.get("/wallet/google/:token", async (req, res) => {
       const r = await findMemberFlexible(client, campaign);
       if (r) {
         externalId  = r.external_id || client;
-        const fn = r.nombre || r.first_name || "";
-        const ln = r.apellido || r.last_name || "";
-        displayName = `${String(fn||"").trim()} ${String(ln||"").trim()}`.trim() || client;
+        displayName = getDisplayName(r) || client;
         tipoCliente = r.tipoCliente || null;
       }
     } catch {}
 
-    const tier = tierFromSources({
-  tipoCliente,
-  queryTier: req.query.tier
-});
-const saveUrl = buildGoogleSaveUrl(req, { client, campaign, externalId, displayName, tier });
-return res.redirect(302, saveUrl);
-
+    const tier    = tierFromSources({ tipoCliente, queryTier: req.query.tier });
+    const saveUrl = buildGoogleSaveUrl({ client, campaign, externalId, displayName, tier });
+    return res.redirect(302, saveUrl);
   } catch (e) {
     console.error("wallet/google error:", e?.message || e);
     return res.status(401).json({ message: "Token inválido/vencido o error en Google Wallet", details: e?.message });
   }
 });
 
-// -------------------- UI unificada: QR + Barras (opcional) --------------------
+// ===================== Vista códigos (opcional) =====================
 router.get("/wallet/codes", async (req, res) => {
   const client   = String(req.query.client || "");
   const campaign = String(req.query.campaign || "");
@@ -544,7 +434,7 @@ router.get("/wallet/codes", async (req, res) => {
   }
   if (!value) return res.status(400).send("missing value or client/campaign");
 
-  const barcodeImg = `${baseUrl(req)}/api/barcode/${encodeURIComponent(value)}.png`;
+  const barcodeImg = `${baseUrl()}/api/barcode/${encodeURIComponent(value)}.png`;
 
   res.send(`<!doctype html>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -613,98 +503,7 @@ router.get("/wallet/codes", async (req, res) => {
   </script>`);
 });
 
-// -------------------- Telemetría: instalar (opcional) --------------------
-router.post("/telemetry/install", async (req, res) => {
-  try {
-    const b = req.body || {};
-    const memberId = b.member_id ?? null;
-    const passId   = b.pass_id ?? null;
-    let p = String(b.platform || "").toLowerCase();
-    let platform =
-      p === "ios" || p === "apple" ? "apple" :
-      p === "google" || p === "android" ? "google" : "unknown";
-    const sourceRaw = String(b.source || req.query.source || "link").toLowerCase();
-    const source =
-      sourceRaw === "qr" ? "qr" :
-      sourceRaw === "barcode" ? "barcode" : "link";
-    if (!SKIP_DB) {
-      await pool.query(
-        `INSERT INTO telemetry_events
-           (member_id, pass_id, platform, source, event_type, user_agent, ip_address)
-         VALUES (?, ?, ?, ?, 'install', ?, ?)`,
-        [memberId, passId, platform, source, req.headers["user-agent"] || null, req.headers["x-forwarded-for"] || req.ip || null]
-      );
-    }
-    return res.status(201).json({ ok: true });
-  } catch (e) {
-    console.error("telemetry install error:", e?.message || e);
-    return res.status(500).json({ ok: false, error: String(e?.message || e) });
-  }
-});
-
-// Smart link: detecta iOS/Android y redirige al destino correcto
-// Smart link: detecta iOS/Android y redirige al destino correcto
-router.get("/wallet/smart/:token", async (req, res) => {
-  try {
-    const { client, campaign } = jwt.verify(req.params.token, SECRET);
-    const ua = String(req.get("user-agent") || "").toLowerCase();
-    const isApple = /iphone|ipad|ipod|macintosh/.test(ua);
-
-    // --- Enriquecer con DB: external_id, nombre/apellido, tipoCliente ---
-    let externalId  = client;
-    let displayName = client;
-    let tipoCliente = null;
-
-    try {
-      const r = await findMemberFlexible(client, campaign);
-      if (r) {
-        externalId = r.external_id || client;
-        const fn = r.nombre || r.first_name || "";
-        const ln = r.apellido || r.last_name || "";
-        displayName = `${String(fn||"").trim()} ${String(ln||"").trim()}`.trim() || client;
-        tipoCliente = r.tipoCliente || null; // "gold" / "blue"
-      }
-    } catch {}
-
-    // iOS → endpoint de Apple (.pkpass)
-    if (isApple) {
-    const iosToken = jwt.sign({ client, campaign }, SECRET, { expiresIn: "15m" });
-    const tier = req.query?.tier || req.body?.tier;
-    const extraTier = tier ? `?tier=${encodeURIComponent(tier)}` : "";
-    const appleUrl = `${baseUrl(req)}/api/wallet/ios/${iosToken}${extraTier}`;
-    return res.redirect(302, appleUrl);
-  }
-
-    // Android/Google Wallet → usa tier (preferencia: DB, luego query/body, luego "blue")
-    const tier = tierFromSources({
-    tipoCliente,
-    queryTier: req.query?.tier,
-    bodyTier:  req.body?.tier
-  });
-  console.log(
-  "[smart] client=", client,
-  "campaign=", campaign,
-  "tipoCliente(DB)=", tipoCliente,
-  "tierFinal=", tier,
-  "classRef=", classIdForTier(tier)
-);
-
-
-  const googleSaveUrl = buildGoogleSaveUrl(req, { client, campaign, externalId, displayName, tier });
-  return res.redirect(302, googleSaveUrl);
-
-  } catch (e) {
-    const status  = e?.response?.status || 401;
-    const details = e?.response?.data || e?.message || String(e);
-    console.error("wallet/smart error:", details);
-    return res.status(status).json({ message: "Token inválido/vencido", details });
-  }
-});
-
-// valida PUBLIC_BASE_URL
-baseUrl();
-
-// POST /api/wallet/email  → envía el correo con el smart link
+// ===================== Email con Smart Link =====================
 router.post("/wallet/email", async (req, res) => {
   try {
     const client   = String(req.body.client   || "");
@@ -714,16 +513,14 @@ router.post("/wallet/email", async (req, res) => {
       return res.status(400).json({ ok:false, message:"Falta client/campaign/to" });
     }
 
-    // --- Buscar datos del miembro ---
+    // Buscar datos del miembro
     let externalId = null;
     let displayName = client;
     try {
       const r = await findMemberFlexible(client, campaign);
       if (r) {
-        externalId = r.external_id || null;
-        const fn = r.nombre || r.first_name || "";
-        const ln = r.apellido || r.last_name || "";
-        displayName = `${String(fn||"").trim()} ${String(ln||"").trim()}`.trim() || client;
+        externalId  = r.external_id || null;
+        displayName = getDisplayName(r) || client;
       }
     } catch {}
 
@@ -731,38 +528,30 @@ router.post("/wallet/email", async (req, res) => {
       return res.status(400).json({ ok:false, message:"No hay externalId para el miembro." });
     }
 
-    // --- Smart link (redirige a iOS/Google) ---
+    // Smart link
     const token    = jwt.sign({ client, campaign }, SECRET, { expiresIn: "2d" });
-    const smartUrl = `${baseUrl(req)}/api/wallet/smart/${token}`;
+    const smartUrl = `${baseUrl()}/api/wallet/smart/${token}`;
+    console.log("[email] SMART_URL =>", smartUrl);
 
-    // 👇 Log para verificar que apunta a tu dominio y no a render.com
-console.log("[email] SMART_URL =>", smartUrl);
-    // --- Render del correo (usa tu template) ---
-    const settings = mergeSettings(); // overrides opcionales
+    const settings = mergeSettings();
     const html = renderWalletEmail(settings, {
       displayName,
       membershipId: externalId,
       smartUrl,
     });
 
-    // Subject y messageId únicos → evita “Mostrar texto citado” en Gmail
-    const stamp = new Date().toISOString().replace(/[:T]/g, "-").slice(0,16);
+    const stamp     = new Date().toISOString().replace(/[:T]/g, "-").slice(0,16);
     const subject   = `${settings.subject} • ${displayName || externalId} • ${stamp}`;
     const messageId = `<${crypto.randomBytes(9).toString("hex")}@alcazaren.com.gt>`;
 
-    // --- Enviar (Outlook → fallback Gmail) ---
     await sendMailSmart({
-      to,
-      subject,
-      html,
+      to, subject, html,
       text:
         `Su Tarjeta de Lealtad\n\n` +
         `Hola ${displayName || ""}, guarde su tarjeta en su billetera digital.\n\n` +
         `Añadir a mi Wallet: ${smartUrl}\n\n` +
         `Este es un correo automático. No responda a este mensaje.`,
       messageId,
-      inReplyTo: undefined,
-      references: undefined,
       headers: {
         "Auto-Submitted": "auto-generated",
         "X-Auto-Response-Suppress": "All",
@@ -776,5 +565,48 @@ console.log("[email] SMART_URL =>", smartUrl);
   }
 });
 
+// ===================== Smart link UA =====================
+router.get("/wallet/smart/:token", async (req, res) => {
+  try {
+    const { client, campaign } = jwt.verify(req.params.token, SECRET);
+    const ua = String(req.get("user-agent") || "").toLowerCase();
+    const isApple = /iphone|ipad|ipod|macintosh/.test(ua);
+
+    // Enriquecer
+    let externalId  = client;
+    let displayName = client;
+    let tipoCliente = null;
+    try {
+      const r = await findMemberFlexible(client, campaign);
+      if (r) {
+        externalId  = r.external_id || client;
+        displayName = getDisplayName(r) || client;
+        tipoCliente = r.tipoCliente || null;
+      }
+    } catch {}
+
+    if (isApple) {
+      const iosToken  = jwt.sign({ client, campaign }, SECRET, { expiresIn: "15m" });
+      const tierQ     = req.query?.tier || req.body?.tier;
+      const extraTier = tierQ ? `?tier=${encodeURIComponent(tierQ)}` : "";
+      const appleUrl  = `${baseUrl()}/api/wallet/ios/${iosToken}${extraTier}`;
+      return res.redirect(302, appleUrl);
+    }
+
+    const tier = tierFromSources({ tipoCliente, queryTier: req.query?.tier, bodyTier: req.body?.tier });
+    console.log("[smart]", { client, campaign, tipoCliente, tier, classRef: classIdForTier(tier) });
+
+    const googleSaveUrl = buildGoogleSaveUrl({ client, campaign, externalId, displayName, tier });
+    return res.redirect(302, googleSaveUrl);
+  } catch (e) {
+    const status  = e?.response?.status || 401;
+    const details = e?.response?.data || e?.message || String(e);
+    console.error("wallet/smart error:", details);
+    return res.status(status).json({ message: "Token inválido/vencido", details });
+  }
+});
+
+// valida PUBLIC_BASE_URL al cargar
+baseUrl();
 
 module.exports = router;
