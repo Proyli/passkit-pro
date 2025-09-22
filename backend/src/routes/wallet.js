@@ -211,29 +211,29 @@ function buildGoogleSaveUrl({ client, campaign, externalId, displayName, tier })
   const codeValue = String(externalId || "").trim();
   if (!codeValue) throw new Error("No hay externalId para el miembro.");
 
- const rawTier  = String(tier || "");
-const gold     = /(gold|golden|dorado|oro|15)/i.test(rawTier);
-const tierNorm = gold ? "gold" : "blue";
-const verTag   = process.env.WALLET_OBJECT_REV || "2"; 
-  //const tierLabel = gold ? "GOLD 15%" : "BLUE 5%";
+  // --- TIER primero ---
+  const rawTier  = String(tier || "");
+  const gold     = /(gold|golden|dorado|oro|15)/i.test(rawTier);
+  const tierNorm = gold ? "gold" : "blue";
+  const tierLabel= gold ? "GOLD 15%" : "BLUE 5%";
+  const verTag   = String(process.env.WALLET_OBJECT_REV || "2");
 
-  const heroUri  = getHeroUrl();
-  const origin   = baseUrl();
+  const heroUri = getHeroUrl();
+  const origin  = baseUrl();
 
- // usa tierNorm y verTag en el objectId:
-const objectId = `${issuer}.${sanitize(`${codeValue}-${(campaign||"").toLowerCase()}-${tierNorm}-r${verTag}`)}`;
+  // --- ID versionado para forzar objeto nuevo cuando cambies de clase/color ---
+  const objectId = `${issuer}.${sanitize(`${codeValue}-${(campaign||"").toLowerCase()}-${tierNorm}-r${verTag}`)}`;
 
-// clase correcta por tier
-const classRef = classIdForTier(tierNorm);
-console.log("[GW]", { objectId, tierNorm, classRef });
+  // --- Clase correcta según el tier ---
+  const classRef = classIdForTier(tierNorm);
+  console.log("[GW]", { objectId, tierNorm, classRef });
 
-
-// color forzado por tier
-const loyaltyObject = {
-  id: objectId,
-  classId: classRef,
-  state: "ACTIVE",
-  hexBackgroundColor: gold ? "#DAA520" : "#2350C6",
+  // --- Objeto de lealtad ---
+  const loyaltyObject = {
+    id: objectId,
+    classId: classRef,
+    state: "ACTIVE",
+    hexBackgroundColor: gold ? GOLD_HEX : BLUE_HEX,
 
     accountId:   codeValue,
     accountName: displayName || codeValue,
@@ -563,15 +563,23 @@ router.post("/wallet/email", async (req, res) => {
     }
 
     // Buscar datos del miembro
-    let externalId = null;
-    let displayName = client;
-    try {
-      const r = await findMemberFlexible(client, campaign);
-      if (r) {
-        externalId  = r.external_id || null;
-        displayName = getDisplayName(r) || client;
-      }
-    } catch {}
+    // Buscar datos del miembro
+let externalId  = null;
+let displayName = client;
+let tipoCliente = null;                              // <-- añade esto
+try {
+  const r = await findMemberFlexible(client, campaign);
+  if (r) {
+    externalId  = r.external_id || null;
+    displayName = getDisplayName(r) || client;
+    tipoCliente = r.tipoCliente || null;            // <-- y esto
+  }
+} catch {}
+
+const tierParam = (normalizeTier(tipoCliente) || "blue");
+const nameParam = displayName ? `&name=${encodeURIComponent(displayName)}` : "";
+const smartUrl  = `${baseUrl()}/api/wallet/smart/${token}?tier=${encodeURIComponent(tierParam)}${nameParam}`;
+
 
     if (!externalId) {
       return res.status(400).json({ ok:false, message:"No hay externalId para el miembro." });
@@ -579,11 +587,6 @@ router.post("/wallet/email", async (req, res) => {
 
     // Smart link
     const token = jwt.sign({ client, campaign }, SECRET, { expiresIn: "2d" });
-
-    const tierParam = (tipoCliente || "blue").toLowerCase();
-    const nameParam = displayName ? `&name=${encodeURIComponent(displayName)}` : "";
-
-    const smartUrl = `${baseUrl()}/api/wallet/smart/${token}?tier=${encodeURIComponent(tierParam)}${nameParam}`;
 
     console.log("[email] SMART_URL =>", smartUrl);
 
