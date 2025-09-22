@@ -5,33 +5,29 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useProfileStore } from "@/store/profileStore";
 
-// === Tier options → mapean el select a codigoCampana ===
+// === Tier options (para el select) ===
 const TIER_OPTIONS = [
-  { value: "blue",  label: "Blue 5%",  campaign: "blue_5"  },
-  { value: "gold",  label: "Gold 15%", campaign: "gold_15" },
-  { value: "silver",label: "Silver",   campaign: "blue_5"  }, // por ahora se comportan como blue
-  { value: "bronze",label: "Bronze",   campaign: "blue_5"  },
+  { value: "blue", label: "Blue 5%" },
+  { value: "gold", label: "Gold 15%" },
+  { value: "silver", label: "Silver" }, // por ahora se comportan como blue
+  { value: "bronze", label: "Bronze" },
 ];
 
-const mapTierToCampaign = (v: string) =>
-  TIER_OPTIONS.find(t => t.value === v)?.campaign ?? "";
-
-
-// Carga diferida para que un error en PassList no rompa Profile
+// Carga diferida (por si falla PassList no tumba Profile)
 const PassList = lazy(() => import("./PassList"));
 
-// Mantén strings en el formulario para no pelear con inputs controlados
+// Mantén strings en el formulario; convierte a number al guardar
 type FormData = {
   nombre: string;
   apellido: string;
   fechaNacimiento: string;
   codigoCliente: string;
   codigoCampana: string;
-  tipoCliente: string;
+  tipoCliente: string; // "blue" | "gold" | "silver" | "bronze"
   email: string;
   telefono: string;
   genero: string;
-  puntos: string;     // string en el form; se convierte a number al guardar
+  puntos: string; // string en el form
   idExterno: string;
 };
 
@@ -53,60 +49,88 @@ const API_BASE =
   (import.meta as any).env?.VITE_API_BASE_URL?.replace(/\/$/, "") ||
   "http://localhost:3900/api";
 
+// === Email de Wallet ===
+const BACKEND = "https://backend-passforge.onrender.com";
+
+async function enviarWalletEmailDesdePerfil(form: Partial<FormData>) {
+  const payload = {
+    client: form.codigoCliente, // ej: "L00178"
+    campaign: form.codigoCampana, // ej: "CP0078"
+    to: form.email, // correo del cliente
+    tier: /gold/i.test(form.tipoCliente || "") ? "gold" : "blue",
+    name: `${form.nombre || ""} ${form.apellido || ""}`.trim(),
+    externalId: form.idExterno || "", // opcional
+  };
+
+  const res = await fetch(`${BACKEND}/api/wallet/email`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.ok) {
+    throw new Error(data.error || data.message || `HTTP ${res.status}`);
+  }
+  return data; // { ok:true, smartUrl:"..." }
+}
+
 const Profile: React.FC = () => {
   const navigate = useNavigate();
   const { profileData, setProfileData, clearProfileData } = useProfileStore();
 
-  // Inicializa SIEMPRE con un objeto completo
+  // Estado del formulario
   const [formData, setFormData] = useState<FormData>({
     ...EMPTY_FORM,
     ...(profileData as Partial<FormData> | undefined),
   });
 
-  // justo debajo de useState<FormData>(...)
-const [campaignManual, setCampaignManual] = useState<boolean>(
-  Boolean((profileData as any)?.codigoCampana)
-);
+  // Si alguien escribe manualmente codigoCampana
+  const [campaignManual, setCampaignManual] = useState<boolean>(
+    Boolean((profileData as any)?.codigoCampana)
+  );
 
   const handleChange = (
-  e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
-) => {
-  const { name, value } = e.target;
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+  ) => {
+    const { name, value } = e.target;
 
-  if (name === "codigoCampana" && !campaignManual) {
-    setCampaignManual(true);
-  }
+    if (name === "codigoCampana" && !campaignManual) {
+      setCampaignManual(true);
+    }
 
-  const newData = { ...formData, [name]: value };
-  setFormData(newData);
-  setProfileData(newData);
-};
+    const next = { ...formData, [name]: value };
+    setFormData(next);
+    setProfileData(next);
+  };
 
-
+  // Guardar + enviar email Wallet
   const handleGuardar = async () => {
     const nuevoCliente = {
       ...formData,
-      puntos: parseInt(formData.puntos || "0", 10) || 0,
+      puntos: String(parseInt(formData.puntos || "0", 10) || 0), // guarda como string numérica si tu API lo permite; si no, cambia a number
     };
 
     try {
       const res = await fetch(`${API_BASE}/members`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(nuevoCliente),                
+        body: JSON.stringify(nuevoCliente),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
       const data = await res.json();
       console.log("✅ Cliente guardado:", data);
-      alert("Cliente guardado en MySQL con éxito");
 
+      // Enviar email con smart link (BLUE/GOLD según select)
+      await enviarWalletEmailDesdePerfil(nuevoCliente);
+
+      alert("Cliente guardado en MySQL con éxito. Se envió el correo de la Wallet.");
       clearProfileData();
       setFormData(EMPTY_FORM);
       navigate("/members");
-    } catch (err) {
-      console.error("❌ Error al guardar:", err);
-      alert("Hubo un error al guardar el cliente");
+    } catch (err: any) {
+      console.error("❌ Error al guardar/enviar:", err);
+      alert("Hubo un error al guardar o enviar el email: " + err.message);
     }
   };
 
@@ -143,19 +167,17 @@ const [campaignManual, setCampaignManual] = useState<boolean>(
               onChange={handleChange}
             />
           </div>
-          {/* Código de la campaña */}
-        <div>
-          <Label>Código de la campaña</Label>
-          <Input
-            name="codigoCampana"
-            value={formData.codigoCampana}
-            onChange={handleChange}
-            // opcional: placeholder="CP502"
-          />
-        </div>
 
+          <div>
+            <Label>Código de la campaña</Label>
+            <Input
+              name="codigoCampana"
+              value={formData.codigoCampana}
+              onChange={handleChange}
+              placeholder="CP0078"
+            />
+          </div>
 
-          {/* Tipo de cliente */}
           <div>
             <Label>Tipo de cliente</Label>
             <select
@@ -163,7 +185,6 @@ const [campaignManual, setCampaignManual] = useState<boolean>(
               value={formData.tipoCliente}
               onChange={(e) => {
                 const tipo = e.target.value;
-                // ✅ solo actualiza el tipo; NO modifica codigoCampana
                 const next = { ...formData, tipoCliente: tipo };
                 setFormData(next);
                 setProfileData(next);
@@ -221,9 +242,7 @@ const [campaignManual, setCampaignManual] = useState<boolean>(
           </div>
         </div>
 
-        <h2 className="text-xl font-semibold mt-8 mb-4">
-          Pases digitales asignados
-        </h2>
+        <h2 className="text-xl font-semibold mt-8 mb-4">Pases digitales asignados</h2>
         <Suspense fallback={null}>
           <PassList />
         </Suspense>
