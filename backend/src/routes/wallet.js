@@ -56,6 +56,10 @@ const BLUE_HEX  = "#2350C6";
 const GOLD_RGB  = "rgb(218,165,32)"; // Apple
 const BLUE_RGB  = "rgb(35,80,198)";
 
+function isGoldTier(t) {
+  return /(gold|golden|dorado|oro|15)/i.test(String(t || ""));
+}
+
 function getHeroUrl() {
   const envUrl = (process.env.GW_HERO || "").trim();
   if (envUrl) return envUrl;
@@ -64,12 +68,26 @@ function getHeroUrl() {
 
 function normalizeTier(s) {
   const t = String(s || "").toLowerCase();
-  if (t.includes("gold") || t.includes("15")) return "gold";
-  if (t.includes("blue") || t.includes("5"))  return "blue";
-  return "blue";
+  if (!t) return "";
+  // acepta sinónimos: golden, dorado, oro, 15
+  if (/(gold|golden|dorado|oro|15)/i.test(t)) return "gold";
+  if (/(blue|azul|5)/i.test(t))               return "blue";
+  return "";
 }
-function tierFromSources({ tipoCliente, queryTier, bodyTier }) {
+
+/*function tierFromSources({ tipoCliente, queryTier, bodyTier }) {
   return normalizeTier(tipoCliente || queryTier || bodyTier || "blue");
+}*/
+
+// DB → query → body → campaign → default
+function tierFromAll({ tipoCliente, campaign, queryTier, bodyTier }) {
+  return (
+    normalizeTier(tipoCliente) ||
+    normalizeTier(queryTier)   ||
+    normalizeTier(bodyTier)    ||
+    normalizeTier(campaign)    ||
+    "blue"
+  );
 }
 
 function getInfoText(tier) {
@@ -135,33 +153,54 @@ const router = express.Router();
 router.get("/healthz", (_req, res) => res.status(200).send("ok"));
 
 // ===================== DB Helper =====================
+async function tryQuery(sql, params) {
+  try {
+    const [rows] = await pool.query(sql, params);
+    return rows;
+  } catch (e) {
+    if (e?.code === "ER_BAD_FIELD_ERROR") return null; // columna no existe; probamos otra
+    throw e;
+  }
+}
+
 async function findMemberFlexible(client, campaign) {
   if (SKIP_DB) return null;
 
-  let [rows] = await pool.query(
+  // 1) camelCase
+  let rows = await tryQuery(
     `SELECT external_id, nombre, apellido, first_name, last_name, tipoCliente, codigoCliente, codigoCampana
-       FROM members
-      WHERE codigoCliente=? AND \`codigoCampana\`=? LIMIT 1`,
+       FROM members WHERE codigoCliente=? AND codigoCampana=? LIMIT 1`,
     [client, campaign]
   );
   if (rows?.[0]) return rows[0];
 
-  [rows] = await pool.query(
-    `SELECT external_id, nombre, apellido, first_name, last_name, tipoCliente, codigoCliente, codigoCampana
-       FROM members
-      WHERE codigoCliente=? LIMIT 1`,
+  // 2) sólo cliente (camelCase)
+  rows = await tryQuery(
+    `SELECT external_id, nombre, apellido, first_name, last_name, tipoCliente, codigoCliente
+       FROM members WHERE codigoCliente=? LIMIT 1`,
     [client]
   );
   if (rows?.[0]) return rows[0];
 
-  [rows] = await pool.query(
-    `SELECT external_id, nombre, apellido, first_name, last_name, tipoCliente, codigoCliente, codigoCampana
-       FROM members
-      WHERE \`codigoCampana\`=? LIMIT 1`,
-    [campaign]
+  // 3) snake_case
+  rows = await tryQuery(
+    `SELECT external_id, nombre, apellido, first_name, last_name,
+            tipo_cliente AS tipoCliente, codigo_cliente AS codigoCliente, codigo_campana AS codigoCampana
+       FROM members WHERE codigo_cliente=? AND codigo_campana=? LIMIT 1`,
+    [client, campaign]
+  );
+  if (rows?.[0]) return rows[0];
+
+  // 4) sólo cliente (snake_case)
+  rows = await tryQuery(
+    `SELECT external_id, nombre, apellido, first_name, last_name,
+            tipo_cliente AS tipoCliente, codigo_cliente AS codigoCliente
+       FROM members WHERE codigo_cliente=? LIMIT 1`,
+    [client]
   );
   return rows?.[0] || null;
 }
+
 
 // ===================== Google: construir Save URL =====================
 function buildGoogleSaveUrl({ client, campaign, externalId, displayName, tier }) {
@@ -172,26 +211,27 @@ function buildGoogleSaveUrl({ client, campaign, externalId, displayName, tier })
   const codeValue = String(externalId || "").trim();
   if (!codeValue) throw new Error("No hay externalId para el miembro.");
 
-  const tierNorm  = normalizeTier(tier);
-  const objectId  = `${issuer}.${sanitize(`${codeValue}-${(campaign||"").toLowerCase()}-${tierNorm}`)}`;
-  const classRef  = classIdForTier(tierNorm);
-  const heroUri   = getHeroUrl();
-  const origin    = baseUrl();
-  const tierLabel = tierNorm === "gold" ? "GOLD 15%" : "BLUE 5%";
+  // 👇 Decide primero si es gold
+  const rawTier   = String(tier || "");
+  const gold      = isGoldTier(rawTier);
+  const tierNorm  = gold ? "gold" : "blue";
+  const tierLabel = gold ? "GOLD 15%" : "BLUE 5%";
+
+  // 👇 Ahora sí, usa tierNorm
+  const objectId = `${issuer}.${sanitize(`${codeValue}-${(campaign||"").toLowerCase()}-${tierNorm}`)}`;
+  const classRef = classIdForTier(tierNorm);
+  const heroUri  = getHeroUrl();
+  const origin   = baseUrl();
 
   const loyaltyObject = {
     id: objectId,
     classId: classRef,
     state: "ACTIVE",
+    hexBackgroundColor: gold ? GOLD_HEX : BLUE_HEX,
 
-    // 🔥 Color por tier (Google sí requiere HEX)
-    hexBackgroundColor: tierNorm === "gold" ? GOLD_HEX : BLUE_HEX,
+    accountId:   codeValue,
+    accountName: displayName || codeValue,
 
-    // Identidad visible
-    accountId:   codeValue,                     // lo que escanean
-    accountName: displayName || codeValue,      // lo que ven como nombre
-
-    // Bloques visibles
     infoModuleData: {
       labelValueRows: [
         { columns: [{ label: "Nombre", value: displayName || codeValue }] },
@@ -201,36 +241,19 @@ function buildGoogleSaveUrl({ client, campaign, externalId, displayName, tier })
       showLastUpdateTime: false
     },
 
-    imageModulesData: [
-      { id: "alcazaren_hero", mainImage: { sourceUri: { uri: heroUri } } }
-    ],
-
-    textModulesData: [
-      { header: "Información", body: getInfoText(tierNorm) }
-    ],
-
-    linksModuleData: {
-      uris: [
-        { uri: `${origin}/public/terminos`, description: "Términos y condiciones" }
-      ]
-    },
-
+    imageModulesData: [{ id: "alcazaren_hero", mainImage: { sourceUri: { uri: heroUri } } }],
+    textModulesData:  [{ header: "Información", body: getInfoText(tierNorm) }],
+    linksModuleData:  { uris: [{ uri: `${origin}/public/terminos`, description: "Términos y condiciones" }] },
     barcode: { type: "CODE_128", value: codeValue, alternateText: externalId },
   };
 
   const saveToken = jwt.sign(
-    {
-      iss: SA_EMAIL,
-      aud: "google",
-      typ: "savetowallet",
-      payload: { loyaltyObjects: [loyaltyObject], origins: [origin] },
-    },
-    PRIVATE_KEY,
-    { algorithm: "RS256" }
+    { iss: SA_EMAIL, aud: "google", typ: "savetowallet", payload: { loyaltyObjects: [loyaltyObject], origins: [origin] } },
+    PRIVATE_KEY, { algorithm: "RS256" }
   );
-
   return `https://pay.google.com/gp/v/save/${saveToken}`;
 }
+
 
 // ===================== iOS (.pkpass) =====================
 router.get("/wallet/ios/:token", async (req, res) => {
@@ -263,7 +286,12 @@ router.get("/wallet/ios/:token", async (req, res) => {
     const signerKey  = fs.readFileSync(path.join(CERTS, "signerKey.pem"));
 
     // Tier y colores Apple (RGB)
-    const tier = normalizeTier(tipoCliente || req.query.tier || "blue");
+    const tier = tierFromAll({
+    tipoCliente,
+    campaign,
+    queryTier: req.query.tier
+  });
+
     const tierLabel = tier === "gold" ? "GOLD 15%" : "BLUE 5%";
     const theme = (tier === "gold")
       ? { bg: GOLD_RGB, fg: "rgb(255,255,255)", label: "rgb(255,255,255)" }
@@ -366,7 +394,13 @@ router.get("/wallet/resolve", async (req, res) => {
     }
 
     // Android/Google → Save URL
-    const tier = tierFromSources({ tipoCliente, queryTier: req.query.tier, bodyTier: req.body?.tier });
+    const tier = tierFromAll({
+  tipoCliente,
+  campaign,
+  queryTier: req.query?.tier,
+  bodyTier:  req.body?.tier
+});
+
     console.log("[resolve]", { client, campaign, tipoCliente, tier, classRef: classIdForTier(tier) });
 
     const saveUrl = buildGoogleSaveUrl({ client, campaign, externalId, displayName, tier });
@@ -402,7 +436,7 @@ router.get("/wallet/google/:token", async (req, res) => {
       }
     } catch {}
 
-    const tier    = tierFromSources({ tipoCliente, queryTier: req.query.tier });
+    const tier = tierFromAll({ tipoCliente, campaign, queryTier: req.query.tier });
     const saveUrl = buildGoogleSaveUrl({ client, campaign, externalId, displayName, tier });
     return res.redirect(302, saveUrl);
   } catch (e) {
@@ -593,7 +627,13 @@ router.get("/wallet/smart/:token", async (req, res) => {
       return res.redirect(302, appleUrl);
     }
 
-    const tier = tierFromSources({ tipoCliente, queryTier: req.query?.tier, bodyTier: req.body?.tier });
+    const tier = tierFromAll({
+  tipoCliente,
+  campaign,
+  queryTier: req.query?.tier,
+  bodyTier:  req.body?.tier
+});
+
     console.log("[smart]", { client, campaign, tipoCliente, tier, classRef: classIdForTier(tier) });
 
     const googleSaveUrl = buildGoogleSaveUrl({ client, campaign, externalId, displayName, tier });
