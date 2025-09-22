@@ -219,7 +219,8 @@ function buildGoogleSaveUrl({ client, campaign, externalId, displayName, tier })
 
   // 👇 Ahora sí, usa tierNorm
   const objectId = `${issuer}.${sanitize(`${codeValue}-${(campaign||"").toLowerCase()}-${tierNorm}`)}`;
-  const classRef = classIdForTier(tierNorm);
+  const classRef = classIdForTier(tierNorm); // <- seguro y simple
+  console.log("[GW] color:", gold ? "GOLD" : "BLUE", "classRef:", classRef);
   const heroUri  = getHeroUrl();
   const origin   = baseUrl();
 
