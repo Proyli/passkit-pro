@@ -211,24 +211,29 @@ function buildGoogleSaveUrl({ client, campaign, externalId, displayName, tier })
   const codeValue = String(externalId || "").trim();
   if (!codeValue) throw new Error("No hay externalId para el miembro.");
 
-  // 👇 Decide primero si es gold
-  const rawTier   = String(tier || "");
-  const gold      = isGoldTier(rawTier);
-  const tierNorm  = gold ? "gold" : "blue";
-  const tierLabel = gold ? "GOLD 15%" : "BLUE 5%";
+ const rawTier  = String(tier || "");
+const gold     = /(gold|golden|dorado|oro|15)/i.test(rawTier);
+const tierNorm = gold ? "gold" : "blue";
+const verTag   = process.env.WALLET_OBJECT_REV || "2"; 
+  //const tierLabel = gold ? "GOLD 15%" : "BLUE 5%";
 
-  // 👇 Ahora sí, usa tierNorm
-  const objectId = `${issuer}.${sanitize(`${codeValue}-${(campaign||"").toLowerCase()}-${tierNorm}`)}`;
-  const classRef = classIdForTier(tierNorm); // <- seguro y simple
-  console.log("[GW] color:", gold ? "GOLD" : "BLUE", "classRef:", classRef);
   const heroUri  = getHeroUrl();
   const origin   = baseUrl();
 
-  const loyaltyObject = {
-    id: objectId,
-    classId: classRef,
-    state: "ACTIVE",
-    hexBackgroundColor: gold ? GOLD_HEX : BLUE_HEX,
+ // usa tierNorm y verTag en el objectId:
+const objectId = `${issuer}.${sanitize(`${codeValue}-${(campaign||"").toLowerCase()}-${tierNorm}-r${verTag}`)}`;
+
+// clase correcta por tier
+const classRef = classIdForTier(tierNorm);
+console.log("[GW]", { objectId, tierNorm, classRef });
+
+
+// color forzado por tier
+const loyaltyObject = {
+  id: objectId,
+  classId: classRef,
+  state: "ACTIVE",
+  hexBackgroundColor: gold ? "#DAA520" : "#2350C6",
 
     accountId:   codeValue,
     accountName: displayName || codeValue,
