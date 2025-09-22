@@ -273,6 +273,9 @@ router.get("/wallet/ios/:token", async (req, res) => {
         tipoCliente = r.tipoCliente || null;
       }
     } catch {}
+   if (req.query?.name) {
+  displayName = String(req.query.name).trim();
+}
 
     // Modelo e iconos mínimos
     const icon1x = path.join(MODEL, "icon.png");
@@ -385,7 +388,13 @@ router.get("/wallet/resolve", async (req, res) => {
         tipoCliente = r.tipoCliente || null;
       }
     } catch {}
+    // override desde query/body si viene del frontend
+if (req.query?.name || req.body?.name) {
+  displayName = String(req.query.name || req.body.name).trim();
+}
 
+console.log("[resolve] using:", { client, campaign, externalId, displayName, tipoCliente });
+ 
     // iOS → .pkpass
     if (forced === "apple" || isiOS) {
       const iosToken  = jwt.sign({ client, campaign }, SECRET, { expiresIn: "15m" });
@@ -564,8 +573,13 @@ router.post("/wallet/email", async (req, res) => {
     }
 
     // Smart link
-    const token    = jwt.sign({ client, campaign }, SECRET, { expiresIn: "2d" });
-    const smartUrl = `${baseUrl()}/api/wallet/smart/${token}`;
+    const token = jwt.sign({ client, campaign }, SECRET, { expiresIn: "2d" });
+
+    const tierParam = (tipoCliente || "blue").toLowerCase();
+    const nameParam = displayName ? `&name=${encodeURIComponent(displayName)}` : "";
+
+    const smartUrl = `${baseUrl()}/api/wallet/smart/${token}?tier=${encodeURIComponent(tierParam)}${nameParam}`;
+
     console.log("[email] SMART_URL =>", smartUrl);
 
     const settings = mergeSettings();
@@ -621,12 +635,20 @@ router.get("/wallet/smart/:token", async (req, res) => {
     } catch {}
 
     if (isApple) {
-      const iosToken  = jwt.sign({ client, campaign }, SECRET, { expiresIn: "15m" });
-      const tierQ     = req.query?.tier || req.body?.tier;
-      const extraTier = tierQ ? `?tier=${encodeURIComponent(tierQ)}` : "";
-      const appleUrl  = `${baseUrl()}/api/wallet/ios/${iosToken}${extraTier}`;
-      return res.redirect(302, appleUrl);
-    }
+  const iosToken = jwt.sign({ client, campaign }, SECRET, { expiresIn: "15m" });
+
+  const tierQ = req.query?.tier || req.body?.tier;
+  const nameQ = req.query?.name || req.body?.name;
+
+  const qs = [];
+  if (tierQ) qs.push(`tier=${encodeURIComponent(tierQ)}`);
+  if (nameQ) qs.push(`name=${encodeURIComponent(nameQ)}`);
+
+  const extra = qs.length ? `?${qs.join("&")}` : "";
+  const appleUrl = `${baseUrl()}/api/wallet/ios/${iosToken}${extra}`;
+  return res.redirect(302, appleUrl);
+}
+
 
     const tier = tierFromAll({
   tipoCliente,
