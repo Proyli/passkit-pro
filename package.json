@@ -48,6 +48,7 @@
     "csv-writer": "^1.6.0",
     "date-fns": "^3.6.0",
     "embla-carousel-react": "^8.3.0",
+    "google-auth-library": "^10.3.0",
     "input-otp": "^1.2.4",
     "jsbarcode": "^3.12.1",
     "lucide-react": "^0.462.0",
@@ -89,5 +90,18 @@
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.0.1",
     "vite": "^5.4.1"
-  }
+  },
+  "description": "**URL**: https://lovable.dev/projects/cc4ee0da-972a-449e-bb55-46ae93f41110",
+  "main": "eslint.config.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Proyli/passkit-pro.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Proyli/passkit-pro/issues"
+  },
+  "homepage": "https://github.com/Proyli/passkit-pro#readme"
 }

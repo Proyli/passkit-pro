@@ -1,20 +1,25 @@
 // backend/src/helpers/tier.js
-function classIdForTier(tier = "blue") {
+function ensurePrefixed(id) {
   const issuer = process.env.GOOGLE_WALLET_ISSUER_ID;
+  if (!id) return null;
+  // si ya viene con issuer (3388....*), respétalo
+  return /^\d+\./.test(id) ? id : `${issuer}.${id}`;
+}
+
+function classIdForTier(tier = "") {
   const t = String(tier).trim().toLowerCase();
+  const isGold = t.includes("gold"); // aquí ya te llega "gold" o "blue"
 
-  // acepta "gold", "gold 15", "15%", etc.
-  const isGold =
-    t.includes("gold") || t.includes("15");
+  const goldShort = process.env.GOOGLE_WALLET_CLASS_ID_GOLD || process.env.GOOGLE_WALLET_CLASS_ID;
+  const blueShort = process.env.GOOGLE_WALLET_CLASS_ID_BLUE || process.env.GOOGLE_WALLET_CLASS_ID;
 
-  const classShort = isGold
-    ? process.env.GOOGLE_WALLET_CLASS_ID_GOLD   // p.ej. digital_pass_gold
-    : process.env.GOOGLE_WALLET_CLASS_ID_BLUE;  // p.ej. digital_pass_blue
+  const chosen = isGold ? goldShort : blueShort;
+  const full   = ensurePrefixed(chosen);
 
-  if (!issuer || !classShort) {
+  if (!full) {
     throw new Error("Faltan GOOGLE_WALLET_ISSUER_ID o GOOGLE_WALLET_CLASS_ID_[BLUE|GOLD]");
   }
-  return `${issuer}.${classShort}`;
+  return full;
 }
 
 module.exports = { classIdForTier };
