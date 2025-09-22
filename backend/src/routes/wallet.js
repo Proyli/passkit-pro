@@ -67,29 +67,23 @@ function getHeroUrl() {
 }
 
 function normalizeTier(s) {
-  const t = String(s || "").toLowerCase();
-  if (!t) return "";
-  // acepta sinónimos: golden, dorado, oro, 15
-  if (/(gold|golden|dorado|oro|15)/i.test(t)) return "gold";
-  if (/(blue|azul|5)/i.test(t))               return "blue";
+  const t = String(s || "").trim().toLowerCase();
+
+  // match exacto (con o sin %)
+  if (/^(gold|golden|dorado|oro|15|15%)$/.test(t)) return "gold";
+  if (/^(blue|azul|5|5%)$/.test(t)) return "blue";
   return "";
 }
 
-/*function tierFromSources({ tipoCliente, queryTier, bodyTier }) {
-  return normalizeTier(tipoCliente || queryTier || bodyTier || "blue");
-}*/
-
-// DB → query → body → campaign → default
 function tierFromAll({ tipoCliente, campaign, queryTier, bodyTier }) {
+  // DB -> query -> body -> (NO usar campaign como fallback) -> blue
   return (
     normalizeTier(tipoCliente) ||
     normalizeTier(queryTier)   ||
     normalizeTier(bodyTier)    ||
-    normalizeTier(campaign)    ||
     "blue"
   );
 }
-
 function getInfoText(tier) {
   const t = String(tier || "").toLowerCase();
   if (t === "gold") {
@@ -208,8 +202,8 @@ function buildGoogleSaveUrl({ client, campaign, externalId, displayName, tier })
   if (!issuer) throw new Error("Falta GOOGLE_WALLET_ISSUER_ID");
   if (!SA_EMAIL || !PRIVATE_KEY) throw new Error("Faltan GOOGLE_SA_EMAIL o PRIVATE_KEY");
 
-  const codeValue = String(externalId || "").trim();
-  if (!codeValue) throw new Error("No hay externalId para el miembro.");
+ const codeValue = String(externalId || client || "").trim();
+if (!codeValue) throw new Error("No hay código para el miembro.");
 
     const rawTier  = String(tier || "");
   const gold     = /(gold|golden|dorado|oro|15)/i.test(rawTier);
@@ -555,6 +549,7 @@ router.get("/wallet/codes", async (req, res) => {
 });
 
 // ===================== Email con Smart Link =====================
+
 // ===================== Email con Smart Link =====================
 router.post("/wallet/email", async (req, res) => {
   try {
@@ -569,7 +564,6 @@ router.post("/wallet/email", async (req, res) => {
     let externalId   = null;
     let displayName  = client;
     let tipoCliente  = null;
-
     try {
       const r = await findMemberFlexible(client, campaign);
       if (r) {
@@ -579,17 +573,23 @@ router.post("/wallet/email", async (req, res) => {
       }
     } catch {}
 
-    if (!externalId) {
-      return res.status(400).json({ ok:false, message:"No hay externalId para el miembro." });
-    }
+    // 🔥 Fallback: permite forzar por body y si aún no hay, usa el client
+    const extFromBody = String(req.body.externalId || req.body.external_id || "").trim();
+    externalId = extFromBody || externalId || client;
 
-    // Smart link
+    // Tier: body > DB > blue
+    const inputTier = normalizeTier(req.body.tier);
+    const tierParam = inputTier || normalizeTier(tipoCliente) || "blue";
+
+    // Nombre opcional desde body
+    if (req.body.name) displayName = String(req.body.name).trim() || displayName;
+
+    // Smart link (pasamos nombre para iOS; externalId ya viaja por DB o cae a client)
     const token     = jwt.sign({ client, campaign }, SECRET, { expiresIn: "2d" });
-    const tierParam = normalizeTier(tipoCliente) || "blue";
     const nameParam = displayName ? `&name=${encodeURIComponent(displayName)}` : "";
     const smartUrl  = `${baseUrl()}/api/wallet/smart/${token}?tier=${encodeURIComponent(tierParam)}${nameParam}`;
 
-    console.log("[email] SMART_URL =>", smartUrl);
+    console.log("[email] SMART_URL =>", smartUrl, "| ext=", externalId, "| tierFinal=", tierParam);
 
     const settings = mergeSettings();
     const html = renderWalletEmail(settings, {
@@ -610,10 +610,7 @@ router.post("/wallet/email", async (req, res) => {
         `Añadir a mi Wallet: ${smartUrl}\n\n` +
         `Este es un correo automático. No responda a este mensaje.`,
       messageId,
-      headers: {
-        "Auto-Submitted": "auto-generated",
-        "X-Auto-Response-Suppress": "All",
-      },
+      headers: { "Auto-Submitted": "auto-generated", "X-Auto-Response-Suppress": "All" },
     });
 
     return res.status(200).json({ ok:true, to, smartUrl });
@@ -622,7 +619,6 @@ router.post("/wallet/email", async (req, res) => {
     return res.status(500).json({ ok:false, error: String(e?.message || e) });
   }
 });
-
 
 // ===================== Smart link UA =====================
 router.get("/wallet/smart/:token", async (req, res) => {
