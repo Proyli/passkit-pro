@@ -211,29 +211,30 @@ function buildGoogleSaveUrl({ client, campaign, externalId, displayName, tier })
   const codeValue = String(externalId || "").trim();
   if (!codeValue) throw new Error("No hay externalId para el miembro.");
 
-  // --- TIER primero ---
-  const rawTier  = String(tier || "");
+    const rawTier  = String(tier || "");
   const gold     = /(gold|golden|dorado|oro|15)/i.test(rawTier);
   const tierNorm = gold ? "gold" : "blue";
-  const tierLabel= gold ? "GOLD 15%" : "BLUE 5%";
-  const verTag   = String(process.env.WALLET_OBJECT_REV || "2");
+  const tierLabel = gold ? "GOLD 15%" : "BLUE 5%";   // <- ¡vuelve!
+  const verTag   = process.env.WALLET_OBJECT_REV || "2";
 
-  const heroUri = getHeroUrl();
-  const origin  = baseUrl();
+  const heroUri  = getHeroUrl();
+  const origin   = baseUrl();
 
-  // --- ID versionado para forzar objeto nuevo cuando cambies de clase/color ---
-  const objectId = `${issuer}.${sanitize(`${codeValue}-${(campaign||"").toLowerCase()}-${tierNorm}-r${verTag}`)}`;
+  // ID nuevo para forzar refresco en el teléfono
+  const objectId = `${issuer}.${sanitize(
+    `${codeValue}-${(campaign || "").toLowerCase()}-${tierNorm}-r${verTag}`
+  )}`;
 
-  // --- Clase correcta según el tier ---
+  // Clase correcta por tier
   const classRef = classIdForTier(tierNorm);
   console.log("[GW]", { objectId, tierNorm, classRef });
 
-  // --- Objeto de lealtad ---
+  // Objeto con color forzado por tier
   const loyaltyObject = {
     id: objectId,
     classId: classRef,
     state: "ACTIVE",
-    hexBackgroundColor: gold ? GOLD_HEX : BLUE_HEX,
+    hexBackgroundColor: gold ? "#DAA520" : "#2350C6",
 
     accountId:   codeValue,
     accountName: displayName || codeValue,
@@ -241,7 +242,7 @@ function buildGoogleSaveUrl({ client, campaign, externalId, displayName, tier })
     infoModuleData: {
       labelValueRows: [
         { columns: [{ label: "Nombre", value: displayName || codeValue }] },
-        { columns: [{ label: "Nivel",  value: tierLabel }] },
+        { columns: [{ label: "Nivel",  value: tierLabel }] },   // <- ya no rompe
         { columns: [{ label: "Código", value: codeValue }] }
       ],
       showLastUpdateTime: false
@@ -252,6 +253,7 @@ function buildGoogleSaveUrl({ client, campaign, externalId, displayName, tier })
     linksModuleData:  { uris: [{ uri: `${origin}/public/terminos`, description: "Términos y condiciones" }] },
     barcode: { type: "CODE_128", value: codeValue, alternateText: externalId },
   };
+
 
   const saveToken = jwt.sign(
     { iss: SA_EMAIL, aud: "google", typ: "savetowallet", payload: { loyaltyObjects: [loyaltyObject], origins: [origin] } },
@@ -553,6 +555,7 @@ router.get("/wallet/codes", async (req, res) => {
 });
 
 // ===================== Email con Smart Link =====================
+// ===================== Email con Smart Link =====================
 router.post("/wallet/email", async (req, res) => {
   try {
     const client   = String(req.body.client   || "");
@@ -563,30 +566,28 @@ router.post("/wallet/email", async (req, res) => {
     }
 
     // Buscar datos del miembro
-    // Buscar datos del miembro
-let externalId  = null;
-let displayName = client;
-let tipoCliente = null;                              // <-- añade esto
-try {
-  const r = await findMemberFlexible(client, campaign);
-  if (r) {
-    externalId  = r.external_id || null;
-    displayName = getDisplayName(r) || client;
-    tipoCliente = r.tipoCliente || null;            // <-- y esto
-  }
-} catch {}
+    let externalId   = null;
+    let displayName  = client;
+    let tipoCliente  = null;
 
-const tierParam = (normalizeTier(tipoCliente) || "blue");
-const nameParam = displayName ? `&name=${encodeURIComponent(displayName)}` : "";
-const smartUrl  = `${baseUrl()}/api/wallet/smart/${token}?tier=${encodeURIComponent(tierParam)}${nameParam}`;
-
+    try {
+      const r = await findMemberFlexible(client, campaign);
+      if (r) {
+        externalId   = r.external_id || null;
+        displayName  = getDisplayName(r) || client;
+        tipoCliente  = r.tipoCliente || null;
+      }
+    } catch {}
 
     if (!externalId) {
       return res.status(400).json({ ok:false, message:"No hay externalId para el miembro." });
     }
 
     // Smart link
-    const token = jwt.sign({ client, campaign }, SECRET, { expiresIn: "2d" });
+    const token     = jwt.sign({ client, campaign }, SECRET, { expiresIn: "2d" });
+    const tierParam = normalizeTier(tipoCliente) || "blue";
+    const nameParam = displayName ? `&name=${encodeURIComponent(displayName)}` : "";
+    const smartUrl  = `${baseUrl()}/api/wallet/smart/${token}?tier=${encodeURIComponent(tierParam)}${nameParam}`;
 
     console.log("[email] SMART_URL =>", smartUrl);
 
@@ -621,6 +622,7 @@ const smartUrl  = `${baseUrl()}/api/wallet/smart/${token}?tier=${encodeURICompon
     return res.status(500).json({ ok:false, error: String(e?.message || e) });
   }
 });
+
 
 // ===================== Smart link UA =====================
 router.get("/wallet/smart/:token", async (req, res) => {
