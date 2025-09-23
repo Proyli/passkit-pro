@@ -14,6 +14,7 @@ import { PassModal } from "./ui/PassModal";
 import { Pass } from "@/types/pass.types";
 import AddToWalletButton from "@/components/wallet/AddToWalletButton";
 import { useToast } from "@/hooks/use-toast";
+import { can } from "@/lib/authz";
 
 const API = import.meta.env.VITE_API_BASE_URL || "/api";
 
@@ -126,18 +127,22 @@ const PassCard = ({ pass, onDuplicate, onDelete, compact = false }: PassCardProp
             </div>
 
             <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className={`transition-opacity ${compact ? "" : "opacity-0 group-hover:opacity-100"} h-8 w-8 ml-2`}
-                  aria-label="Acciones"
-                >
-                  <MoreHorizontal className="w-4 h-4" />
-                </Button>
-              </DropdownMenuTrigger>
+              {(can.editMember() || can.deleteMember() || onDuplicate) && (
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className={`transition-opacity ${compact ? "" : "opacity-0 group-hover:opacity-100"} h-8 w-8 ml-2`}
+                    aria-label="Acciones"
+                  >
+                    <MoreHorizontal className="w-4 h-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+              )}
+
               <DropdownMenuContent align="end">
+              {can.editMember() && (
                 <DropdownMenuItem
                   onClick={(e) => {
                     e.stopPropagation();
@@ -146,38 +151,44 @@ const PassCard = ({ pass, onDuplicate, onDelete, compact = false }: PassCardProp
                 >
                   <Edit className="w-4 h-4 mr-2" /> Edit
                 </DropdownMenuItem>
+              )}
 
+              {onDuplicate && (
                 <DropdownMenuItem
                   onClick={(e) => {
                     e.stopPropagation();
-                    onDuplicate?.(pass);
+                    onDuplicate(pass);
                   }}
                 >
                   <Copy className="w-4 h-4 mr-2" /> Duplicate
                 </DropdownMenuItem>
+              )}
 
-                <DropdownMenuItem
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setModalOpen(true);
-                  }}
-                >
-                  <QrCode className="w-4 h-4 mr-2" /> QR Code
-                </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setModalOpen(true);
+                }}
+              >
+                <QrCode className="w-4 h-4 mr-2" /> QR Code
+              </DropdownMenuItem>
 
+              {can.deleteMember() && onDelete && (
                 <DropdownMenuItem
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     if (window.confirm("¿Eliminar este pase? Esta acción no se puede deshacer.")) {
-                      onDelete?.(pass.id);
+                      onDelete(pass.id);
                     }
                   }}
                   className="text-red-600 focus:text-red-600"
                 >
                   <Trash2 className="w-4 h-4 mr-2" /> Delete
                 </DropdownMenuItem>
-              </DropdownMenuContent>
+              )}
+            </DropdownMenuContent>
+
             </DropdownMenu>
           </div>
 

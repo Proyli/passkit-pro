@@ -59,25 +59,27 @@ async function sendPassEmail(args: SendArgs) {
 
   const { googleUrl, appleUrl } = buildUrls(clientCode, campaignCode);
 
-  const r = await fetch(`${API}/email/send-pass`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "x-role": "admin" },
-    body: JSON.stringify({
-      to,
-      displayName,
-      buttonText,            // → {{BUTTON_TEXT}}
-      googleUrl,             // → {{GOOGLE_SAVE_URL}}
-      appleUrl,              // → {{APPLE_URL}}
-      htmlTemplate,          // → body (HTML) desde tu editor
-      subject: "Su Tarjeta de Lealtad",
-      from: "Distribuidora Alcazarén",
+ const r = await fetch(`${API}/distribution/send-test-email`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json", "x-role": "admin" },
+  body: JSON.stringify({
+    to,
+    displayName,
+    clientCode,
+    campaignCode,
+    // IMPORTANTE: manda lo que el usuario editó ↓
+    settings,           // ← objeto completo (subject, fromName, htmlBody, etc.)
+    htmlTemplate,       // ← o solo el HTML si prefieres
+    buttonText,
+    membershipId,
+    logoUrl,
+    subject: settings?.subject,
+    from: settings?.fromName,
+    provider: "outlook", // o "gmail"
+  }),
+});
 
-      // 👇 NUEVOS
-      membershipId,          // → {{MEMBERSHIP_ID}}
-      logoUrl,               // → {{LOGO_URL}} (opcional)
-      settings,              // si lo envías, el backend usará todo tu look
-    }),
-  });
+
 
   if (!r.ok) {
     const j = await r.json().catch(() => ({} as any));
@@ -107,15 +109,76 @@ const defaultSettings: Settings = {
   fromName: "Distribuidora Alcazarén, S. A.",
   buttonText: "Guardar en el móvil",
 
-  // ✅ Colores para que luzca como la segunda imagen
   lightBg: "#f5f7fb",
   darkBg: "#0b1626",
   bodyColorLight: "#ffffff",
   bodyColorDark: "#0f2b40",
-  htmlBody: '<!-- CONTENIDO PERSONALIZABLE DEL EMAIL -->\n<p style="margin:0 0 14px 0;font-size:18px;line-height:1.45;">\n  <strong>Su Tarjeta de Lealtad</strong>\n</p>\n\n<p style="margin:0 0 10px 0;line-height:1.6;">\n  Estimado/a <strong>{{DISPLAY_NAME}}</strong>,\n</p>\n\n<p style="margin:0 0 10px 0;line-height:1.6;">\n  Es un honor darle la bienvenida a nuestro exclusivo programa\n  <em>Lealtad Alcazaren</em>, diseñado para premiar su preferencia con beneficios únicos.\n</p>\n\n<p style="margin:0 0 10px 0;line-height:1.6;">\n  A partir de hoy, cada compra de nuestra gama de productos selectos le otorgará\n  ahorros inmediatos y experiencias distinguidas. Acceda fácilmente a sus\n  beneficios desde su billetera digital y disfrute de descuentos exclusivos.\n</p>\n\n<!-- CTA: Botones responsivos y compatibles con Outlook -->\n<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin:18px 0 6px 0;">\n  <tr>\n    <td align="center" style="padding:0;">\n      <!--[if mso]>\n      <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="{{GOOGLE_SAVE_URL}}" arcsize="12%" stroke="f" fillcolor="#8B173C" style="height:48px;v-text-anchor:middle;width:320px;">\n        <w:anchorlock/>\n        <center style="color:#ffffff;font-family:Segoe UI,Arial,sans-serif;font-size:16px;font-weight:700;">\n          {{BUTTON_TEXT}}\n        </center>\n      </v:roundrect>\n      <![endif]-->\n      <!--[if !mso]><!-- -->\n      <a href="{{GOOGLE_SAVE_URL}}"\n         style="background:#8B173C;border-radius:10px;display:inline-block;padding:14px 22px;text-decoration:none;\n                color:#ffffff;font-weight:700;font-family:Segoe UI,Roboto,Arial,sans-serif;font-size:16px;">\n        {{BUTTON_TEXT}}\n      </a>\n      <!--<![endif]-->\n    </td>\n  </tr>\n</table>\n\n<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin:8px 0 18px 0;">\n  <tr>\n    <td align="center" style="padding:0;">\n      <!--[if mso]>\n      <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="{{APPLE_URL}}" arcsize="12%" strokecolor="#0F2B40" fillcolor="#FFFFFF" style="height:46px;v-text-anchor:middle;width:320px;">\n        <w:anchorlock/>\n        <center style="color:#0F2B40;font-family:Segoe UI,Arial,sans-serif;font-size:15px;font-weight:700;">\n          Añadir a Apple Wallet\n        </center>\n      </v:roundrect>\n      <![endif]-->\n      <!--[if !mso]><!-- -->\n      <a href="{{APPLE_URL}}"\n         style="background:#FFFFFF;border:2px solid #0F2B40;border-radius:10px;display:inline-block;padding:12px 20px;text-decoration:none;\n                color:#0F2B40;font-weight:700;font-family:Segoe UI,Roboto,Arial,sans-serif;font-size:15px;">\n        Añadir a Apple Wallet\n      </a>\n      <!--<![endif]-->\n    </td>\n  </tr>\n</table>\n\n<hr style="border:none;border-top:1px solid rgba(0,0,0,.12);margin:18px 0;" />\n\n<p style="margin:0 0 6px 0;line-height:1.6;"><em>Aplican restricciones.</em></p>\n<p style="margin:0 0 6px 0;line-height:1.6;">\n  Si tiene dudas, puede comunicarse al teléfono 2429 5959, ext. 2120 (Ciudad Capital),\n  ext. 1031 (Xelajú) o al correo\n  <a href="mailto:alcazaren@alcazaren.com.gt" style="color:inherit;text-decoration:underline;">alcazaren@alcazaren.com.gt</a>.\n</p>\n\n<p style="margin:14px 0 0 0;line-height:1.6;">\n  Saludos cordiales.<br>\n  <strong>Distribuidora Alcazarén</strong>\n</p>\n<!-- /CONTENIDO PERSONALIZABLE DEL EMAIL -->',
 
-    logoUrl: "https://raw.githubusercontent.com/Proyli/wallet-assets/main/program-logo.png",
+  // 👇 Un solo botón que usa {{SMART_URL}}
+  htmlBody: `
+<!-- Encabezado con logo y Membership ID (opcional) -->
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 16px 0">
+  <tr>
+    <td align="left" style="padding:0 0 10px 0">
+      <img src="{{LOGO_URL}}" alt="Programa" width="56" height="56"
+           style="border-radius:50%;display:block;border:1px solid rgba(0,0,0,.08)" />
+    </td>
+    <td align="right" style="font:14px/1.4 Segoe UI,Roboto,Arial,sans-serif;color:rgba(0,0,0,.65)">
+      <div style="opacity:.8">Membership ID</div>
+      <div style="font-weight:700;color:#0F2B40">{{MEMBERSHIP_ID}}</div>
+    </td>
+  </tr>
+</table>
+
+<p style="margin:0 0 14px 0;font-size:18px;line-height:1.45;">
+  <strong>Su Tarjeta de Lealtad</strong>
+</p>
+
+<p style="margin:0 0 10px 0;line-height:1.6;">
+  Estimado/a <strong>{{DISPLAY_NAME}}</strong>,
+</p>
+
+<p style="margin:0 0 10px 0;line-height:1.6;">
+  Es un honor darle la bienvenida a nuestro exclusivo programa
+  <em>Lealtad Alcazaren</em>, diseñado para premiar su preferencia con beneficios únicos.
+</p>
+
+<p style="margin:0 0 10px 0;line-height:1.6;">
+  A partir de hoy, cada compra le otorgará ahorros inmediatos y experiencias distinguidas.
+  Guarde su tarjeta en la billetera digital y disfrute de descuentos exclusivos.
+</p>
+
+<!-- CTA ÚNICO con SMART_URL -->
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin:18px 0 10px 0;">
+  <tr>
+    <td align="center" style="padding:0;">
+      <a href="{{SMART_URL}}"
+         style="background:#8B173C;border-radius:10px;display:inline-block;padding:14px 22px;text-decoration:none;
+                color:#ffffff;font-weight:700;font-family:Segoe UI,Roboto,Arial,sans-serif;font-size:16px;">
+        {{BUTTON_TEXT}}
+      </a>
+    </td>
+  </tr>
+</table>
+
+<hr style="border:none;border-top:1px solid rgba(0,0,0,.12);margin:18px 0;" />
+
+<p style="margin:0 0 6px 0;line-height:1.6;"><em>Aplican restricciones.</em></p>
+<p style="margin:0 0 6px 0;line-height:1.6;">
+  Si tiene dudas, puede comunicarse al teléfono 2429 5959, ext. 2120 (Ciudad Capital),
+  ext. 1031 (Xelajú) o al correo
+  <a href="mailto:alcazaren@alcazaren.com.gt" style="color:inherit;text-decoration:underline;">alcazaren@alcazaren.com.gt</a>.
+</p>
+
+<p style="margin:14px 0 0 0;line-height:1.6;">
+  Saludos cordiales.<br>
+  <strong>Distribuidora Alcazarén</strong>
+</p>
+`,
+  logoUrl: "https://raw.githubusercontent.com/Proyli/wallet-assets/main/program-logo.png",
 };
+
+
 
 // Para la tabla de tiers
 type Tier = { id: string; name: string };
@@ -209,15 +272,16 @@ useEffect(() => {
 
   // Reemplazos de PREVIEW (solo visual; el backend inyecta los reales al enviar)
   const SAMPLE: Record<string, string> = {
-    DISPLAY_NAME: displayName || "Linda Pérez",
-    CLIENT: clientCode || "L01313",
-    CAMPAIGN: campaignCode || "C00131",
+    DISPLAY_NAME: displayName || "Nombree",
+    CLIENT: clientCode || "Codigo Cliente",
+    CAMPAIGN: campaignCode || "Codigo Campaña",
     BUTTON_TEXT: btn,
     GOOGLE_SAVE_URL: "#google-wallet",
     APPLE_URL: "#apple-wallet",
     // 👇 añadidos
     MEMBERSHIP_ID: membershipId || "L00005-CP0160",
     LOGO_URL: settings.logoUrl || "https://raw.githubusercontent.com/Proyli/wallet-assets/main/program-logo.png",
+   SMART_URL: "#smart-url",
   };
 
   const originalBody = String(settings.htmlBody || "");
@@ -226,8 +290,7 @@ useEffect(() => {
     safeBody = safeBody.split(`{{${k}}}`).join(v);
   });
 
-  const hasLinks =
-    originalBody.includes("{{GOOGLE_SAVE_URL}}") || originalBody.includes("{{APPLE_URL}}");
+  const hasLinks = originalBody.includes("{{SMART_URL}}");
 
   const fallbackCTA = hasLinks
     ? ""
@@ -241,26 +304,27 @@ useEffect(() => {
     `;
 
   const bg = previewTheme === "dark" ? settings.darkBg : settings.lightBg;
-  const screenBg = previewTheme === "dark" ? settings.bodyColorDark : settings.bodyColorLight;
+const screenBg = previewTheme === "dark" ? settings.bodyColorDark : settings.bodyColorLight;
+const screenText = previewTheme === "dark" ? "#ffffff" : "#0F2B40"; // 👈 texto legible
 
-  const darkBlock =
-    previewTheme === "system"
-      ? `
+const darkBlock =
+  previewTheme === "system"
+    ? `
 @media (prefers-color-scheme: dark){
   body  { background:${settings.darkBg}; }
-  .screen { background:${settings.bodyColorDark}; }
+  .screen { background:${settings.bodyColorDark}; color:#ffffff; }
 }`
-      : "";
+    : "";
 
-  return `
+return `
 <!doctype html>
 <meta name="color-scheme" content="light dark">
 <style>
   :root { color-scheme: light dark; }
-  body { margin:0; padding:0; background:${bg}; font:16px system-ui,-apple-system,Segoe UI,Roboto; color:#fff; }
+  body { margin:0; padding:0; background:${bg}; font:16px system-ui,-apple-system,Segoe UI,Roboto,Arial; }
   .wrap{ max-width:400px; margin:0; padding:0 }
   .phone{ width:360px; height:720px; background:#111; border-radius:32px; padding:20px; margin:16px auto; box-shadow:0 10px 30px rgba(0,0,0,.35); }
-  .screen{ width:100%; height:100%; border-radius:22px; overflow:auto; background:${screenBg}; padding:20px; }
+  .screen{ width:100%; height:100%; border-radius:22px; overflow:auto; background:${screenBg}; color:${screenText}; padding:20px; }
   h2{ margin-top:0 }
   .btn{ display:inline-block; padding:12px 18px; background:#8b173c; color:#fff; border-radius:8px; text-decoration:none; font-weight:600; }
   ${darkBlock}
@@ -277,6 +341,7 @@ useEffect(() => {
   </div>
 </body>
 `.trim();
+
 }, [
   settings.htmlBody,
   settings.buttonText,
@@ -329,6 +394,7 @@ const resolveUrl = useMemo(() => {
             bodyColorLight: settings.bodyColorLight,
             bodyColorDark: settings.bodyColorDark,
             htmlBody: settings.htmlBody,
+             logoUrl: settings.logoUrl,    
           }),
         });
         const j = await r.json().catch(() => ({} as any));
@@ -471,7 +537,7 @@ const handleSendTest = async () => {
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="blue_5">Blue 5%</SelectItem>
-          <SelectItem value="gold_10">Gold 10%</SelectItem>
+          <SelectItem value="gold_15">Gold 15%</SelectItem>
         </SelectContent>
       </Select>
     </div>

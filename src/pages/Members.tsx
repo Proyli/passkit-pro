@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { User, Edit3, Link, Plus, Upload, Download, Columns3, Trash2 } from "lucide-react";
+import { getRole, can, Role } from "@/lib/authz";
 // Se eliminan los imports de Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 // porque estás usando directamente elementos <table>, <thead>, etc.
 import { useToast } from "@/hooks/use-toast";
@@ -17,6 +18,7 @@ import axios from "axios";
 
 import { QrCodeModal } from "@/components/modals/QrCodeModal";
 import { QrCode } from "lucide-react";
+
 
 // === Config de columnas (4 por defecto) ===
 const COLUMN_KEYS = [
@@ -195,6 +197,8 @@ const Members = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
+  const role: Role = getRole();
+
 
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [memberToAssign, setMemberToAssign] = useState<any>(null);
@@ -212,6 +216,8 @@ const [qrOpen, setQrOpen] = useState(false);
 const [qrPass, setQrPass] = useState<any>(null);
 const [qrClient, setQrClient] = useState("");     // 👈 existe
 const [qrCampaign, setQrCampaign] = useState(""); 
+
+
 
 const [visibleColumns, setVisibleColumns] =
   useState<Record<ColumnKey, boolean>>(DEFAULT_VISIBLE);
@@ -423,6 +429,15 @@ const handleSelectAll = () => {
 };
 
 const handleDeleteSelected = async () => {
+  if (!can.deleteMember(role)) {
+  toast({
+    title: "Acción no permitida",
+    description: "Solo un administrador puede eliminar miembros.",
+    variant: "destructive",
+  });
+  return;
+}
+
   try {
     const deletePromises = selectedMembers.map((id) =>
       fetch(`${API_BASE}/members/${id}`, { method: "DELETE" }).then((res) => {
@@ -494,24 +509,6 @@ const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     toast({ title: "Error", description: `No se pudo importar: ${error.message}` });
   }
 };
-
-  const formatLabel = (key: string) => {
-    const map: Record<string, string> = {
-      id: "ID",
-      externalId: "External ID",
-      firstName: "First Name",
-      lastName: "Last Name",
-      email: "Email",
-      mobile: "Phone",
-      tier: "Tier",
-      gender: "Gender",
-      points: "Points",
-      dateOfBirth: "Date of Birth",
-      clientCode: "Client Code",
-      campaignCode: "Campaign Code",
-    };
-    return map[key] || key.replace(/([A-Z])/g, " $1").replace(/^./, (str) => str.toUpperCase());
-  };
 
   const openAssignModal = (member: any) => {
   setMemberToAssign(member);
@@ -620,33 +617,40 @@ const handleAssignCard = async (member: any) => {
           </DialogContent>
         </Dialog>
 
-       <div className="flex gap-3 mb-6">
-  <Button
-    onClick={() => navigate("/profile")}
-    className="bg-[#8B5CF6] hover:bg-[#7C3AED] text-white font-semibold px-4 py-2 rounded-lg"
-  >
-    <Plus className="w-4 h-4 mr-2" />
-    ADD MEMBER
-  </Button>
+      <div className="flex gap-3 mb-6">
+  {/* ADD MEMBER: solo admin */}
+  {can.addMember(role) && (
+    <Button
+      onClick={() => navigate("/profile")}
+      className="bg-[#8B5CF6] hover:bg-[#7C3AED] text-white font-semibold px-4 py-2 rounded-lg"
+    >
+      <Plus className="w-4 h-4 mr-2" />
+      ADD MEMBER
+    </Button>
+  )}
 
-          {/* IMPORT CSV */}
-          <label htmlFor="importCSV">
-            <input id="importCSV" type="file" accept=".csv" onChange={handleImport} style={{ display: "none" }} />
-            <Button variant="outline" className="text-muted-foreground" asChild>
-              <span>
-                <Upload className="w-4 h-4 mr-2" />
-                IMPORT CSV
-              </span>
-            </Button>
-          </label>
+  {/* IMPORT CSV: solo admin */}
+  {can.importExport(role) && (
+    <label htmlFor="importCSV">
+      <input id="importCSV" type="file" accept=".csv" onChange={handleImport} style={{ display: "none" }} />
+      <Button variant="outline" className="text-muted-foreground" asChild>
+        <span>
+          <Upload className="w-4 h-4 mr-2" />
+          IMPORT CSV
+        </span>
+      </Button>
+    </label>
+  )}
 
-          {/* EXPORT CSV */}
-          <Button variant="outline" className="text-muted-foreground" onClick={handleExport}>
-            <Download className="w-4 h-4 mr-2" />
-            EXPORT CSV
-          </Button>
+  {/* EXPORT CSV: solo admin */}
+  {can.importExport(role) && (
+    <Button variant="outline" className="text-muted-foreground" onClick={handleExport}>
+      <Download className="w-4 h-4 mr-2" />
+      EXPORT CSV
+    </Button>
+  )}
 
-          {/* Botón COLUMNS con DropdownMenu mejorado */}
+   {/* Botón COLUMNS con DropdownMenu mejorado */}
 <DropdownMenu.Root>
   <DropdownMenu.Trigger asChild>
     <Button variant="outline" className="flex items-center gap-2">
@@ -726,64 +730,76 @@ const handleAssignCard = async (member: any) => {
 
         {/* Tabla de miembros con scroll horizontal y columna sticky */}
         <div className="overflow-auto bg-card rounded-lg shadow-sm border">
-          <table className="min-w-[1200px] table-auto w-full">
-            <thead>
-              <tr className="border-b bg-muted/50">
-                <th className="w-12">
-                  <Checkbox checked={selectedMembers.length === membersFromBackend.length} onCheckedChange={handleSelectAll} />
-                </th>
+  <table className="min-w-[1200px] table-auto w-full">
+    <thead>
+      <tr className="border-b bg-muted/50">
+        {can.deleteMember(role) ? (
+          <th className="w-12">
+            <Checkbox
+              checked={selectedMembers.length === membersFromBackend.length && membersFromBackend.length > 0}
+              onCheckedChange={handleSelectAll}
+            />
+          </th>
+        ) : (
+          <th className="w-12" />
+        )}
 
-                {visibleColumns.id && (
-                  <th className="text-left font-medium text-muted-foreground text-nowrap">PASSKIT ID</th>
-                )}
-                {visibleColumns.externalId && (
-                  <th className="text-left font-medium text-muted-foreground text-nowrap">EXTERNAL ID</th>
-                )}
-                {visibleColumns.firstName && (
-                  <th className="text-left font-medium text-muted-foreground text-nowrap">FIRST NAME</th>
-                )}
-                {visibleColumns.lastName && (
-                  <th className="text-left font-medium text-muted-foreground text-nowrap">LAST NAME</th>
-                )}
-                {visibleColumns.email && (
-                  <th className="text-left font-medium text-muted-foreground text-nowrap">EMAIL</th>
-                )}
-                {visibleColumns.mobile && (
-                  <th className="text-left font-medium text-muted-foreground text-nowrap">PHONE</th>
-                )}
-                {visibleColumns.tier && (
-                  <th className="text-left font-medium text-muted-foreground text-nowrap">TIER</th>
-                )}
-                {visibleColumns.gender && (
-                  <th className="text-left font-medium text-muted-foreground text-nowrap">GENDER</th>
-                )}
-                {visibleColumns.points && (
-                  <th className="text-left font-medium text-muted-foreground text-nowrap">POINTS</th>
-                )}
-                {visibleColumns.dateOfBirth && (
-                  <th className="text-left font-medium text-muted-foreground text-nowrap">BIRTHDATE</th>
-                )}
-                {visibleColumns.clientCode && (
-                  <th className="text-left font-medium text-muted-foreground text-nowrap">CLIENT CODE</th>
-                )}
-                {visibleColumns.campaignCode && (
-                  <th className="text-left font-medium text-muted-foreground text-nowrap">CAMPAIGN CODE</th>
-                )}
+        {visibleColumns.id && (
+          <th className="text-left font-medium text-muted-foreground text-nowrap">PASSKIT ID</th>
+        )}
+        {visibleColumns.externalId && (
+          <th className="text-left font-medium text-muted-foreground text-nowrap">EXTERNAL ID</th>
+        )}
+        {visibleColumns.firstName && (
+          <th className="text-left font-medium text-muted-foreground text-nowrap">FIRST NAME</th>
+        )}
+        {visibleColumns.lastName && (
+          <th className="text-left font-medium text-muted-foreground text-nowrap">LAST NAME</th>
+        )}
+        {visibleColumns.email && (
+          <th className="text-left font-medium text-muted-foreground text-nowrap">EMAIL</th>
+        )}
+        {visibleColumns.mobile && (
+          <th className="text-left font-medium text-muted-foreground text-nowrap">PHONE</th>
+        )}
+        {visibleColumns.tier && (
+          <th className="text-left font-medium text-muted-foreground text-nowrap">TIER</th>
+        )}
+        {visibleColumns.gender && (
+          <th className="text-left font-medium text-muted-foreground text-nowrap">GENDER</th>
+        )}
+        {visibleColumns.points && (
+          <th className="text-left font-medium text-muted-foreground text-nowrap">POINTS</th>
+        )}
+        {visibleColumns.dateOfBirth && (
+          <th className="text-left font-medium text-muted-foreground text-nowrap">BIRTHDATE</th>
+        )}
+        {visibleColumns.clientCode && (
+          <th className="text-left font-medium text-muted-foreground text-nowrap">CLIENT CODE</th>
+        )}
+        {visibleColumns.campaignCode && (
+          <th className="text-left font-medium text-muted-foreground text-nowrap">CAMPAIGN CODE</th>
+        )}
 
-                {/* Sticky columna de acciones */}
-                <th className="text-right sticky right-0 bg-muted/50 z-10 w-[150px] text-nowrap">ACTIONS</th>
-              </tr>
-            </thead>
+        {/* Sticky columna de acciones */}
+        <th className="text-right sticky right-0 bg-muted/50 z-10 w-[150px] text-nowrap">ACTIONS</th>
+      </tr>
+    </thead>
+
 
             <tbody>
               {membersFromBackend.map((member: any) => (
                 <tr key={member.id} className="border-b hover:bg-muted/50">
-                  <td className="py-2">
+                 <td className="py-2">
+                  {can.deleteMember(role) ? (
                     <Checkbox
-                    checked={selectedMembers.includes(String(member.id))}
-                    onCheckedChange={() => handleSelectMember(member.id)}
-                  />
-                  </td>
+                      checked={selectedMembers.includes(String(member.id))}
+                      onCheckedChange={() => handleSelectMember(member.id)}
+                    />
+                  ) : (
+                    <span className="inline-block w-4 h-4" />
+                  )}
+                </td>
 
                   {visibleColumns.id && <td className="font-mono text-sm py-2">{member.id}</td>}
                   {visibleColumns.externalId && <td className="py-2">{member.externalId || "—"}</td>}
@@ -814,14 +830,17 @@ const handleAssignCard = async (member: any) => {
                         <User className="w-4 h-4 text-muted-foreground" />
                       </Button>
 
+                      {can.editMember(role) && (
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => handleEditMember(member)}
                         className="h-8 w-8 p-0 hover:bg-muted"
+                        title="Editar"
                       >
                         <Edit3 className="w-4 h-4 text-muted-foreground" />
                       </Button>
+                    )}
 
                       <Button
                         variant="ghost"
@@ -879,23 +898,24 @@ const handleAssignCard = async (member: any) => {
                   </table>
                    </div>
 
-        {selectedMembers.length > 0 && (
-          <div className="w-full flex justify-end mt-4 pr-4 mb-2">
-            <Button
-              variant="destructive"
-              size="sm"
-              className="px-3 py-1.5 text-sm flex items-center gap-1 shadow-sm"
-              onClick={() => {
-                if (window.confirm(`¿Estás seguro que deseas eliminar ${selectedMembers.length} miembro(s)?`)) {
-                  handleDeleteSelected();
-                }
-              }}
-            >
-              <Trash2 size={16} />
-              DELETE
-            </Button>
-          </div>
-        )}
+       {can.deleteMember(role) && selectedMembers.length > 0 && (
+  <div className="w-full flex justify-end mt-4 pr-4 mb-2">
+    <Button
+      variant="destructive"
+      size="sm"
+      className="px-3 py-1.5 text-sm flex items-center gap-1 shadow-sm"
+      onClick={() => {
+        if (window.confirm(`¿Estás seguro que deseas eliminar ${selectedMembers.length} miembro(s)?`)) {
+          handleDeleteSelected();
+        }
+      }}
+    >
+      <Trash2 size={16} />
+      DELETE
+    </Button>
+  </div>
+)}
+
       </div>
 
           {/* 🎫 Modal de asignar tarjeta */}
