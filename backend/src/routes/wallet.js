@@ -162,6 +162,7 @@ router.get("/healthz", (req, res) => {
 });
 
 
+
 // ===================== DB Helper =====================
 async function tryQuery(sql, params) {
   try {
@@ -306,12 +307,17 @@ router.get("/wallet/ios/:token", async (req, res) => {
     const signerCert = fs.readFileSync(path.join(CERTS, "signerCert.pem"));
     const signerKey  = fs.readFileSync(path.join(CERTS, "signerKey.pem"));
 
-    // Tier y colores Apple (RGB)
-    const tier = tierFromAll({
-    tipoCliente,
-    campaign,
-    queryTier: req.query.tier
-  });
+      // 👉 iOS: primero query ?tier= , luego BD, luego blue
+    const tier =
+      normalizeTier(req.query.tier) ||
+      normalizeTier(tipoCliente, { loose: true }) ||
+      "blue";
+
+    console.log("[ios-pass] tier:", {
+      query: req.query.tier,
+      db: tipoCliente,
+      final: tier
+    });
 
     const tierLabel = tier === "gold" ? "GOLD 15%" : "BLUE 5%";
     const theme = (tier === "gold")
