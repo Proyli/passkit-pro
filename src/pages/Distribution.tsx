@@ -135,7 +135,8 @@ const defaultSettings: Settings = {
 </p>
 
 <p style="margin:0 0 10px 0;line-height:1.6;">
-  Estimado/a <strong>{{DISPLAY_NAME}}</strong>,
+   Estimado/a
+  <span style="display:{{SHOW_NAME}};"> <strong>{{DISPLAY_NAME}}</strong>,</span>
 </p>
 
 <p style="margin:0 0 10px 0;line-height:1.6;">
@@ -272,7 +273,7 @@ useEffect(() => {
 
   // Reemplazos de PREVIEW (solo visual; el backend inyecta los reales al enviar)
   const SAMPLE: Record<string, string> = {
-    DISPLAY_NAME: displayName || "Nombree",
+    DISPLAY_NAME: displayName || "Nombre",
     CLIENT: clientCode || "Codigo Cliente",
     CAMPAIGN: campaignCode || "Codigo Campaña",
     BUTTON_TEXT: btn,
@@ -503,13 +504,13 @@ const handleSendTest = async () => {
     {/* Nombre */}
     <div>
       <Label>Nombre (opcional)</Label>
-      <Input value={displayName} onChange={(e)=>setDisplayName(e.target.value)} placeholder="Linda Pérez" />
+      <Input value={displayName} onChange={(e)=>setDisplayName(e.target.value)} placeholder="Nombre y aopellido" />
     </div>
 
     {/* Código Cliente */}
     <div>
       <Label>Código Cliente</Label>
-      <Input value={clientCode} onChange={(e)=>setClientCode(e.target.value)} placeholder="L00457" />
+      <Input value={clientCode} onChange={(e)=>setClientCode(e.target.value)} placeholder="" />
     </div>
 
     {/* Código Campaña */}
@@ -518,7 +519,7 @@ const handleSendTest = async () => {
       <Input
         value={campaignCode}
         onChange={(e)=>{ setCampaignCode(e.target.value); setCampaignTouched(true); }}
-        placeholder="blue_5"
+        placeholder=""
       />
     </div>
             

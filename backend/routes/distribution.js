@@ -21,10 +21,13 @@ const DEFAULT_SETTINGS = {
   bodyColorLight: "#c69667",
   bodyColorDark: "#0f2b40",
   htmlBody:
-    '<p><strong>Estimado/a {{DISPLAY_NAME}},</strong></p>' +
+    '<p>Estimado/a' +
+      '<span style="display:{{SHOW_NAME}};"> <strong>{{DISPLAY_NAME}}</strong>,</span>' +
+    '</p>' +
     '<p>Bienvenido al programa <em>Lealtad Alcazarén</em>. Guarde su tarjeta en su billetera móvil.</p>' +
     '<p><a href="{{SMART_URL}}"><strong>{{BUTTON_TEXT}}</strong></a></p>',
 };
+
 
 // ========== SEND WELCOME: HTML ==========
 async function sendWelcomeEmailHtml(
@@ -38,11 +41,30 @@ async function sendWelcomeEmailHtml(
   const token = jwt.sign({ client, campaign }, process.env.WALLET_TOKEN_SECRET, { expiresIn: "7d" });
   const smartUrl = `${API_BASE}/api/wallet/smart/${token}`;
 
-  const s = (settings && Object.keys(settings || {}).length)
-    ? mergeSettings(settings)
-    : { htmlBody: htmlTemplate, buttonText: buttonText || DEFAULT_SETTINGS.buttonText, logoUrl };
+  // Mezcla settings del cliente con defaults incluso cuando vienes por htmlTemplate
+const s = (settings && Object.keys(settings || {}).length)
+  ? mergeSettings(settings)
+  : mergeSettings({
+      ...DEFAULT_SETTINGS,
+      htmlBody: htmlTemplate ?? DEFAULT_SETTINGS.htmlBody,
+      buttonText: buttonText || DEFAULT_SETTINGS.buttonText,
+      logoUrl,
+    });
 
-  const html = renderWalletEmail(s, { displayName, membershipId, smartUrl });
+// Render base
+let html = renderWalletEmail(s, { displayName, membershipId, smartUrl });
+
+// Mostrar/ocultar el bloque del nombre (si no hay nombre, no se muestra)
+const showName = displayName && String(displayName).trim() ? 'inline' : 'none';
+
+// Reemplazos (compatibles con Node viejito)
+html = html
+  .replace(/{{SHOW_NAME}}/g, showName)
+  .replace(/{{SMART_URL}}/g, smartUrl)       // por si el template usa SMART_URL
+  .replace(/{{GOOGLE_SAVE_URL}}/g, smartUrl) // compatibilidad con templates previos
+  .replace(/{{APPLE_URL}}/g, smartUrl);
+
+
 
   const result = await sendMailSmart({
     from: from || `${s.fromName || "Alcazaren"} <no-reply@alcazaren.com.gt>`,
