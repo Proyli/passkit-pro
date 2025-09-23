@@ -39,6 +39,14 @@ const PrivateRoute = ({ children }: { children: JSX.Element }) => {
 
 const queryClient = new QueryClient();
 
+if (import.meta.env.DEV) {
+  const once = sessionStorage.getItem("__dev_cleared__");
+  if (!once) {
+    try { localStorage.removeItem("passkit_session"); } catch {}
+    sessionStorage.setItem("__dev_cleared__", "1");
+  }
+}
+
 const App = () => {
   const isLoggedIn = !!localStorage.getItem("passkit_session");
 
