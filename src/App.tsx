@@ -151,11 +151,35 @@ const App = () => {
             />
 
               {/* Ruta para no encontrados */}
+                           {/* PASSES (protegidas) */}
+              <Route
+                path="/passes"
+                element={
+                  <PrivateRoute>
+                    <PassList />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/passes/new"
+                element={
+                  <PrivateRoute>
+                    <PassesCreate />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/passes/:id"
+                element={
+                  <PrivateRoute>
+                    <PassDetail />
+                  </PrivateRoute>
+                }
+              />
+
+              {/* Ruta para no encontrados (siempre la última) */}
               <Route path="*" element={<NotFound />} />
             </Routes>
-            <Route path="/passes" element={<PassList />} />
-            <Route path="/passes/new" element={<PassesCreate />} />
-            <Route path="/passes/:id" element={<PassDetail />} />
           </BrowserRouter>
         </TooltipProvider>
       </QueryClientProvider>
