@@ -9,7 +9,7 @@ import { useProfileStore } from "@/store/profileStore";
 const TIER_OPTIONS = [
   { value: "blue", label: "Blue 5%" },
   { value: "gold", label: "Gold 15%" },
-  { value: "silver", label: "Silver" }, // por ahora se comportan como blue
+  { value: "silver", label: "Silver" },
   { value: "bronze", label: "Bronze" },
 ];
 
@@ -54,12 +54,12 @@ const BACKEND = "https://backend-passforge.onrender.com";
 
 async function enviarWalletEmailDesdePerfil(form: Partial<FormData>) {
   const payload = {
-    client: form.codigoCliente, // ej: "L00178"
-    campaign: form.codigoCampana, // ej: "CP0078"
-    to: form.email, // correo del cliente
+    client: form.codigoCliente,
+    campaign: form.codigoCampana,
+    to: form.email,
     tier: /gold/i.test(form.tipoCliente || "") ? "gold" : "blue",
     name: `${form.nombre || ""} ${form.apellido || ""}`.trim(),
-    externalId: form.idExterno || "", // opcional
+    externalId: form.idExterno || "",
   };
 
   const res = await fetch(`${BACKEND}/api/wallet/email`, {
@@ -77,6 +77,9 @@ async function enviarWalletEmailDesdePerfil(form: Partial<FormData>) {
 const Profile: React.FC = () => {
   const navigate = useNavigate();
   const { profileData, setProfileData, clearProfileData } = useProfileStore();
+
+  // ⬇️ Flag: oculta la sección de “Pases digitales asignados”
+  const SHOW_ASSIGNED_PASSES = false;
 
   // Estado del formulario
   const [formData, setFormData] = useState<FormData>({
@@ -107,7 +110,7 @@ const Profile: React.FC = () => {
   const handleGuardar = async () => {
     const nuevoCliente = {
       ...formData,
-      puntos: String(parseInt(formData.puntos || "0", 10) || 0), // guarda como string numérica si tu API lo permite; si no, cambia a number
+      puntos: String(parseInt(formData.puntos || "0", 10) || 0),
     };
 
     try {
@@ -121,7 +124,6 @@ const Profile: React.FC = () => {
       const data = await res.json();
       console.log("✅ Cliente guardado:", data);
 
-      // Enviar email con smart link (BLUE/GOLD según select)
       await enviarWalletEmailDesdePerfil(nuevoCliente);
 
       alert("Cliente guardado en MySQL con éxito. Se envió el correo de la Wallet.");
@@ -242,10 +244,15 @@ const Profile: React.FC = () => {
           </div>
         </div>
 
-        <h2 className="text-xl font-semibold mt-8 mb-4">Pases digitales asignados</h2>
-        <Suspense fallback={null}>
-          <PassList />
-        </Suspense>
+        {/* ⬇️ Sección de “Pases digitales asignados” desactivada */}
+        {SHOW_ASSIGNED_PASSES && (
+          <>
+            <h2 className="text-xl font-semibold mt-8 mb-4">Pases digitales asignados</h2>
+            <Suspense fallback={null}>
+              <PassList />
+            </Suspense>
+          </>
+        )}
       </div>
     </div>
   );
