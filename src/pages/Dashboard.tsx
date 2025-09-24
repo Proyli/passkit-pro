@@ -2,13 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '@/components/Header';
 import StatsCards from '@/components/StatsCards';
-import PassCard from '@/components/PassCard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Search, Filter, Plus, LogOut } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
-import { DuplicatePassModal } from '@/components/modals/DuplicatePassModal';
+//import { DuplicatePassModal } from '@/components/modals/DuplicatePassModal';
 import type { Pass } from '@/types/pass.types';
 import { API } from '@/config/api';
 
@@ -378,52 +377,20 @@ const Dashboard = () => {
         </div>
 
         {/* Grid de pases */}
-        {/* Grid de pases */}
-<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-  {passes.map((pass, index) => (
-    <div key={pass.id} style={{ animationDelay: `${index * 100}ms` }}>
-      <PassCard compact pass={pass} onDuplicate={handleDuplicate} onDelete={handleDelete} />
-    </div>
-  ))}
-</div>
-
+        {/* En lugar de renderizar tarjetas aquí, solo deja un CTA */}
+        <div className="flex justify-end mt-4">
+          <Button variant="outline" onClick={() => navigate('/passes')}>
+            View all passes
+          </Button>
+        </div>
 
         {/* Empty state */}
-        {passes.length === 0 && (
-          <div className="text-center py-12">
-            <div className="w-24 h-24 bg-gradient-to-br from-primary to-secondary rounded-full mx-auto mb-6 flex items-center justify-center">
-              <Plus className="w-12 h-12 text-white" />
-            </div>
-            <h3 className="text-2xl font-semibold text-foreground mb-2">Create your first pass</h3>
-            <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-              Get started by creating your first digital pass. It's quick and easy!
-            </p>
-            <Button
-            onClick={() => navigate('/passes/new')}
-            size="lg"
-            className="bg-gradient-to-r from-primary to-secondary hover:from-primary/90 hover:to-secondary/90"
-          >
-            <Plus className="w-5 h-5 mr-2" />
-            Create Your First Pass
-          </Button>
-
-          </div>
-        )}
-
-        {/* Modal de duplicado */}
-        {duplicateModal.pass && (() => {
-          const p = duplicateModal.pass as any;
-          const { estado, ...rest } = p;
-          const passClean: Pass = { ...rest, status: p.status ?? estado ?? 'active' };
-          return (
-            <DuplicatePassModal
-              isOpen={duplicateModal.isOpen}
-              onClose={() => setDuplicateModal({ isOpen: false, pass: null })}
-              passData={passClean}
-              onDuplicate={handleSaveDuplicate}
-            />
-          );
-        })()}
+        {/* Empty state (desactivado) */}
+            {false && (
+              <div className="text-center py-12">
+                {/* …deja tu mismo contenido aquí por si luego lo activas… */}
+              </div>
+            )}
 
         <Toaster />
       </main>
