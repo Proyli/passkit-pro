@@ -1,26 +1,33 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import Header from '@/components/Header';
-import StatsCards from '@/components/StatsCards';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Search, Filter, Plus, LogOut } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
-import { Toaster } from '@/components/ui/toaster';
-//import { DuplicatePassModal } from '@/components/modals/DuplicatePassModal';
-import type { Pass } from '@/types/pass.types';
-import { API } from '@/config/api';
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import Header from "@/components/Header";
+import StatsCards from "@/components/StatsCards";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Search, Filter, Plus, LogOut } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { Toaster } from "@/components/ui/toaster";
+import type { Pass } from "@/types/pass.types";
+import { API } from "@/config/api";
 
 // Gráficos
 import {
   ResponsiveContainer,
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  PieChart, Pie, Cell
-} from 'recharts';
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  PieChart,
+  Pie,
+  Cell,
+} from "recharts";
 
 interface SessionData {
   email: string;
-  role: 'admin' | 'user';
+  role: "admin" | "user";
   loginTime: string;
 }
 
@@ -28,7 +35,7 @@ type Overview = {
   ok: boolean;
   range: { from: string; to: string };
   totals?: { scans?: number; installs?: number; uninstalls?: number; deleted?: number };
-  byPlatform?: { platform: 'apple' | 'google' | 'unknown'; c: number }[];
+  byPlatform?: { platform: "apple" | "google" | "unknown"; c: number }[];
   series?: { d: string; scans?: number; installs?: number; uninstalls?: number; deleted?: number }[];
 };
 
@@ -39,126 +46,64 @@ const Dashboard = () => {
 
   // ========= Auth check =========
   useEffect(() => {
-    const session = localStorage.getItem('passkit_session');
+    const session = localStorage.getItem("passkit_session");
     if (!session) {
-      navigate('/login');
+      navigate("/login");
       return;
     }
     try {
       const parsedSession = JSON.parse(session);
       setSessionData(parsedSession);
     } catch {
-      localStorage.removeItem('passkit_session');
-      navigate('/login');
+      localStorage.removeItem("passkit_session");
+      navigate("/login");
     }
   }, [navigate]);
 
   const handleLogout = () => {
-    localStorage.removeItem('passkit_session');
-    toast({ title: 'Logged out', description: 'You have been successfully logged out.' });
-    navigate('/login');
+    localStorage.removeItem("passkit_session");
+    toast({ title: "Logged out", description: "You have been successfully logged out." });
+    navigate("/login");
   };
 
-  // ========= PASES =========
+  // ========= PASES (solo para KPIs) =========
   const [passes, setPasses] = useState<Pass[]>([]);
-  const [duplicateModal, setDuplicateModal] = useState<{ isOpen: boolean; pass: Pass | null }>({
-    isOpen: false,
-    pass: null,
-  });
 
-  const fetchPasses = async () => {
-    try {
-      const res = await fetch(`${API}/passes`);
-      if (!res.ok) throw new Error(`GET /passes ${res.status}`);
-      const data = await res.json();
-      const list: any[] = Array.isArray(data) ? data : [];
-      const normalized: Pass[] = list.map((p: any) => ({
-        ...p,
-        id: String(p.id),
-        status: p.status ?? p.estado ?? 'active',
-      }));
-      setPasses(normalized);
-    } catch (e) {
-      console.error(e);
-      toast({ title: 'No se pudieron cargar los pases', variant: 'destructive' });
-    }
-  };
   useEffect(() => {
-    fetchPasses();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const handleDuplicate = (pass: Pass) => {
-    setDuplicateModal({ isOpen: true, pass });
-  };
-
-  const handleSaveDuplicate = async (
-    payload: Pick<Pass, 'title' | 'description' | 'status' | 'type'>
-  ) => {
-    if (!duplicateModal.pass) return;
-    const base = duplicateModal.pass;
-
-    const body = {
-      title: payload.title,
-      description: payload.description,
-      type: payload.type,
-      status: payload.status ?? base.status ?? 'active',
-      backgroundColor: base.backgroundColor,
-      textColor: base.textColor,
-    };
-
-    try {
-      const res = await fetch(`${API}/passes`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) throw new Error('Create failed');
-
-      const created = await res.json();
-      const newPass: Pass = {
-        ...created,
-        id: String(created.id),
-        status: created.status ?? created.estado ?? 'active',
-      };
-
-      setPasses((prev) => [...prev, newPass]);
-      setDuplicateModal({ isOpen: false, pass: null });
-      toast({ title: 'Pase duplicado', description: 'Guardado correctamente' });
-    } catch (err) {
-      console.error(err);
-      toast({ title: 'No se pudo guardar el duplicado', variant: 'destructive' });
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    if (!window.confirm('¿Eliminar este pase? Esta acción no se puede deshacer.')) return;
-    try {
-      const res = await fetch(`${API}/passes/${id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Delete failed');
-      setPasses((prev) => prev.filter((p) => p.id !== id));
-      toast({ title: 'Pase eliminado' });
-    } catch (err) {
-      console.error(err);
-      toast({ title: 'No se pudo eliminar', variant: 'destructive' });
-    }
-  };
+    (async () => {
+      try {
+        const res = await fetch(`${API}/passes`);
+        if (!res.ok) throw new Error(`GET /passes ${res.status}`);
+        const data = await res.json();
+        const list: any[] = Array.isArray(data) ? data : [];
+        const normalized: Pass[] = list.map((p: any) => ({
+          ...p,
+          id: String(p.id),
+          status: p.status ?? p.estado ?? "active",
+        }));
+        setPasses(normalized);
+      } catch (e) {
+        console.error(e);
+        toast({ title: "No se pudieron cargar los pases", variant: "destructive" });
+      }
+    })();
+  }, [toast]);
 
   // ========= ANALYTICS =========
-  const [from, setFrom] = useState<string>(''); // YYYY-MM-DD
-  const [to, setTo] = useState<string>('');
+  const [from, setFrom] = useState<string>(""); // YYYY-MM-DD
+  const [to, setTo] = useState<string>("");
   const [overview, setOverview] = useState<Overview | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams();
-    if (from) params.set('from', from);
-    if (to) params.set('to', to);
+    if (from) params.set("from", from);
+    if (to) params.set("to", to);
     fetch(`${API}/analytics/overview?${params.toString()}`)
       .then((r) => r.json())
       .then((json) => setOverview(json as Overview))
       .catch((err) => {
         console.error(err);
-        toast({ title: 'No se pudo cargar analytics', variant: 'destructive' });
+        toast({ title: "No se pudo cargar analytics", variant: "destructive" });
       });
   }, [from, to, toast]);
 
@@ -193,9 +138,9 @@ const Dashboard = () => {
 
   const pieData = useMemo(
     () => [
-      { name: 'Apple Wallet', value: wallets.apple },
-      { name: 'Google Pay', value: wallets.google },
-      // Intencionalmente dejamos fuera "unknown" del pie
+      { name: "Apple Wallet", value: wallets.apple },
+      { name: "Google Pay", value: wallets.google },
+      // dejamos fuera "unknown" del pie
     ],
     [wallets]
   );
@@ -209,7 +154,6 @@ const Dashboard = () => {
     );
   }
 
-
   return (
     <div className="min-h-screen">
       <Header />
@@ -219,7 +163,7 @@ const Dashboard = () => {
         <div className="mb-8 flex items-center justify-between animate-fade-in">
           <div>
             <h1 className="text-3xl font-bold text-foreground mb-2">
-              Welcome back, {sessionData.role === 'admin' ? 'Administrator' : 'User'}! 👋
+              Welcome back, {sessionData.role === "admin" ? "Administrator" : "User"}! 👋
             </h1>
             <p className="text-lg text-muted-foreground">
               Manage your digital passes and track their performance.
@@ -272,13 +216,7 @@ const Dashboard = () => {
 
           {/* Filter */}
           <div className="col-span-6 sm:col-span-2">
-            <Button
-              variant="outline"
-              className="h-12 w-full rounded-2xl"
-              onClick={() => {
-                // opcional: refetch manual
-              }}
-            >
+            <Button variant="outline" className="h-12 w-full rounded-2xl">
               <Filter className="w-4 h-4 mr-2" />
               Filter
             </Button>
@@ -287,13 +225,12 @@ const Dashboard = () => {
           {/* Create */}
           <div className="col-span-6 sm:col-span-2">
             <Button
-            onClick={() => navigate('/passes/new')}
-            className="h-12 w-full rounded-2xl bg-gradient-to-r from-primary to-secondary hover:from-primary/90 hover:to-secondary/90"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Create Pass
-          </Button>
-
+              onClick={() => navigate("/passes/new")}
+              className="h-12 w-full rounded-2xl bg-gradient-to-r from-primary to-secondary hover:from-primary/90 hover:to-secondary/90"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Create Pass
+            </Button>
           </div>
         </div>
 
@@ -312,21 +249,12 @@ const Dashboard = () => {
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={lineData}>
                       <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis
-                        dataKey="d"
-                        tickFormatter={(v) => new Date(v).toLocaleDateString()}
-                      />
+                      <XAxis dataKey="d" tickFormatter={(v) => new Date(v).toLocaleDateString()} />
                       <YAxis allowDecimals={false} />
-                      <Tooltip
-                        labelFormatter={(v) => new Date(v).toLocaleDateString()}
-                      />
+                      <Tooltip labelFormatter={(v) => new Date(v).toLocaleDateString()} />
                       <Legend />
                       <Line type="monotone" dataKey="scans" stroke="#0ea5e9" name="Scans" />
                       <Line type="monotone" dataKey="installs" stroke="#22c55e" name="Installs" />
-                      {/* Puedes añadir:
-                          <Line type="monotone" dataKey="uninstalls" stroke="#f59e0b" name="Uninstalls" />
-                          <Line type="monotone" dataKey="deleted" stroke="#ef4444" name="Deleted" />
-                      */}
                     </LineChart>
                   </ResponsiveContainer>
                 )}
@@ -346,14 +274,7 @@ const Dashboard = () => {
                 ) : (
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                      <Pie
-                        data={pieData}
-                        dataKey="value"
-                        nameKey="name"
-                        innerRadius={70}
-                        outerRadius={110}
-                        label
-                      >
+                      <Pie data={pieData} dataKey="value" nameKey="name" innerRadius={70} outerRadius={110} label>
                         <Cell fill="#111827" /> {/* Apple */}
                         <Cell fill="#1a73e8" /> {/* Google */}
                       </Pie>
@@ -376,21 +297,17 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Grid de pases */}
-        {/* En lugar de renderizar tarjetas aquí, solo deja un CTA */}
+        {/* CTA para ir a Passes */}
         <div className="flex justify-end mt-4">
-          <Button variant="outline" onClick={() => navigate('/passes')}>
+          <Button variant="outline" onClick={() => navigate("/passes")}>
             View all passes
           </Button>
         </div>
 
-        {/* Empty state */}
-        {/* Empty state (desactivado) */}
-            {false && (
-              <div className="text-center py-12">
-                {/* …deja tu mismo contenido aquí por si luego lo activas… */}
-              </div>
-            )}
+        {/* Empty state desactivado (conservado por si lo necesitas luego) */}
+        {false && (
+          <div className="text-center py-12">{/* contenido anterior del empty state */}</div>
+        )}
 
         <Toaster />
       </main>
