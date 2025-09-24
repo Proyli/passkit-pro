@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import Header from '@/components/Header';
 import StatsCards from '@/components/StatsCards';
 import PassCard from '@/components/PassCard';
-import CreatePassForm from '@/components/CreatePassForm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Search, Filter, Plus, LogOut } from 'lucide-react';
@@ -37,7 +36,6 @@ type Overview = {
 const Dashboard = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [currentView, setCurrentView] = useState<'dashboard' | 'create'>('dashboard');
   const [sessionData, setSessionData] = useState<SessionData | null>(null);
 
   // ========= Auth check =========
@@ -212,31 +210,6 @@ const Dashboard = () => {
     );
   }
 
-  if (currentView === 'create') {
-    return (
-      <div className="min-h-screen">
-        <Header />
-        <main className="container mx-auto px-6 py-8">
-          <div className="mb-6 flex items-center justify-between">
-            <Button variant="outline" onClick={() => setCurrentView('dashboard')} className="mb-4">
-              ← Back to Dashboard
-            </Button>
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-muted-foreground">
-                {sessionData.role === 'admin' ? 'Administrator' : 'User'}: {sessionData.email}
-              </span>
-              <Button variant="outline" onClick={handleLogout}>
-                <LogOut className="w-4 h-4 mr-2" />
-                Logout
-              </Button>
-            </div>
-          </div>
-          <CreatePassForm />
-        </main>
-      </div>
-    );
-  }
-
 
   return (
     <div className="min-h-screen">
@@ -315,12 +288,13 @@ const Dashboard = () => {
           {/* Create */}
           <div className="col-span-6 sm:col-span-2">
             <Button
-              onClick={() => setCurrentView('create')}
-              className="h-12 w-full rounded-2xl bg-gradient-to-r from-primary to-secondary hover:from-primary/90 hover:to-secondary/90"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Create Pass
-            </Button>
+            onClick={() => navigate('/passes/new')}
+            className="h-12 w-full rounded-2xl bg-gradient-to-r from-primary to-secondary hover:from-primary/90 hover:to-secondary/90"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Create Pass
+          </Button>
+
           </div>
         </div>
 
@@ -425,13 +399,14 @@ const Dashboard = () => {
               Get started by creating your first digital pass. It's quick and easy!
             </p>
             <Button
-              onClick={() => setCurrentView('create')}
-              size="lg"
-              className="bg-gradient-to-r from-primary to-secondary hover:from-primary/90 hover:to-secondary/90"
-            >
-              <Plus className="w-5 h-5 mr-2" />
-              Create Your First Pass
-            </Button>
+            onClick={() => navigate('/passes/new')}
+            size="lg"
+            className="bg-gradient-to-r from-primary to-secondary hover:from-primary/90 hover:to-secondary/90"
+          >
+            <Plus className="w-5 h-5 mr-2" />
+            Create Your First Pass
+          </Button>
+
           </div>
         )}
 
