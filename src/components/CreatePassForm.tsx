@@ -1,20 +1,21 @@
-import axios from "axios"; 
-import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+// src/components/CreatePassForm.tsx
+import axios from "axios";
+import { useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Minus } from 'lucide-react';
-import PassPreview from './PassPreview';
+} from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Plus, Minus } from "lucide-react";
+import PassPreview from "./PassPreview";
 
 interface PassData {
   title: string;
@@ -25,96 +26,119 @@ interface PassData {
   fields: Record<string, string>;
 }
 
-const CreatePassForm = () => {
+export type CreatePassFormProps = {
+  onCreated?: (id: string) => void;
+  onCancel?: () => void;
+  initialValues?: Partial<PassData>;
+};
+
+const API_BASE_PASSES =
+  (import.meta as any).env?.VITE_API_BASE_URL?.replace(/\/$/, "") ||
+  `${window.location.protocol}//${window.location.hostname}:3900/api`;
+
+const CreatePassForm: React.FC<CreatePassFormProps> = ({
+  onCreated,
+  onCancel,
+  initialValues,
+}) => {
+  // Estado principal del pase (con initialValues opcionales)
   const [passData, setPassData] = useState<PassData>({
-    title: 'Sample Pass',
-    description: 'This is a sample pass description',
-    type: 'coupon',
-    backgroundColor: '#007AFF',
-    textColor: '#FFFFFF',
-    fields: {
-      'Valid Until': '2024-12-31',
-      'Code': 'SAVE20'
-    }
+    title: initialValues?.title ?? "Sample Pass",
+    description:
+      initialValues?.description ?? "This is a sample pass description",
+    type: initialValues?.type ?? "coupon",
+    backgroundColor: initialValues?.backgroundColor ?? "#007AFF",
+    textColor: initialValues?.textColor ?? "#FFFFFF",
+    fields:
+      initialValues?.fields ?? {
+        "Valid Until": "2024-12-31",
+        Code: "SAVE20",
+      },
   });
 
-  const [customFields, setCustomFields] = useState([
-    { key: 'Valid Until', value: '2024-12-31' },
-    { key: 'Code', value: 'SAVE20' }
-  ]);
+  // Campos personalizados visibles en el UI (sincronizados con passData.fields)
+  const [customFields, setCustomFields] = useState<
+    { key: string; value: string }[]
+  >(
+    Object.entries(passData.fields).map(([key, value]) => ({ key, value })) || [
+      { key: "Valid Until", value: "2024-12-31" },
+      { key: "Code", value: "SAVE20" },
+    ]
+  );
 
   const addCustomField = () => {
-    setCustomFields([...customFields, { key: '', value: '' }]);
+    const nf = [...customFields, { key: "", value: "" }];
+    setCustomFields(nf);
+    updatePassFields(nf);
   };
 
   const removeCustomField = (index: number) => {
-    const newFields = customFields.filter((_, i) => i !== index);
-    setCustomFields(newFields);
-    updatePassFields(newFields);
+    const nf = customFields.filter((_, i) => i !== index);
+    setCustomFields(nf);
+    updatePassFields(nf);
   };
 
   const updateCustomField = (index: number, key: string, value: string) => {
-    const newFields = [...customFields];
-    newFields[index] = { key, value };
-    setCustomFields(newFields);
-    updatePassFields(newFields);
+    const nf = [...customFields];
+    nf[index] = { key, value };
+    setCustomFields(nf);
+    updatePassFields(nf);
   };
 
   const updatePassFields = (fields: { key: string; value: string }[]) => {
-    const fieldsObj = fields.reduce((acc, field) => {
-      if (field.key && field.value) {
-        acc[field.key] = field.value;
-      }
+    const fieldsObj = fields.reduce((acc, f) => {
+      if (f.key && f.value) acc[f.key] = f.value;
       return acc;
     }, {} as Record<string, string>);
-    
-    setPassData(prev => ({ ...prev, fields: fieldsObj }));
+    setPassData((prev) => ({ ...prev, fields: fieldsObj }));
   };
 
-  const updatePassData = (key: string, value: string) => {
-    setPassData(prev => ({ ...prev, [key]: value }));
+  const updatePassData = (key: keyof PassData, value: string) => {
+    setPassData((prev) => ({ ...prev, [key]: value }));
   };
 
-const setHex = (key: "backgroundColor" | "textColor") => (e: any) => {
-  let v = String(e.target.value).trim().toUpperCase();
-  if (!v.startsWith("#")) v = "#" + v;
-  if (v.length > 7) v = v.slice(0, 7);
-  setPassData(prev => ({ ...prev, [key]: v }));
-};
-
-const setPick = (key: "backgroundColor" | "textColor") => (e: any) => {
-  // el color picker ya viene con '#'
-  setPassData(prev => ({ ...prev, [key]: e.target.value.toUpperCase() }));
-};
-
-
-const handleCreatePass = async () => {
-  try {
-    const body = {
-      title: passData.title,
-      description: passData.description,
-      type: passData.type || "coupon",
-      status: "active",
-
-      // 👇 MANDAR COLORES Y FIELDS
-      backgroundColor: passData.backgroundColor,
-      textColor: passData.textColor,
-      fields: passData.fields,
+  const setHex =
+    (key: "backgroundColor" | "textColor") => (e: React.ChangeEvent<HTMLInputElement>) => {
+      let v = String(e.target.value).trim().toUpperCase();
+      if (!v.startsWith("#")) v = "#" + v;
+      if (v.length > 7) v = v.slice(0, 7);
+      setPassData((prev) => ({ ...prev, [key]: v }));
     };
 
-    const API_BASE =
-      import.meta.env?.VITE_API_BASE ??
-      `${window.location.protocol}//${window.location.hostname}:3900`;
+  const setPick =
+    (key: "backgroundColor" | "textColor") => (e: React.ChangeEvent<HTMLInputElement>) => {
+      setPassData((prev) => ({ ...prev, [key]: e.target.value.toUpperCase() }));
+    };
 
-    const response = await axios.post(`${API_BASE}/api/passes`, body);
-    console.log("Pass creado:", response.data);
-    alert("🎉 Pase creado exitosamente.");
-  } catch (error) {
-    console.error("Error al crear el pase:", error);
-    alert("❌ Ocurrió un error al guardar el pase.");
-  }
-};
+  const handleCreatePass = async () => {
+    try {
+      const body = {
+        title: passData.title,
+        description: passData.description,
+        type: passData.type || "coupon",
+        status: "active",
+        backgroundColor: passData.backgroundColor,
+        textColor: passData.textColor,
+        fields: passData.fields,
+      };
 
+      const res = await axios.post(`${API_BASE_PASSES}/passes`, body);
+      const data = res.data || {};
+      const newId = data.id || data.passId || data.uuid || "";
+
+      // Navegar al detalle (lo maneja el contenedor /passes/new)
+      onCreated?.(newId);
+    } catch (error: any) {
+      console.error("Error al crear el pase:", error);
+      const msg =
+        error?.response?.data?.message ||
+        (typeof error?.response?.data === "string"
+          ? error.response.data
+          : error?.message) ||
+        "Error desconocido";
+      alert("❌ Ocurrió un error al guardar el pase: " + msg);
+    }
+  };
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -138,7 +162,7 @@ const handleCreatePass = async () => {
                     id="title"
                     placeholder="Enter pass title"
                     value={passData.title}
-                    onChange={(e) => updatePassData('title', e.target.value)}
+                    onChange={(e) => updatePassData("title", e.target.value)}
                   />
                 </div>
 
@@ -148,13 +172,16 @@ const handleCreatePass = async () => {
                     id="description"
                     placeholder="Enter pass description"
                     value={passData.description}
-                    onChange={(e) => updatePassData('description', e.target.value)}
+                    onChange={(e) => updatePassData("description", e.target.value)}
                   />
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="type">Pass Type</Label>
-                  <Select value={passData.type} onValueChange={(value) => updatePassData('type', value)}>
+                  <Select
+                    value={passData.type}
+                    onValueChange={(value) => updatePassData("type", value)}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Select pass type" />
                     </SelectTrigger>
@@ -211,7 +238,6 @@ const handleCreatePass = async () => {
                 </div>
               </TabsContent>
 
-
               <TabsContent value="fields" className="space-y-4 mt-6">
                 <div className="space-y-4">
                   <div className="flex justify-between items-center">
@@ -228,14 +254,18 @@ const handleCreatePass = async () => {
                         <Input
                           placeholder="Field name"
                           value={field.key}
-                          onChange={(e) => updateCustomField(index, e.target.value, field.value)}
+                          onChange={(e) =>
+                            updateCustomField(index, e.target.value, field.value)
+                          }
                         />
                       </div>
                       <div className="flex-1">
                         <Input
                           placeholder="Field value"
                           value={field.value}
-                          onChange={(e) => updateCustomField(index, field.key, e.target.value)}
+                          onChange={(e) =>
+                            updateCustomField(index, field.key, e.target.value)
+                          }
                         />
                       </div>
                       <Button
@@ -254,13 +284,13 @@ const handleCreatePass = async () => {
 
             <div className="mt-6 flex space-x-3">
               <Button
-               className="flex-1 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
-              onClick={handleCreatePass}
+                className="flex-1 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
+                onClick={handleCreatePass}
               >
-              Create Pass
+                Create Pass
               </Button>
 
-              <Button variant="outline">
+              <Button variant="outline" onClick={() => onCancel?.()}>
                 Save Draft
               </Button>
             </div>

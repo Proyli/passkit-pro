@@ -30,6 +30,10 @@ import DesignerRegister from "./pages/Designer/Register";
 import DesignerDataFields from "./pages/Designer/DataFields";
 import DesignerSettings from "./pages/Designer/Settings";
 
+import PassList from "@/pages/PassList";
+import PassesCreate from "@/pages/PassesCreate";
+import PassDetail from "@/pages/PassDetail";
+
 
 // Ruta protegida
 const PrivateRoute = ({ children }: { children: JSX.Element }) => {
@@ -149,6 +153,9 @@ const App = () => {
               {/* Ruta para no encontrados */}
               <Route path="*" element={<NotFound />} />
             </Routes>
+            <Route path="/passes" element={<PassList />} />
+            <Route path="/passes/new" element={<PassesCreate />} />
+            <Route path="/passes/:id" element={<PassDetail />} />
           </BrowserRouter>
         </TooltipProvider>
       </QueryClientProvider>

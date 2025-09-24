@@ -7,6 +7,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import axios from "axios";
 import { Button } from "@/components/ui/button";
 import { DuplicatePassModal } from "@/components/modals/DuplicatePassModal";
+import { useNavigate } from "react-router-dom";
 
 // === Base de API robusta ===
 const API_BASE_PASSES =
@@ -96,6 +97,7 @@ const safeShortDate = (iso: string) => {
 
 const PassList: React.FC = () => {
   const [passes, setPasses] = useState<Pass[]>([]);
+  const navigate = useNavigate();
   // --- 🔎 Filtro (para PASSES) ---
 type PassFieldKey = "title" | "description" | "type" | "estado";
 
@@ -169,11 +171,9 @@ const displayedPasses = useMemo(() => {
   duplicatedData: Omit<Pass, "id" | "createdAt">
 ) => {
   // Base de API robusta (usa .env si existe; si no, el mismo host del front)
-  const base =
-    (import.meta as any).env?.VITE_API_BASE_URL?.replace(/\/$/, "") ||
-    `http://${location.hostname}:3900/api`;
+  const base = API_BASE_PASSES;
+const url = `${base}/passes`;
 
-  const url = `${base}/passes`;
 
   // 1) Payload en español (muchos de tus endpoints usan "estado")
   const payloadES = {
@@ -232,119 +232,128 @@ const displayedPasses = useMemo(() => {
 };
 
 
-  useEffect(() => {
-    const url = `${import.meta.env.VITE_API_BASE_URL}/passes`;
-    axios
-      .get(url)
-      .then((res) => {
-        // Normaliza cualquier forma de respuesta a []
-        const list = toArray(res.data);
-        setPasses(list);
-      })
-      .catch((err) => {
-        console.error("Error al obtener pases:", err);
-        setPasses([]); // asegura arreglo para que .map no reviente
-      });
-  }, []);
+ useEffect(() => {
+  const url = `${API_BASE_PASSES}/passes`;
+  axios
+    .get(url)
+    .then((res) => setPasses(toArray(res.data)))
+    .catch((err) => {
+      console.error("Error al obtener pases:", err);
+      setPasses([]);
+    });
+}, []);
+
 
   return (
   <div className="mt-6 space-y-4">
     {/* ── Toolbar: Search + Filter ───────────────────────────── */}
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      {/* Search input */}
-      <div className="relative flex-1">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search passes..."
-          className="pl-9"
-        />
-        {query && (
-          <button
-            type="button"
-            onClick={() => setQuery("")}
-            className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-muted"
-            aria-label="Clear"
-          >
-            <X className="h-4 w-4 text-muted-foreground" />
-          </button>
-        )}
-      </div>
+    {/* ── Toolbar: Search + Filter + Create ───────────────────── */}
+<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+  {/* Search input */}
+  <div className="relative flex-1">
+    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+    <Input
+      value={query}
+      onChange={(e) => setQuery(e.target.value)}
+      placeholder="Search passes..."
+      className="pl-9"
+    />
+    {query && (
+      <button
+        type="button"
+        onClick={() => setQuery("")}
+        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-muted"
+        aria-label="Clear"
+      >
+        <X className="h-4 w-4 text-muted-foreground" />
+      </button>
+    )}
+  </div>
 
-      {/* Botón FILTER con Dropdown */}
-      <DropdownMenu.Root>
-        <DropdownMenu.Trigger asChild>
-          <Button variant="outline" className="gap-2">
-            <FilterIcon className="h-4 w-4" />
-            Filter
-          </Button>
-        </DropdownMenu.Trigger>
+  <div className="flex gap-3">
+    {/* Botón FILTER con Dropdown (tu mismo contenido) */}
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <Button variant="outline" className="gap-2">
+          <FilterIcon className="h-4 w-4" />
+          Filter
+        </Button>
+      </DropdownMenu.Trigger>
 
-        <DropdownMenu.Content
-          align="end"
-          sideOffset={8}
-          className="bg-white rounded-md shadow-md border p-2 w-64"
-          loop
-        >
-          <div className="px-2 pb-2 text-xs text-muted-foreground">
-            Buscar en los campos
-          </div>
+      <DropdownMenu.Content
+        align="end"
+        sideOffset={8}
+        className="bg-white rounded-md shadow-md border p-2 w-64"
+        loop
+      >
+        <div className="px-2 pb-2 text-xs text-muted-foreground">
+          Buscar en los campos
+        </div>
 
-          {PASS_FIELD_KEYS.map((key) => (
-            <DropdownMenu.CheckboxItem
-              key={key}
-              checked={searchFields[key]}
-              onCheckedChange={(checked) =>
-                setSearchFields((prev) => ({ ...prev, [key]: !!checked }))
-              }
-              className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-md cursor-pointer hover:bg-gray-100 data-[state=checked]:bg-blue-100 data-[state=checked]:text-blue-700"
-            >
-              {PASS_FIELD_LABEL[key]}
-            </DropdownMenu.CheckboxItem>
-          ))}
-
-          <DropdownMenu.Separator />
-
-          <div className="px-2 py-1 text-xs text-muted-foreground">Coincidencia</div>
-          <DropdownMenu.RadioGroup
-            value={searchMode}
-            onValueChange={(v) => setSearchMode(v as any)}
-          >
-            <DropdownMenu.RadioItem value="contains" className="px-2 py-1.5 text-sm">
-              Contiene
-            </DropdownMenu.RadioItem>
-            <DropdownMenu.RadioItem value="starts" className="px-2 py-1.5 text-sm">
-              Empieza con
-            </DropdownMenu.RadioItem>
-            <DropdownMenu.RadioItem value="exact" className="px-2 py-1.5 text-sm">
-              Exacta
-            </DropdownMenu.RadioItem>
-          </DropdownMenu.RadioGroup>
-
-          <DropdownMenu.Separator />
-
-          <DropdownMenu.Item
-            onClick={() => setQuery("")}
-            className="px-2 py-1.5 text-sm cursor-pointer hover:bg-gray-100"
-          >
-            Limpiar búsqueda
-          </DropdownMenu.Item>
-          <DropdownMenu.Item
-            onClick={() =>
-              setSearchFields(
-                Object.fromEntries(
-                  PASS_FIELD_KEYS.map((k) => [k, DEFAULT_PASS_FIELDS.includes(k)])
-                ) as Record<PassFieldKey, boolean>
-              )
+        {PASS_FIELD_KEYS.map((key) => (
+          <DropdownMenu.CheckboxItem
+            key={key}
+            checked={searchFields[key]}
+            onCheckedChange={(checked) =>
+              setSearchFields((prev) => ({ ...prev, [key]: !!checked }))
             }
-            className="px-2 py-1.5 text-sm cursor-pointer hover:bg-gray-100"
+            className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-md cursor-pointer hover:bg-gray-100 data-[state=checked]:bg-blue-100 data-[state=checked]:text-blue-700"
           >
-            Reset campos
-          </DropdownMenu.Item>
-        </DropdownMenu.Content>
-      </DropdownMenu.Root>
-    </div>
+            {PASS_FIELD_LABEL[key]}
+          </DropdownMenu.CheckboxItem>
+        ))}
+
+        <DropdownMenu.Separator />
+
+        <div className="px-2 py-1 text-xs text-muted-foreground">Coincidencia</div>
+        <DropdownMenu.RadioGroup
+          value={searchMode}
+          onValueChange={(v) => setSearchMode(v as any)}
+        >
+          <DropdownMenu.RadioItem value="contains" className="px-2 py-1.5 text-sm">
+            Contiene
+          </DropdownMenu.RadioItem>
+          <DropdownMenu.RadioItem value="starts" className="px-2 py-1.5 text-sm">
+            Empieza con
+          </DropdownMenu.RadioItem>
+          <DropdownMenu.RadioItem value="exact" className="px-2 py-1.5 text-sm">
+            Exacta
+          </DropdownMenu.RadioItem>
+        </DropdownMenu.RadioGroup>
+
+        <DropdownMenu.Separator />
+
+        <DropdownMenu.Item
+          onClick={() => setQuery("")}
+          className="px-2 py-1.5 text-sm cursor-pointer hover:bg-gray-100"
+        >
+          Limpiar búsqueda
+        </DropdownMenu.Item>
+        <DropdownMenu.Item
+          onClick={() =>
+            setSearchFields(
+              Object.fromEntries(
+                PASS_FIELD_KEYS.map((k) => [k, DEFAULT_PASS_FIELDS.includes(k)])
+              ) as Record<PassFieldKey, boolean>
+            )
+          }
+          className="px-2 py-1.5 text-sm cursor-pointer hover:bg-gray-100"
+        >
+          Reset campos
+        </DropdownMenu.Item>
+      </DropdownMenu.Content>
+    </DropdownMenu.Root>
+
+    {/* 👉 NUEVO: Create Pass dentro de Passes */}
+    <Button
+      onClick={() => navigate("/passes/new")}
+      className="rounded-xl px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-400 text-white"
+    >
+      + Create Pass
+    </Button>
+  </div>
+</div>
+
 
     {/* ── Grid de tarjetas ───────────────────────────────────── */}
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -373,7 +382,12 @@ const displayedPasses = useMemo(() => {
       {openMenuId === pass.id && (
         <div className="absolute right-0 mt-2 w-44 bg-white border border-gray-200 shadow-md rounded-lg z-50">
           <ul className="text-sm text-gray-700">
-            <li className="px-3 py-2 hover:bg-gray-100 cursor-pointer">✏️ Edit</li>
+            <li
+              className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+              onClick={() => navigate(`/passes/${pass.id}`)}  // <- usa 'navigate' o 'nav', según cómo lo declaraste
+            >
+              ✏️ Edit
+            </li>
             <li
               className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
               onClick={() => handleOpenDuplicate(pass)}
