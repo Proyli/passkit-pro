@@ -176,7 +176,7 @@ const Profile: React.FC = () => {
               name="codigoCampana"
               value={formData.codigoCampana}
               onChange={handleChange}
-              placeholder="CP0078"
+              //placeholder="CP0078"
             />
           </div>
 
