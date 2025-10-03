@@ -87,12 +87,19 @@ function normalizeTier(s, { loose = false } = {}) {
 
 // DB -> query -> body -> blue
 function tierFromAll({ tipoCliente, queryTier, bodyTier }) {
-  return (
+ /* return (
     normalizeTier(tipoCliente, { loose: true }) || // <- BD flexible ("Gold 15%")
     normalizeTier(queryTier) ||                    // <- exacto
     normalizeTier(bodyTier)  ||                    // <- exacto
     "blue"
-  );
+  );*/
+  // Precedencia: body > query > DB (el frontend debe poder forzar el tier via body)
+  const fromBody  = normalizeTier(bodyTier);
+  const fromQuery = normalizeTier(queryTier);
+  const fromDb    = normalizeTier(tipoCliente, { loose: true }); // BD puede contener texto extra
+  const finalTier = fromBody || fromQuery || fromDb || "blue";
+  console.log("[tierFromAll] inputs:", { tipoCliente, queryTier, bodyTier }, "normalized:", { fromBody, fromQuery, fromDb, finalTier });
+  return finalTier;
 }
 
 function getInfoText(tier) {
@@ -222,9 +229,14 @@ function buildGoogleSaveUrl({ client, campaign, externalId, displayName, tier })
  const codeValue = String(externalId || client || "").trim();
 if (!codeValue) throw new Error("No hay código para el miembro.");
 
-    const rawTier  = String(tier || "");
+  /*const rawTier  = String(tier || "");
   const gold     = /(gold|golden|dorado|oro|15)/i.test(rawTier);
-  const tierNorm = gold ? "gold" : "blue";
+  const tierNorm = gold ? "gold" : "blue";*/
+   // Normalizar el tier aquí de forma permisiva (acepta "Gold 15%", "gold", etc.)
+  const tierNorm = normalizeTier(tier, { loose: true }) || "blue";
+  const gold = tierNorm === "gold";
+  console.log("[buildGoogleSaveUrl] tier input:", tier, "=> tierNorm:", tierNorm, "gold:", gold);
+
   const tierLabel = gold ? "GOLD 15%" : "BLUE 5%";   // <- ¡vuelve!
   const verTag   = process.env.WALLET_OBJECT_REV || "2";
 
@@ -236,9 +248,18 @@ if (!codeValue) throw new Error("No hay código para el miembro.");
     `${codeValue}-${(campaign || "").toLowerCase()}-${tierNorm}-r${verTag}`
   )}`;
 
-  // Clase correcta por tier
-  const classRef = classIdForTier(tierNorm);
-  console.log("[GW]", { objectId, tierNorm, classRef });
+  // Clase correcta por tier (intenta helper, luego fallbacks desde env)
+  let classRef = classIdForTier(tierNorm);
+  // Fallbacks por si helpers/tier devuelve una clase inesperada o vacía
+  const envGold = process.env.GW_CLASS_ID_GOLD || null;
+  const envBlue = process.env.GW_CLASS_ID_BLUE || null;
+  if (!classRef || (tierNorm === "gold" && /blue/i.test(String(classRef)))) {
+    classRef = envGold || classRef;
+  }
+  if (!classRef || (tierNorm === "blue" && /gold/i.test(String(classRef)))) {
+    classRef = envBlue || classRef;
+  }
+  console.log("[GW] class pick:", { objectId, tierNorm, classRef, envGold, envBlue });
 
   // Objeto con color forzado por tier
   const loyaltyObject = {
