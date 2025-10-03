@@ -75,6 +75,7 @@ exports.createMember = async (req, res) => {
           codigoCampana: newMember.codigoCampana,
           nombre: newMember.nombre,
           apellido: newMember.apellido,
+          tipoCliente: newMember.tipoCliente,
           email: newMember.email,
         }).catch((err) =>
           console.error("sendWelcomeEmail error:", err?.message || err)
