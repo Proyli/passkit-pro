@@ -41,6 +41,16 @@ async function sendWelcomeEmailHtml(
   const token = jwt.sign({ client, campaign }, process.env.WALLET_TOKEN_SECRET, { expiresIn: "7d" });
   const smartUrl = `${API_BASE}/api/wallet/smart/${token}`;
 
+  // Logging para debug: inputs importantes y token truncado (no exponer key completa)
+  try {
+    const tshort = String(token || "");
+    const tshow = tshort.length > 20 ? `${tshort.slice(0,6)}...${tshort.slice(-6)}` : tshort;
+    console.log("[dist] sendWelcomeEmailHtml inputs:", { to, displayName, client, campaign, smartUrl, tokenPreview: tshow });
+    console.log("[dist] settings summary:", { hasSettings: !!settings, settingsKeys: Object.keys(settings || {}) });
+  } catch (e) {
+    console.log("[dist] error logging inputs:", e?.message || e);
+  }
+
   // Mezcla settings del cliente con defaults incluso cuando vienes por htmlTemplate
 const s = (settings && Object.keys(settings || {}).length)
   ? mergeSettings(settings)

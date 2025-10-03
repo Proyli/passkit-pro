@@ -251,14 +251,15 @@ if (!codeValue) throw new Error("No hay código para el miembro.");
   // Clase correcta por tier (intenta helper, luego fallbacks desde env)
   let classRef = classIdForTier(tierNorm);
   // Fallbacks por si helpers/tier devuelve una clase inesperada o vacía
-  const envGold = process.env.GW_CLASS_ID_GOLD || null;
-  const envBlue = process.env.GW_CLASS_ID_BLUE || null;
+  const envGold = process.env.GW_CLASS_ID_GOLD || process.env.GOOGLE_WALLET_CLASS_ID_GOLD || null;
+  const envBlue = process.env.GW_CLASS_ID_BLUE || process.env.GOOGLE_WALLET_CLASS_ID_BLUE || null;
   if (!classRef || (tierNorm === "gold" && /blue/i.test(String(classRef)))) {
     classRef = envGold || classRef;
   }
   if (!classRef || (tierNorm === "blue" && /gold/i.test(String(classRef)))) {
     classRef = envBlue || classRef;
   }
+  if (!envGold && !envBlue) console.log('[GW] no GW/GOOGLE class envs found; classIdForTier will use GOOGLE_WALLET_CLASS_ID if present');
   console.log("[GW] class pick:", { objectId, tierNorm, classRef, envGold, envBlue });
 
   // Objeto con color forzado por tier
