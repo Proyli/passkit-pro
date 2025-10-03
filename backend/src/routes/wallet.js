@@ -600,9 +600,15 @@ router.post("/wallet/email", async (req, res) => {
     externalId = extFromBody || externalId || client;
 
     // Tier: body > DB > blue
-    const inputTier = normalizeTier(req.body.tier);
-    const tierParam = inputTier || normalizeTier(tipoCliente) || "blue";
+    //const inputTier = normalizeTier(req.body.tier);
+    //const tierParam = inputTier || normalizeTier(tipoCliente) || "blue";
 
+     const inputTier = normalizeTier(req.body.tier);
+  // La BD puede tener valores como "Gold 15%"; usar versión flexible (loose)
+    const tierFromDb = normalizeTier(tipoCliente, { loose: true });
+    const tierParam = inputTier || tierFromDb || "blue";
+    console.log("[email] tier inputs:", { inputTier, tipoCliente, tierFromDb, tierFinal: tierParam });
+ // ...existing code...
     // Nombre opcional desde body
     if (req.body.name) displayName = String(req.body.name).trim() || displayName;
 
