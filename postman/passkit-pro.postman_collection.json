@@ -1,0 +1,81 @@
+{
+  "info": {
+    "name": "passkit-pro - API",
+    "_postman_id": "passkit-pro-collection",
+    "description": "Colección Postman generada automáticamente para passkit-pro",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Members - List",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{API_BASE}}/members",
+          "host": ["{{API_BASE}}"],
+          "path": ["members"]
+        }
+      }
+    },
+    {
+      "name": "Members - Create",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"externalId\": \"ext123\",\n  \"firstName\": \"Ana\",\n  \"lastName\": \"Perez\",\n  \"email\": \"ana@example.com\",\n  \"points\": 0\n}"
+        },
+        "url": { "raw": "{{API_BASE}}/members", "host": ["{{API_BASE}}"], "path": ["members"] }
+      }
+    },
+    {
+      "name": "Members - Update",
+      "request": {
+        "method": "PUT",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{ \"points\": 200 }" },
+        "url": { "raw": "{{API_BASE}}/members/:id", "host": ["{{API_BASE}}"], "path": ["members", ":id"] }
+      }
+    },
+    {
+      "name": "Members - Delete",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": { "raw": "{{API_BASE}}/members/:id", "host": ["{{API_BASE}}"], "path": ["members", ":id"] }
+      }
+    },
+    {
+      "name": "Passes - List",
+      "request": { "method": "GET", "header": [], "url": { "raw": "{{API_BASE}}/passes", "host": ["{{API_BASE}}"], "path": ["passes"] } }
+    },
+    {
+      "name": "Passes - Get by id",
+      "request": { "method": "GET", "header": [], "url": { "raw": "{{API_BASE}}/passes/:id", "host": ["{{API_BASE}}"], "path": ["passes", ":id"] } }
+    },
+    {
+      "name": "Analytics - Overview",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{API_BASE}}/analytics/overview?from={{from}}&to={{to}}", "host": ["{{API_BASE}}"], "path": ["analytics", "overview"], "query": [{ "key": "from", "value": "{{from}}" }, { "key": "to", "value": "{{to}}" }] }
+      }
+    },
+    {
+      "name": "Wallet - Send Email",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"client\": \"C1\",\n  \"campaign\": \"CP1\",\n  \"to\": \"user@example.com\",\n  \"tier\": \"gold\",\n  \"name\": \"Nombre Apellido\",\n  \"externalId\": \"ext123\"\n}" },
+        "url": { "raw": "https://backend-passforge.onrender.com/api/wallet/email", "protocol": "https", "host": ["backend-passforge","onrender","com"], "path": ["api","wallet","email"] }
+      }
+    }
+  ],
+  "variable": [
+    { "key": "API_BASE", "value": "http://localhost:3900/api" },
+    { "key": "from", "value": "2025-01-01" },
+    { "key": "to", "value": "2025-01-07" }
+  ]
+}
