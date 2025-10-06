@@ -71,6 +71,8 @@ exports.createMember = async (req, res) => {
       setImmediate(() =>
         sendWelcomeEmail({
           id: newMember.id,
+          external_id: newMember.external_id,
+          externalId: newMember.external_id,
           codigoCliente: newMember.codigoCliente,
           codigoCampana: newMember.codigoCampana,
           nombre: newMember.nombre,
