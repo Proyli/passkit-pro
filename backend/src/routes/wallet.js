@@ -475,9 +475,13 @@ router.get("/wallet/resolve", async (req, res) => {
       }
     } catch {}
     // override desde query/body si viene del frontend
-if (req.query?.name || req.body?.name) {
-  displayName = String(req.query.name || req.body.name).trim();
-}
+    if (req.query?.externalId) {
+      const trimmed = String(req.query.externalId).trim();
+      if (trimmed) externalId = trimmed;
+    }
+    if (req.query?.name || req.body?.name) {
+      displayName = String(req.query.name || req.body.name).trim();
+    }
 
 console.log("[resolve] using:", { client, campaign, externalId, displayName, tipoCliente });
  

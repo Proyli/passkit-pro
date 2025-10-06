@@ -76,9 +76,11 @@ const barcodeBoxRef = useRef<HTMLDivElement | null>(null);
   // URL que debe contener el QR para resolver en backend y entregar Apple/Google Wallet
   const walletUrl = useMemo(() => {
     // Wallet resolve should always receive client+campaign so backend can map to externalId
-    const c = encodeURIComponent(clientCode.trim());
-    const k = encodeURIComponent(campaignCode.trim());
-    return `${API_BASE}/wallet/resolve?client=${c}&campaign=${k}`;
+    const params = new URLSearchParams();
+    params.set("client", clientCode.trim());
+    params.set("campaign", campaignCode.trim());
+    if (externalId) params.set("externalId", externalId.trim());
+    return `${API_BASE}/wallet/resolve?${params.toString()}`;
   }, [clientCode, campaignCode, API_BASE, externalId]);
 
   // Payload para barcode (opción Code128) — formato pedido: CLIENT-CAMPAIGN (ej L0083-CP0163)

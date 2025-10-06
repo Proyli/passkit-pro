@@ -55,9 +55,15 @@ const PassCard = ({ pass, onDuplicate, onDelete, compact = false }: PassCardProp
   // Resolve URL must use client+campaign so backend can map to externalId
   const resolveUrl =
     client && campaign
-      ? `${API}/wallet/resolve?client=${encodeURIComponent(client)}&campaign=${encodeURIComponent(
-          campaign
-        )}&source=link`
+      ? (() => {
+          const params = new URLSearchParams({
+            client: String(client),
+            campaign: String(campaign),
+            source: "link",
+          });
+          if (externalId) params.set("externalId", String(externalId));
+          return `${API}/wallet/resolve?${params.toString()}`;
+        })()
       : "";
 
   async function handleSendByEmail() {
