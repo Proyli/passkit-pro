@@ -36,7 +36,11 @@ exports.createPass = async (req, res) => {
     const created = await db.Pass.create(body);
 
     const passWithMember = await db.Pass.findByPk(created.id, {
-      include: [{ model: db.Member, as: "member", attributes: ["id", "codigoCliente", "codigoCampana"] }],
+      include: [{
+        model: db.Member,
+        as: "member",
+        attributes: ["id", "external_id", "codigoCliente", "codigoCampana"]
+      }],
     });
 
     const out = passWithMember.toJSON();
@@ -65,7 +69,11 @@ exports.getAllPasses = async (_req, res) => {
     const rows = await Pass.findAll({
       order: [["id", "ASC"]],
       // incluir tipoCliente para poder decidir color en el servidor
-      include: [{ model: Member, as: "member", attributes: ["id", "codigoCliente", "codigoCampana", "tipoCliente"] }],
+      include: [{
+        model: Member,
+        as: "member",
+        attributes: ["id", "external_id", "codigoCliente", "codigoCampana", "tipoCliente"]
+      }],
     });
 
     const mapTierToColor = (raw) => {
@@ -141,7 +149,11 @@ exports.assignMember = async (req, res) => {
     await pass.update({ member_id });
 
     const out = await Pass.findByPk(id, {
-      include: [{ model: Member, as: "member", attributes: ["id", "codigoCliente", "codigoCampana"] }],
+      include: [{
+        model: Member,
+        as: "member",
+        attributes: ["id", "external_id", "codigoCliente", "codigoCampana"]
+      }],
     });
     return res.json(out);
   } catch (e) {
