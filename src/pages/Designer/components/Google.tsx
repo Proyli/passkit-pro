@@ -10,6 +10,7 @@ type Props = {
   bannerUrl?: string;       // imagen inferior
   barcodeValue?: string;    // ej: "PK|L00457|blue_5"
   showPid?: boolean;        // muestra ${pid} debajo
+  externalId?: string;      // opcional: mostrar externalId debajo del barcode
 };
 
 const makeSvgResponsive = (svg: SVGSVGElement) => {
@@ -28,6 +29,7 @@ export default function Google({
   bannerUrl = "https://raw.githubusercontent.com/Proyli/wallet-assets/main/hero-celebremos.jpg",
   barcodeValue = "PK|L00457|blue_5",
   showPid = true,
+  externalId,
 }: Props) {
   const svgRef = useRef<SVGSVGElement | null>(null);
 
@@ -90,7 +92,7 @@ export default function Google({
           </div>
         </div>
         {showPid && (
-          <div className="text-center text-xs mt-1 opacity-80">${"{pid}"}</div>
+          <div className="text-center text-xs mt-1 opacity-80">{externalId ? externalId : "${{pid}}"}</div>
         )}
       </div>
 

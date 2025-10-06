@@ -228,10 +228,7 @@ const Profile: React.FC = () => {
             <Label>Puntos</Label>
             <Input name="puntos" value={formData.puntos} onChange={handleChange} />
           </div>
-          <div>
-            <Label>ID Externo</Label>
-            <Input name="idExterno" value={formData.idExterno} onChange={handleChange} />
-          </div>
+          {/* ID Externo no se muestra en el formulario (es un identificador primario interno) */}
         </div>
 
         <div className="flex justify-between pt-4">

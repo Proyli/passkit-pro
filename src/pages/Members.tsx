@@ -1083,6 +1083,7 @@ const handleAssignCard = async (member: any) => {
       passData={qrPass}
       clientCode={qrClient}
       campaignCode={qrCampaign}
+      externalId={qrPass?.description || qrPass?.externalId || qrClient}
       defaultMode="code128"
     />
   )}

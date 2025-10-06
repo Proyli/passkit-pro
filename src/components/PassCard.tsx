@@ -43,6 +43,8 @@ const PassCard = ({ pass, onDuplicate, onDelete, compact = false }: PassCardProp
     (pass as any).clientCode ??
     null;
 
+  const externalId = member?.externalId || member?.external_id || (pass as any).externalId || null;
+
   const campaign =
     member?.codigoCampana ??
     member?.codigoCampaña ?? // por si viene con “ñ”
@@ -50,9 +52,10 @@ const PassCard = ({ pass, onDuplicate, onDelete, compact = false }: PassCardProp
     null;
 
   // URL que resuelve Apple/Google según dispositivo
+  // Prefer externalId when available for the resolve URL and barcode
   const resolveUrl =
-    client && campaign
-      ? `${API}/wallet/resolve?client=${encodeURIComponent(client)}&campaign=${encodeURIComponent(
+    (externalId || client) && campaign
+      ? `${API}/wallet/resolve?client=${encodeURIComponent(externalId || client)}&campaign=${encodeURIComponent(
           campaign
         )}&source=link`
       : "";
@@ -214,6 +217,10 @@ const PassCard = ({ pass, onDuplicate, onDelete, compact = false }: PassCardProp
                   })()
                 }}
               />
+              {/* Mostrar externalId si existe en lugar del client code */}
+              {externalId && (
+                <div className="ml-2 text-xs text-muted-foreground truncate">{externalId}</div>
+              )}
               <Badge className={`${compact ? "text-xs px-2.5 py-1" : ""} ${getStatusColor(pass.status || "active")}`}>
                 {pass.status || "active"}
               </Badge>

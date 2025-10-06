@@ -26,6 +26,7 @@ interface QrCodeModalProps {
   clientCode?: string;
   campaignCode?: string;
   defaultMode?: "qr" | "code128";
+  externalId?: string;
 }
 
 // Genera el payload simple "PK|cliente|campaña" para Code128
@@ -47,10 +48,12 @@ export function QrCodeModal({
   clientCode: clientCodeProp = "",
   campaignCode: campaignCodeProp = "",
   defaultMode = "code128",
+  externalId: externalIdProp = "",
 }: QrCodeModalProps) {
   const [mode, setMode] = useState<"qr" | "code128">(defaultMode);
   const [clientCode, setClientCode] = useState(clientCodeProp);
   const [campaignCode, setCampaignCode] = useState(campaignCodeProp);
+  const [externalId, setExternalId] = useState<string>(externalIdProp || "");
 
  const barcodeSvgRef = useRef<SVGSVGElement | null>(null);
 const qrWrapperRef = useRef<HTMLDivElement | null>(null); // ⬅️ nuevo
@@ -62,7 +65,8 @@ const barcodeBoxRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     setClientCode(clientCodeProp);
     setCampaignCode(campaignCodeProp);
-  }, [clientCodeProp, campaignCodeProp]);
+    setExternalId(externalIdProp || "");
+  }, [clientCodeProp, campaignCodeProp, externalIdProp]);
 
   // Base robusta de API (.env si existe; si no, el mismo host con :3900/api)
   const API_BASE =
@@ -71,10 +75,12 @@ const barcodeBoxRef = useRef<HTMLDivElement | null>(null);
 
   // URL que debe contener el QR para resolver en backend y entregar Apple/Google Wallet
   const walletUrl = useMemo(() => {
-    const c = encodeURIComponent(clientCode.trim());
+    // If externalId is provided, prefer it as the client identifier in wallet URL
+    const clientForUrl = (externalId || "").trim() ? (externalId || "").trim() : clientCode.trim();
+    const c = encodeURIComponent(clientForUrl);
     const k = encodeURIComponent(campaignCode.trim());
     return `${API_BASE}/wallet/resolve?client=${c}&campaign=${k}`;
-  }, [clientCode, campaignCode, API_BASE]);
+  }, [clientCode, campaignCode, API_BASE, externalId]);
 
   // Payload para barcode (opción Code128)
   const payload = useMemo(
@@ -240,8 +246,8 @@ const barcodeBoxRef = useRef<HTMLDivElement | null>(null);
       {/* Códigos en claro */}
       <div className="grid grid-cols-2 gap-2 mt-2 text-sm">
         <div>
-          <span className="text-muted-foreground">Cliente:</span>{" "}
-          <span className="font-mono">{clientCode || "—"}</span>
+          <span className="text-muted-foreground">External ID:</span>{" "}
+          <span className="font-mono">{externalIdProp || clientCode || "—"}</span>
         </div>
         <div>
           <span className="text-muted-foreground">Campaña:</span>{" "}
