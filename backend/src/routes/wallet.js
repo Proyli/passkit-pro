@@ -673,7 +673,9 @@ router.post("/wallet/email", async (req, res) => {
 // ===================== Smart link UA =====================
 router.get("/wallet/smart/:token", async (req, res) => {
   try {
-    const { client, campaign } = jwt.verify(req.params.token, SECRET);
+  const tokenPayload = jwt.verify(req.params.token, SECRET) || {};
+  const { client, campaign, tier: tokenTier } = tokenPayload;
+  console.log('[smart] tokenPayload:', tokenPayload, 'queryTier:', req.query?.tier);
     const ua = String(req.get("user-agent") || "").toLowerCase();
     const isApple = /iphone|ipad|ipod|macintosh/.test(ua);
 
@@ -706,12 +708,13 @@ router.get("/wallet/smart/:token", async (req, res) => {
 }
 
 
-    const tier = tierFromAll({
-  tipoCliente,
-  campaign,
-  queryTier: req.query?.tier,
-  bodyTier:  req.body?.tier
-});
+    // Precedencia: tokenTier (si viene en el token) > query/body > DB
+    const tier = tokenTier || tierFromAll({
+      tipoCliente,
+      campaign,
+      queryTier: req.query?.tier,
+      bodyTier:  req.body?.tier
+    });
 
     console.log("[smart]", { client, campaign, tipoCliente, tier, classRef: classIdForTier(tier) });
 

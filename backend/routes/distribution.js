@@ -38,9 +38,11 @@ async function sendWelcomeEmailHtml(
   settings,
   { htmlTemplate, buttonText, membershipId, logoUrl, subject, from, provider, tier } = {}
 ) {
-  const token = jwt.sign({ client, campaign }, process.env.WALLET_TOKEN_SECRET, { expiresIn: "7d" });
-  const smartUrlBase = `${API_BASE}/api/wallet/smart/${token}`;
-  const smartUrl = tier ? `${smartUrlBase}?tier=${encodeURIComponent(tier)}` : smartUrlBase;
+  // Incluir `tier` en el token para que viaje seguro con el smart URL
+  const tokenPayload = { client, campaign };
+  if (tier) tokenPayload.tier = tier;
+  const token = jwt.sign(tokenPayload, process.env.WALLET_TOKEN_SECRET, { expiresIn: "7d" });
+  const smartUrl = `${API_BASE}/api/wallet/smart/${token}`;
 
   // Logging para debug: inputs importantes y token truncado (no exponer key completa)
   try {
