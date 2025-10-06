@@ -50,8 +50,27 @@ const normalizePass = (raw: any): Pass => ({
   type: raw?.type ?? raw?.passType ?? "loyalty",
   estado: normalizeEstado(raw?.estado ?? raw?.status),
   createdAt: raw?.createdAt ?? raw?.created_at ?? raw?.dateCreated ?? new Date().toISOString(),
-  backgroundColor: raw?.backgroundColor ?? raw?.bgColor ?? "#ffffff",
-  textColor: raw?.textColor ?? raw?.fgColor ?? "#000000",
+  // Detect tier from member or raw fields to derive color if not provided
+  backgroundColor: (function(){
+    if (raw?.backgroundColor) return raw.backgroundColor;
+    if (raw?.bgColor) return raw.bgColor;
+    // derive tier from member fields or campaign codes (tolerant)
+    const tierFromMember = String(raw?.member?.tipoCliente || raw?.member?.tier || raw?.tipoCliente || raw?.tier || "");
+    const campaign = String(raw?.member?.codigoCampana || raw?.member?.codigoCampaña || raw?.campaignCode || "");
+    const probe = (tierFromMember + " " + campaign).toLowerCase();
+
+    // Priority: explicit gold/silver/bronze words, then numeric rules (15% -> gold, 5% -> blue)
+    if (/gold/.test(probe)) return "#DAA520"; // GOLD
+    if (/silver/.test(probe)) return "#9CA3AF"; // SILVER
+    if (/bronze|bronce/.test(probe)) return "#CD7F32"; // BRONZE
+
+    // numeric-based mapping (campaign names like 'gold_15', 'blue_5', or tiers like '15%')
+    if (/\b15\b|15%|_15|15\D|\b15\z/.test(probe)) return "#DAA520"; // treat 15 as gold
+    if (/\b5\b|5%|_5|\b05\b/.test(probe)) return "#2350C6"; // treat 5 as blue
+
+    return "#2350C6"; // default BLUE
+  })(),
+  textColor: raw?.textColor ?? raw?.fgColor ?? "#FFFFFF",
   scans: Number(raw?.scans ?? 0),
 });
 

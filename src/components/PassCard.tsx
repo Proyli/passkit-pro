@@ -198,7 +198,21 @@ const PassCard = ({ pass, onDuplicate, onDelete, compact = false }: PassCardProp
             <div className="flex items-center gap-2">
               <div
                 className="w-3 h-3 rounded-full border-2 border-white shadow-sm"
-                style={{ backgroundColor: pass.backgroundColor || "#007AFF" }}
+                style={{
+                  backgroundColor: (function(){
+                    if (pass.backgroundColor) return pass.backgroundColor;
+                    const member = (pass as any).member || {};
+                    const tier = String(member.tipoCliente || member.tier || pass.tipoCliente || "").toLowerCase();
+                    const campaign = String(member.codigoCampana || member.codigoCampaña || (pass as any).campaignCode || "").toLowerCase();
+                    const probe = (tier + " " + campaign).trim();
+                    if (/gold/.test(probe)) return '#DAA520';
+                    if (/silver/.test(probe)) return '#9CA3AF';
+                    if (/bronze|bronce/.test(probe)) return '#CD7F32';
+                    if (/\b15\b|15%|_15|15\D|\b15\z/.test(probe)) return '#DAA520';
+                    if (/\b5\b|5%|_5|\b05\b/.test(probe)) return '#2350C6';
+                    return '#007AFF';
+                  })()
+                }}
               />
               <Badge className={`${compact ? "text-xs px-2.5 py-1" : ""} ${getStatusColor(pass.status || "active")}`}>
                 {pass.status || "active"}

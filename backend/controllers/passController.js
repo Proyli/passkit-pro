@@ -64,8 +64,18 @@ exports.getAllPasses = async (_req, res) => {
   try {
     const rows = await Pass.findAll({
       order: [["id", "ASC"]],
-      include: [{ model: Member, as: "member", attributes: ["id", "codigoCliente", "codigoCampana"] }],
+      // incluir tipoCliente para poder decidir color en el servidor
+      include: [{ model: Member, as: "member", attributes: ["id", "codigoCliente", "codigoCampana", "tipoCliente"] }],
     });
+
+    const mapTierToColor = (raw) => {
+      if (!raw) return "#2350C6"; // default blue
+      const s = String(raw).toLowerCase();
+      if (s.includes("gold")) return "#DAA520"; // gold
+      if (s.includes("silver")) return "#C0C0C0"; // silver
+      if (s.includes("bronze") || s.includes("bronce")) return "#CD7F32"; // bronze
+      return "#2350C6";
+    };
 
     const data = rows.map((r) => {
       const j = r.toJSON();
@@ -73,6 +83,19 @@ exports.getAllPasses = async (_req, res) => {
         try { j.fields = JSON.parse(j.fields); } catch { j.fields = {}; }
       }
       j.status = j.status ?? j.estado ?? "active";
+
+      // Si el pass no trae backgroundColor, derivarlo a partir del tipo de cliente del member
+      try {
+        if (!j.backgroundColor) {
+          const memberTier = j.member && (j.member.tipoCliente || j.member.tipo || null);
+          j.backgroundColor = mapTierToColor(memberTier);
+        }
+      } catch (e) {
+        // defensivo: no fallar la respuesta por un problema menor al mapear color
+        console.warn("warning mapping backgroundColor for pass", j.id, e?.message || e);
+        if (!j.backgroundColor) j.backgroundColor = "#2350C6";
+      }
+
       return j;
     });
 
