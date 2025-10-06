@@ -124,9 +124,13 @@ const Profile: React.FC = () => {
       const data = await res.json();
       console.log("✅ Cliente guardado:", data);
 
-      await enviarWalletEmailDesdePerfil(nuevoCliente);
+      // Fire-and-forget the wallet email: don't block the UI if the external service fails
+      void enviarWalletEmailDesdePerfil(nuevoCliente).catch((err) => {
+        // log error but don't stop the user flow
+        console.error("Error enviando email de Wallet (no bloqueante):", err?.message || err);
+      });
 
-      alert("Cliente guardado en MySQL con éxito. Se envió el correo de la Wallet.");
+      alert("Cliente guardado en MySQL con éxito. Se intentó enviar el correo de la Wallet.");
       clearProfileData();
       setFormData(EMPTY_FORM);
       navigate("/members");
@@ -137,12 +141,10 @@ const Profile: React.FC = () => {
   };
 
   const handleAdvance = () => navigate("/members");
-
   return (
-    <div className="flex flex-col items-center py-10 px-4">
-      <div className="w-full max-w-4xl bg-white rounded-xl shadow p-6 space-y-6">
-        <h2 className="text-2xl font-bold text-center">Perfil del Cliente</h2>
-
+    <div className="container mx-auto p-4">
+      <h1 className="text-2xl mb-4">Perfil</h1>
+      <div className="bg-white p-6 rounded shadow">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <Label>Nombre</Label>
@@ -176,7 +178,6 @@ const Profile: React.FC = () => {
               name="codigoCampana"
               value={formData.codigoCampana}
               onChange={handleChange}
-              //placeholder="CP0078"
             />
           </div>
 

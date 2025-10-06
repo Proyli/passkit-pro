@@ -2,6 +2,28 @@
 const nodemailer = require("nodemailer");
 
 // --- Transports ---
+// Dev/test transport (Ethereal) will be created on demand if MAIL_DEV or NODE_ENV=development
+let etherealTransport = null;
+async function getEtherealTransport() {
+  if (etherealTransport) return etherealTransport;
+  try {
+    const testAccount = await nodemailer.createTestAccount();
+    etherealTransport = nodemailer.createTransport({
+      host: "smtp.ethereal.email",
+      port: 587,
+      secure: false,
+      auth: {
+        user: testAccount.user,
+        pass: testAccount.pass,
+      },
+    });
+    console.log("[mailer] Ethereal transport configured for development. Preview mails at: https://ethereal.email/messages");
+    return etherealTransport;
+  } catch (err) {
+    console.warn("[mailer] Could not create Ethereal transport:", err?.message || err);
+    return null;
+  }
+}
 const outlookTransport = process.env.SMTP_HOST
   ? nodemailer.createTransport({
       host: process.env.SMTP_HOST || "smtp.office365.com",
@@ -61,6 +83,51 @@ async function sendMailSmart(message = {}) {
   if (!to) throw new Error("sendMailSmart: 'to' requerido");
   if (!subject) throw new Error("sendMailSmart: 'subject' requerido");
   if (!html && !text) throw new Error("sendMailSmart: 'html' o 'text' requerido");
+
+  // If in development mode or MAIL_DEV=true, prefer Ethereal (test) transport
+  const isDevMail = String(process.env.MAIL_DEV || "").toLowerCase() === "true" ||
+    String(process.env.NODE_ENV || "").toLowerCase() === "development";
+
+  if (isDevMail) {
+    const eth = await getEtherealTransport();
+    const from = message.from || process.env.MAIL_FROM || `PassForge <${process.env.SMTP_USER}>`;
+    if (eth) {
+      try {
+        const info = await eth.sendMail({ from, to, subject, html, text, headers: headers || {} });
+        const previewUrl = nodemailer.getTestMessageUrl(info) || null;
+        return {
+          ok: true,
+          via: "ethereal",
+          previewUrl,
+          envelope: info.envelope,
+          messageId: info.messageId,
+          accepted: info.accepted,
+          rejected: info.rejected,
+          response: info.response,
+        };
+      } catch (err) {
+        console.warn('[mailer] Ethereal send failed, falling back to file:', err?.message || err);
+        // fall through to file fallback
+      }
+    }
+
+    // If Ethereal is not available or failed, save the mail to a tmp file for inspection
+    try {
+      const os = require('os');
+      const tmpDir = require('path').join(__dirname, '..', 'tmp-mails');
+      const fs = require('fs');
+      if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const filename = `mail-${stamp}.html`;
+      const filePath = require('path').join(tmpDir, filename);
+      const content = html || (text ? `<pre>${String(text).replace(/</g,'&lt;')}</pre>` : '<!-- empty -->');
+      fs.writeFileSync(filePath, content, 'utf8');
+      return { ok: true, via: 'file', previewPath: filePath };
+    } catch (err) {
+      console.error('[mailer] Failed to write dev mail to file:', err?.message || err);
+      throw new Error('Ethereal unavailable and fallback write failed');
+    }
+  }
 
   // Elegir transporte según FROM deseado (o default corporativo)
   const desiredFrom = message.from || process.env.MAIL_FROM || `PassForge <${process.env.SMTP_USER}>`;

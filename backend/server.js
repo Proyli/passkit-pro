@@ -18,7 +18,13 @@ const designRoutes       = require("./routes/designRoutes");
 const walletRoutes       = require(path.join(__dirname, "src", "routes", "wallet"));
 const analyticsRoutes    = require("./src/routes/analytics");
 const { router: distributionRouter } = require("./routes/distribution");
-const applePassRoutes    = require("./routes/applePass");
+// Load applePass routes conditionally: missing Apple certs should not crash the server in dev
+let applePassRoutes = null;
+try {
+  applePassRoutes = require("./routes/applePass");
+} catch (e) {
+  console.warn("[server] applePass routes not loaded:", e?.message || e);
+}
 
 /* ==== App ==== */
 const app = express();
@@ -71,7 +77,11 @@ app.use("/api",         walletRoutes);
 app.use("/api",         barcodeRouter);
 app.use("/api",         analyticsRoutes);
 app.use("/api",         distributionRouter);
-app.use("/api",         applePassRoutes);
+if (applePassRoutes) {
+  app.use("/api", applePassRoutes);
+} else {
+  console.warn('[server] Skipping applePass routes (certs missing or module failed to load)');
+}
 app.use("/applews", require("./routes/applews"));
 
 

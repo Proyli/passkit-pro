@@ -75,18 +75,21 @@ const barcodeBoxRef = useRef<HTMLDivElement | null>(null);
 
   // URL que debe contener el QR para resolver en backend y entregar Apple/Google Wallet
   const walletUrl = useMemo(() => {
-    // If externalId is provided, prefer it as the client identifier in wallet URL
-    const clientForUrl = (externalId || "").trim() ? (externalId || "").trim() : clientCode.trim();
-    const c = encodeURIComponent(clientForUrl);
+    // Wallet resolve should always receive client+campaign so backend can map to externalId
+    const c = encodeURIComponent(clientCode.trim());
     const k = encodeURIComponent(campaignCode.trim());
     return `${API_BASE}/wallet/resolve?client=${c}&campaign=${k}`;
   }, [clientCode, campaignCode, API_BASE, externalId]);
 
-  // Payload para barcode (opción Code128)
-  const payload = useMemo(
-    () => buildPayload(clientCode.trim(), campaignCode.trim()),
-    [clientCode, campaignCode]
-  );
+  // Payload para barcode (opción Code128) — formato pedido: CLIENT-CAMPAIGN (ej L0083-CP0163)
+  const payload = useMemo(() => {
+    const c = clientCode.trim();
+    const k = campaignCode.trim();
+    if (!c && !k) return "";
+    // si ambos existen, los unimos con guion; si falta uno, devolvemos el existente
+    if (c && k) return `${c}-${k}`;
+    return c || k;
+  }, [clientCode, campaignCode]);
 
   // Valor final que se pinta: QR usa walletUrl; Code128 usa payload
   const valueToRender = mode === "qr" ? walletUrl : payload;
@@ -247,7 +250,7 @@ const barcodeBoxRef = useRef<HTMLDivElement | null>(null);
       <div className="grid grid-cols-2 gap-2 mt-2 text-sm">
         <div>
           <span className="text-muted-foreground">External ID:</span>{" "}
-          <span className="font-mono">{externalIdProp || clientCode || "—"}</span>
+          <span className="font-mono">{externalId || "—"}</span>
         </div>
         <div>
           <span className="text-muted-foreground">Campaña:</span>{" "}

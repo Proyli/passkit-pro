@@ -634,10 +634,12 @@ router.post("/wallet/email", async (req, res) => {
     // Nombre opcional desde body
     if (req.body.name) displayName = String(req.body.name).trim() || displayName;
 
-    // Smart link (pasamos nombre para iOS; externalId ya viaja por DB o cae a client)
-    const token     = jwt.sign({ client, campaign }, SECRET, { expiresIn: "2d" });
-    const nameParam = displayName ? `&name=${encodeURIComponent(displayName)}` : "";
-    const smartUrl  = `${baseUrl()}/api/wallet/smart/${token}?tier=${encodeURIComponent(tierParam)}${nameParam}`;
+  // Smart link: include tier inside the signed token so it cannot be tampered with
+  const tokenPayload = { client, campaign, tier: tierParam };
+  const token = jwt.sign(tokenPayload, SECRET, { expiresIn: "2d" });
+  const nameParam = displayName ? `?name=${encodeURIComponent(displayName)}` : "";
+  // Note: tier is preserved inside the token; no need to add it to the query string
+  const smartUrl = `${baseUrl()}/api/wallet/smart/${token}${nameParam}`;
 
     console.log("[email] SMART_URL =>", smartUrl, "| ext=", externalId, "| tierFinal=", tierParam);
 

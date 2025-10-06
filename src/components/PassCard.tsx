@@ -52,10 +52,10 @@ const PassCard = ({ pass, onDuplicate, onDelete, compact = false }: PassCardProp
     null;
 
   // URL que resuelve Apple/Google según dispositivo
-  // Prefer externalId when available for the resolve URL and barcode
+  // Resolve URL must use client+campaign so backend can map to externalId
   const resolveUrl =
-    (externalId || client) && campaign
-      ? `${API}/wallet/resolve?client=${encodeURIComponent(externalId || client)}&campaign=${encodeURIComponent(
+    client && campaign
+      ? `${API}/wallet/resolve?client=${encodeURIComponent(client)}&campaign=${encodeURIComponent(
           campaign
         )}&source=link`
       : "";
