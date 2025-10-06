@@ -728,4 +728,8 @@ router.get("/wallet/smart/:token", async (req, res) => {
 // valida PUBLIC_BASE_URL al cargar
 baseUrl();
 
+// Exports: router para la app y funciones de ayuda para pruebas
 module.exports = router;
+module.exports.normalizeTier = normalizeTier;
+module.exports.tierFromAll = tierFromAll;
+module.exports.buildGoogleSaveUrl = buildGoogleSaveUrl;

@@ -36,10 +36,11 @@ async function sendWelcomeEmailHtml(
   client,
   campaign,
   settings,
-  { htmlTemplate, buttonText, membershipId, logoUrl, subject, from, provider } = {}
+  { htmlTemplate, buttonText, membershipId, logoUrl, subject, from, provider, tier } = {}
 ) {
   const token = jwt.sign({ client, campaign }, process.env.WALLET_TOKEN_SECRET, { expiresIn: "7d" });
-  const smartUrl = `${API_BASE}/api/wallet/smart/${token}`;
+  const smartUrlBase = `${API_BASE}/api/wallet/smart/${token}`;
+  const smartUrl = tier ? `${smartUrlBase}?tier=${encodeURIComponent(tier)}` : smartUrlBase;
 
   // Logging para debug: inputs importantes y token truncado (no exponer key completa)
   try {
@@ -101,7 +102,7 @@ async function sendWelcomeEmail(memberObj, provider = "outlook") {
     memberObj.codigoCliente,
     memberObj.codigoCampana,
     {}, // settings opcionales
-    { provider } // 👈 aquí decides: "gmail" o "outlook"
+    { provider, tier: memberObj.tipoCliente } // 👈 aquí pasamos el tipoCliente para que el smartUrl incluya ?tier=
   );
 }
 
