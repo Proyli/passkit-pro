@@ -124,6 +124,13 @@ function getDisplayName(row) {
   return full || null;
 }
 
+function buildClientCampaignCode(client, campaign) {
+  const clientCode = String(client || "").trim();
+  const campaignCode = String(campaign || "").trim();
+  if (clientCode && campaignCode) return `${clientCode}-${campaignCode}`;
+  return clientCode || campaignCode;
+}
+
 // ===================== ENV Google =====================
 const SA_EMAIL  = process.env.GOOGLE_SA_EMAIL; // wallet-svc@...iam.gserviceaccount.com
 const SECRET    = process.env.WALLET_TOKEN_SECRET || "changeme";
@@ -226,8 +233,10 @@ function buildGoogleSaveUrl({ client, campaign, externalId, displayName, tier })
   if (!issuer) throw new Error("Falta GOOGLE_WALLET_ISSUER_ID");
   if (!SA_EMAIL || !PRIVATE_KEY) throw new Error("Faltan GOOGLE_SA_EMAIL o PRIVATE_KEY");
 
- const codeValue = String(externalId || client || "").trim();
-if (!codeValue) throw new Error("No hay código para el miembro.");
+  const displayId = String(externalId || client || "").trim();
+  if (!displayId) throw new Error("No hay código para el miembro.");
+  const barcodeValue = buildClientCampaignCode(client, campaign);
+  if (!barcodeValue) throw new Error("No hay código de barras para el miembro.");
 
   /*const rawTier  = String(tier || "");
   const gold     = /(gold|golden|dorado|oro|15)/i.test(rawTier);
@@ -245,7 +254,7 @@ if (!codeValue) throw new Error("No hay código para el miembro.");
 
   // ID nuevo para forzar refresco en el teléfono
   const objectId = `${issuer}.${sanitize(
-    `${codeValue}-${(campaign || "").toLowerCase()}-${tierNorm}-r${verTag}`
+    `${displayId}-${(campaign || "").toLowerCase()}-${tierNorm}-r${verTag}`
   )}`;
 
   // Clase correcta por tier (intenta helper, luego fallbacks desde env)
@@ -269,14 +278,14 @@ if (!codeValue) throw new Error("No hay código para el miembro.");
     state: "ACTIVE",
     hexBackgroundColor: gold ? "#DAA520" : "#2350C6",
 
-    accountId:   codeValue,
-    accountName: displayName || codeValue,
+    accountId:   displayId,
+    accountName: displayName || displayId,
 
     infoModuleData: {
       labelValueRows: [
-        { columns: [{ label: "Nombre", value: displayName || codeValue }] },
+        { columns: [{ label: "Nombre", value: displayName || displayId }] },
         { columns: [{ label: "Nivel",  value: tierLabel }] },   // <- ya no rompe
-        { columns: [{ label: "Código", value: codeValue }] }
+        { columns: [{ label: "Código", value: displayId }] }
       ],
       showLastUpdateTime: false
     },
@@ -284,7 +293,7 @@ if (!codeValue) throw new Error("No hay código para el miembro.");
     imageModulesData: [{ id: "alcazaren_hero", mainImage: { sourceUri: { uri: heroUri } } }],
     textModulesData:  [{ header: "Información", body: getInfoText(tierNorm) }],
     linksModuleData:  { uris: [{ uri: `${origin}/public/terminos`, description: "Términos y condiciones" }] },
-    barcode: { type: "CODE_128", value: codeValue, alternateText: externalId },
+    barcode: { type: "CODE_128", value: barcodeValue, alternateText: displayId },
   };
 
 
@@ -371,6 +380,8 @@ router.get("/wallet/ios/:token", async (req, res) => {
       : { bg: BLUE_RGB, fg: "rgb(255,255,255)", label: "rgb(255,255,255)" };
 
     // Serial incluye tier para forzar refresco si cambias color
+    const displayId = String(externalId || client || "").trim();
+    const barcodeValue = buildClientCampaignCode(client, campaign) || displayId;
     const serial = `${sanitize(client)}-${sanitize(campaign)}-${tier}`;
 
     const pass = await Pass.from(
@@ -401,16 +412,16 @@ router.get("/wallet/ios/:token", async (req, res) => {
         // Código de barras
         barcodes: [{
           format: "PKBarcodeFormatCode128",
-          message: String(externalId || "").normalize("NFKD").replace(/[^\x00-\x7F]/g, ""),
+          message: String(barcodeValue || "").normalize("NFKD").replace(/[^\x00-\x7F]/g, ""),
           messageEncoding: "iso-8859-1",
-          altText: externalId, // se ve debajo
+          altText: displayId, // se ve debajo
         }],
 
         // Campos visibles
         storeCard: {
           headerFields:    [{ key: "tier", label: "Nivel", value: tierLabel }],
           primaryFields:   [{ key: "name", label: "Nombre", value: displayName }],
-          secondaryFields: [{ key: "code", label: "Código", value: externalId }],
+          secondaryFields: [{ key: "code", label: "Código", value: displayId }],
           auxiliaryFields: []
         }
       }
