@@ -189,13 +189,16 @@ async function tryQuery(sql, params) {
 }
 
 async function findMemberFlexible(client, campaign) {
+  const clientCode = String(client || "").trim();
+  const campaignCode = String(campaign || "").trim();
+
   if (SKIP_DB) return null;
 
   // 1) camelCase
   let rows = await tryQuery(
     `SELECT external_id, nombre, apellido, first_name, last_name, tipoCliente, codigoCliente, codigoCampana
        FROM members WHERE codigoCliente=? AND codigoCampana=? LIMIT 1`,
-    [client, campaign]
+    [clientCode, campaignCode]
   );
   if (rows?.[0]) return rows[0];
 
@@ -203,7 +206,7 @@ async function findMemberFlexible(client, campaign) {
   rows = await tryQuery(
     `SELECT external_id, nombre, apellido, first_name, last_name, tipoCliente, codigoCliente
        FROM members WHERE codigoCliente=? LIMIT 1`,
-    [client]
+    [clientCode]
   );
   if (rows?.[0]) return rows[0];
 
@@ -212,7 +215,7 @@ async function findMemberFlexible(client, campaign) {
     `SELECT external_id, nombre, apellido, first_name, last_name,
             tipo_cliente AS tipoCliente, codigo_cliente AS codigoCliente, codigo_campana AS codigoCampana
        FROM members WHERE codigo_cliente=? AND codigo_campana=? LIMIT 1`,
-    [client, campaign]
+    [clientCode, campaignCode]
   );
   if (rows?.[0]) return rows[0];
 
@@ -221,7 +224,7 @@ async function findMemberFlexible(client, campaign) {
     `SELECT external_id, nombre, apellido, first_name, last_name,
             tipo_cliente AS tipoCliente, codigo_cliente AS codigoCliente
        FROM members WHERE codigo_cliente=? LIMIT 1`,
-    [client]
+    [clientCode]
   );
   return rows?.[0] || null;
 }
@@ -233,9 +236,11 @@ function buildGoogleSaveUrl({ client, campaign, externalId, displayName, tier })
   if (!issuer) throw new Error("Falta GOOGLE_WALLET_ISSUER_ID");
   if (!SA_EMAIL || !PRIVATE_KEY) throw new Error("Faltan GOOGLE_SA_EMAIL o PRIVATE_KEY");
 
-  const displayId = String(externalId || client || "").trim();
+  const clientCode = String(client || "").trim();
+  const campaignCode = String(campaign || "").trim();
+  const displayId = String(externalId || clientCode || "").trim();
   if (!displayId) throw new Error("No hay código para el miembro.");
-  const barcodeValue = buildClientCampaignCode(client, campaign);
+  const barcodeValue = buildClientCampaignCode(clientCode, campaignCode);
   if (!barcodeValue) throw new Error("No hay código de barras para el miembro.");
 
   /*const rawTier  = String(tier || "");
@@ -245,6 +250,7 @@ function buildGoogleSaveUrl({ client, campaign, externalId, displayName, tier })
   const tierNorm = normalizeTier(tier, { loose: true }) || "blue";
   const gold = tierNorm === "gold";
   console.log("[buildGoogleSaveUrl] tier input:", tier, "=> tierNorm:", tierNorm, "gold:", gold);
+  console.log("[buildGoogleSaveUrl] ids:", { client: clientCode, campaign: campaignCode, displayId, barcodeValue });
 
   const tierLabel = gold ? "GOLD 15%" : "BLUE 5%";   // <- ¡vuelve!
   const verTag   = process.env.WALLET_OBJECT_REV || "2";
@@ -254,7 +260,7 @@ function buildGoogleSaveUrl({ client, campaign, externalId, displayName, tier })
 
   // ID nuevo para forzar refresco en el teléfono
   const objectId = `${issuer}.${sanitize(
-    `${displayId}-${(campaign || "").toLowerCase()}-${tierNorm}-r${verTag}`
+    `${displayId}-${(campaignCode || "").toLowerCase()}-${tierNorm}-r${verTag}`
   )}`;
 
   // Clase correcta por tier (intenta helper, luego fallbacks desde env)
@@ -308,13 +314,12 @@ function buildGoogleSaveUrl({ client, campaign, externalId, displayName, tier })
 // ===================== iOS (.pkpass) =====================
 router.get("/wallet/ios/:token", async (req, res) => {
   try {
-    const {
-      client,
-      campaign,
-      externalId: tokenExternalId,
-      name: tokenName,
-      tier: tokenTier,
-    } = jwt.verify(req.params.token, SECRET);
+    const tokenPayload = jwt.verify(req.params.token, SECRET);
+    const client = String(tokenPayload.client || "").trim();
+    const campaign = String(tokenPayload.campaign || "").trim();
+    const tokenExternalId = tokenPayload.externalId;
+    const tokenName = tokenPayload.name;
+    const tokenTier = tokenPayload.tier;
 
     // Datos del miembro
     let externalId  = tokenExternalId || client;
@@ -382,6 +387,7 @@ router.get("/wallet/ios/:token", async (req, res) => {
     // Serial incluye tier para forzar refresco si cambias color
     const displayId = String(externalId || client || "").trim();
     const barcodeValue = buildClientCampaignCode(client, campaign) || displayId;
+    console.log("[ios-pass] ids:", { client, campaign, displayId, barcodeValue });
     const serial = `${sanitize(client)}-${sanitize(campaign)}-${tier}`;
 
     const pass = await Pass.from(
@@ -448,8 +454,8 @@ router.get("/wallet/ios/:token", async (req, res) => {
 // ===================== Resolve (UA / platform) =====================
 router.get("/wallet/resolve", async (req, res) => {
   try {
-    const client   = String(req.query.client   || "");
-    const campaign = String(req.query.campaign || "");
+    const client   = String(req.query.client   || "").trim();
+    const campaign = String(req.query.campaign || "").trim();
     const forced   = String(req.query.platform || "").toLowerCase();
     if (!client || !campaign) return res.status(400).send("missing client/campaign");
 
@@ -475,21 +481,27 @@ if (req.query?.name || req.body?.name) {
 
 console.log("[resolve] using:", { client, campaign, externalId, displayName, tipoCliente });
  
+    const tier = tierFromAll({
+      tipoCliente,
+      campaign,
+      queryTier: req.query?.tier,
+      bodyTier:  req.body?.tier
+    });
+
     // iOS → .pkpass
     if (forced === "apple" || isiOS) {
-      const iosToken  = jwt.sign({ client, campaign }, SECRET, { expiresIn: "15m" });
-      const extraTier = req.query.tier ? `?tier=${encodeURIComponent(req.query.tier)}` : "";
-      const appleUrl  = `${baseUrl()}/api/wallet/ios/${iosToken}${extraTier}`;
+      const iosPayload = { client, campaign };
+      if (externalId) iosPayload.externalId = externalId;
+      if (displayName) iosPayload.name = displayName;
+      if (tier) iosPayload.tier = tier;
+      const iosToken  = jwt.sign(iosPayload, SECRET, { expiresIn: "15m" });
+      const qs = [];
+      if (req.query.tier) qs.push(`tier=${encodeURIComponent(req.query.tier)}`);
+      if (req.query.name) qs.push(`name=${encodeURIComponent(req.query.name)}`);
+      const extra = qs.length ? `?${qs.join("&")}` : "";
+      const appleUrl  = `${baseUrl()}/api/wallet/ios/${iosToken}${extra}`;
       return res.redirect(302, appleUrl);
     }
-
-    // Android/Google → Save URL
-    const tier = tierFromAll({
-  tipoCliente,
-  campaign,
-  queryTier: req.query?.tier,
-  bodyTier:  req.body?.tier
-});
 
     console.log("[resolve]", { client, campaign, tipoCliente, tier, classRef: classIdForTier(tier) });
 
@@ -504,7 +516,9 @@ console.log("[resolve] using:", { client, campaign, externalId, displayName, tip
 // ===================== Compat: Google con token =====================
 router.get("/wallet/google/:token", async (req, res) => {
   try {
-    const { client, campaign } = jwt.verify(req.params.token, SECRET);
+    const decoded = jwt.verify(req.params.token, SECRET);
+    const client = String(decoded.client || "").trim();
+    const campaign = String(decoded.campaign || "").trim();
 
     if (!process.env.GOOGLE_WALLET_ISSUER_ID) {
       return res.status(500).json({ message: "Falta GOOGLE_WALLET_ISSUER_ID" });
@@ -632,8 +646,8 @@ router.get("/wallet/codes", async (req, res) => {
 // ===================== Email con Smart Link =====================
 router.post("/wallet/email", async (req, res) => {
   try {
-    const client   = String(req.body.client   || "");
-    const campaign = String(req.body.campaign || "");
+    const client   = String(req.body.client   || "").trim();
+    const campaign = String(req.body.campaign || "").trim();
     const to       = String(req.body.to       || "");
     if (!client || !campaign || !to) {
       return res.status(400).json({ ok:false, message:"Falta client/campaign/to" });
@@ -714,12 +728,14 @@ router.get("/wallet/smart/:token", async (req, res) => {
   try {
     const tokenPayload = jwt.verify(req.params.token, SECRET) || {};
     const {
-      client,
-      campaign,
+      client: rawClient,
+      campaign: rawCampaign,
       tier: tokenTier,
       externalId: tokenExternalId,
       name: tokenName,
     } = tokenPayload;
+    const client = String(rawClient || "").trim();
+    const campaign = String(rawCampaign || "").trim();
     console.log('[smart] tokenPayload:', tokenPayload, 'queryTier:', req.query?.tier);
     const ua = String(req.get("user-agent") || "").toLowerCase();
     const isApple = /iphone|ipad|ipod|macintosh/.test(ua);
