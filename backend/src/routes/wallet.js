@@ -299,23 +299,46 @@ if (!codeValue) throw new Error("No hay código para el miembro.");
 // ===================== iOS (.pkpass) =====================
 router.get("/wallet/ios/:token", async (req, res) => {
   try {
-    const { client, campaign } = jwt.verify(req.params.token, SECRET);
+    const {
+      client,
+      campaign,
+      externalId: tokenExternalId,
+      name: tokenName,
+      tier: tokenTier,
+    } = jwt.verify(req.params.token, SECRET);
 
     // Datos del miembro
-    let externalId  = client;
-    let displayName = client;
+    let externalId  = tokenExternalId || client;
+    let displayName = tokenName || client;
     let tipoCliente = null;
     try {
       const r = await findMemberFlexible(client, campaign);
       if (r) {
-        externalId  = r.external_id || client;
-        displayName = getDisplayName(r) || client;
+        if (!tokenExternalId && r.external_id) {
+          externalId = r.external_id;
+        } else {
+          externalId = externalId || r.external_id || client;
+        }
+        if (!tokenName && getDisplayName(r)) {
+          displayName = getDisplayName(r);
+        } else {
+          displayName = displayName || getDisplayName(r) || client;
+        }
         tipoCliente = r.tipoCliente || null;
       }
     } catch {}
-   if (req.query?.name) {
-  displayName = String(req.query.name).trim();
-}
+
+    if (req.query?.name) {
+      displayName = String(req.query.name).trim();
+    }
+
+    if (req.query?.externalId) {
+      const trimmed = String(req.query.externalId).trim();
+      if (trimmed) externalId = trimmed;
+    }
+
+    if (!externalId) externalId = client;
+    if (!displayName) displayName = externalId || client;
 
     // Modelo e iconos mínimos
     const icon1x = path.join(MODEL, "icon.png");
@@ -332,6 +355,7 @@ router.get("/wallet/ios/:token", async (req, res) => {
       // 👉 iOS: primero query ?tier= , luego BD, luego blue
     const tier =
       normalizeTier(req.query.tier) ||
+      normalizeTier(tokenTier) ||
       normalizeTier(tipoCliente, { loose: true }) ||
       "blue";
 
@@ -636,6 +660,8 @@ router.post("/wallet/email", async (req, res) => {
 
   // Smart link: include tier inside the signed token so it cannot be tampered with
   const tokenPayload = { client, campaign, tier: tierParam };
+  if (externalId) tokenPayload.externalId = externalId;
+  if (displayName) tokenPayload.name = displayName;
   const token = jwt.sign(tokenPayload, SECRET, { expiresIn: "2d" });
   const nameParam = displayName ? `?name=${encodeURIComponent(displayName)}` : "";
   // Note: tier is preserved inside the token; no need to add it to the query string
@@ -675,39 +701,72 @@ router.post("/wallet/email", async (req, res) => {
 // ===================== Smart link UA =====================
 router.get("/wallet/smart/:token", async (req, res) => {
   try {
-  const tokenPayload = jwt.verify(req.params.token, SECRET) || {};
-  const { client, campaign, tier: tokenTier } = tokenPayload;
-  console.log('[smart] tokenPayload:', tokenPayload, 'queryTier:', req.query?.tier);
+    const tokenPayload = jwt.verify(req.params.token, SECRET) || {};
+    const {
+      client,
+      campaign,
+      tier: tokenTier,
+      externalId: tokenExternalId,
+      name: tokenName,
+    } = tokenPayload;
+    console.log('[smart] tokenPayload:', tokenPayload, 'queryTier:', req.query?.tier);
     const ua = String(req.get("user-agent") || "").toLowerCase();
     const isApple = /iphone|ipad|ipod|macintosh/.test(ua);
 
     // Enriquecer
-    let externalId  = client;
-    let displayName = client;
+    let externalId  = tokenExternalId || client;
+    let displayName = tokenName || client;
     let tipoCliente = null;
     try {
       const r = await findMemberFlexible(client, campaign);
       if (r) {
-        externalId  = r.external_id || client;
-        displayName = getDisplayName(r) || client;
+        if (!tokenExternalId && r.external_id) {
+          externalId = r.external_id;
+        } else {
+          externalId = externalId || r.external_id || client;
+        }
+        if (!tokenName && getDisplayName(r)) {
+          displayName = getDisplayName(r);
+        } else {
+          displayName = displayName || getDisplayName(r) || client;
+        }
         tipoCliente = r.tipoCliente || null;
       }
     } catch {}
 
+    const nameOverride = req.query?.name || req.body?.name || null;
+    if (nameOverride) {
+      const trimmed = String(nameOverride).trim();
+      if (trimmed) displayName = trimmed;
+    }
+
+    const externalOverride = req.query?.externalId || req.body?.externalId || null;
+    if (externalOverride) {
+      const trimmed = String(externalOverride).trim();
+      if (trimmed) externalId = trimmed;
+    }
+
+    if (!externalId) externalId = client;
+    if (!displayName) displayName = externalId || client;
+
     if (isApple) {
-  const iosToken = jwt.sign({ client, campaign }, SECRET, { expiresIn: "15m" });
+      const iosTokenPayload = { client, campaign };
+      if (externalId) iosTokenPayload.externalId = externalId;
+      if (displayName) iosTokenPayload.name = displayName;
+      if (tokenTier) iosTokenPayload.tier = tokenTier;
+      const iosToken = jwt.sign(iosTokenPayload, SECRET, { expiresIn: "15m" });
 
-  const tierQ = req.query?.tier || req.body?.tier;
-  const nameQ = req.query?.name || req.body?.name;
+      const tierQ = req.query?.tier || req.body?.tier;
+      const nameQ = req.query?.name || req.body?.name;
 
-  const qs = [];
-  if (tierQ) qs.push(`tier=${encodeURIComponent(tierQ)}`);
-  if (nameQ) qs.push(`name=${encodeURIComponent(nameQ)}`);
+      const qs = [];
+      if (tierQ) qs.push(`tier=${encodeURIComponent(tierQ)}`);
+      if (nameQ) qs.push(`name=${encodeURIComponent(nameQ)}`);
 
-  const extra = qs.length ? `?${qs.join("&")}` : "";
-  const appleUrl = `${baseUrl()}/api/wallet/ios/${iosToken}${extra}`;
-  return res.redirect(302, appleUrl);
-}
+      const extra = qs.length ? `?${qs.join("&")}` : "";
+      const appleUrl = `${baseUrl()}/api/wallet/ios/${iosToken}${extra}`;
+      return res.redirect(302, appleUrl);
+    }
 
 
     // Precedencia: tokenTier (si viene en el token) > query/body > DB
