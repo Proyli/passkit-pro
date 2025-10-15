@@ -62,12 +62,25 @@ function renderWalletEmail(s, { displayName, membershipId, smartUrl }) {
     throw new Error("renderWalletEmail: smartUrl inválida o vacía (debe ser absoluta https://)");
   }
 
-  const htmlBody = tpl
+  let htmlBody = tpl
     .replace(/{{DISPLAY_NAME}}/g, escapeHTML(displayName || ""))
     .replace(/{{MEMBERSHIP_ID}}/g, escapeHTML(membershipId || ""))
     .replace(/{{SMART_URL}}/g, smartUrl) // ← se inserta tal cual (absoluto)
     .replace(/{{BUTTON_TEXT}}/g, escapeHTML(s.buttonText || DEFAULTS.buttonText))
     .replace(/{{LOGO_URL}}/g, escapeHTML(s.logoUrl || DEFAULTS.logoUrl));
+
+  // Fallback: si la plantilla no incluye el smartUrl, agrega siempre un botón estándar
+  if (!htmlBody.includes(smartUrl)) {
+    const btnText = escapeHTML(s.buttonText || DEFAULTS.buttonText);
+    htmlBody += `
+      <div style="margin:22px 0 16px 0; text-align:center;">
+        <a href="${smartUrl}"
+           style="display:inline-block; padding:12px 22px; border-radius:10px; background:#8B173C; color:#ffffff; text-decoration:none;
+                  font-weight:700; font-family:Segoe UI,Roboto,Arial,sans-serif; font-size:16px;">
+          ${btnText}
+        </a>
+      </div>`;
+  }
 
   const preheader = escapeHTML(s.preheader || DEFAULTS.preheader);
 

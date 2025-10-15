@@ -97,6 +97,35 @@ const res = await fetch(`${API_BASE}/members`);
 const list = await res.json();
 ```
 
+Buscar 1 miembro por códigos
+----------------------------
+- GET /members?idClient=...&idCampaing=...
+  - Parámetros aceptados (alias):
+    - `idClient` o `clientCode` → coincide con `codigoCliente`
+    - `idCampaing`, `idCampaign` o `campaignCode` → coincide con `codigoCampana`
+- Si envías ambos parámetros devuelve UN objeto del miembro. Si falta alguno, devuelve la lista completa.
+
+curl (localhost)
+```bash
+curl -sS "http://localhost:3900/api/members?idClient=L00005&idCampaing=CP0161"
+```
+
+fetch (TS)
+```ts
+const url = new URL(`${API_BASE}/members`);
+url.searchParams.set("idClient", "L00005");
+url.searchParams.set("idCampaing", "CP0161");
+const res = await fetch(url.toString());
+if (!res.ok) throw new Error(`HTTP ${res.status}`);
+const member = await res.json();
+```
+
+Nota Postman (Error ENOTFOUND api)
+----------------------------------
+Si en Postman pones solo `api/members?...` verás `getaddrinfo ENOTFOUND api` porque intenta resolver un host llamado `api`.
+Usa la URL completa con protocolo y puerto, por ejemplo:
+`http://localhost:3900/api/members?idClient=L00005&idCampaing=CP0161`.
+
 Crear miembro
 -------------
 - POST /members
@@ -238,6 +267,54 @@ const res = await fetch('https://backend-passforge.onrender.com/api/wallet/email
 const data = await res.json();
 if (!res.ok || !data.ok) throw new Error(data.error || data.message || `HTTP ${res.status}`);
 ```
+
+---
+
+## Actualizar Wallet / Smart Link
+
+Generar el smart link (redirige a Apple/Google según dispositivo) para un cliente específico.
+
+- GET `/wallet/resolve?client={clientCode}&campaign={campaignCode}&externalId={externalId?}`
+
+Ejemplo
+```bash
+curl "${API_BASE}/wallet/resolve?client=L00005&campaign=CP0161&externalId=L00005" -I
+```
+
+Smart link por `memberId` (helper)
+- GET `/wallet/smart-link/member/:id`
+
+Respuesta
+```json
+{ "ok": true, "smartUrl": "https://tu-dominio/api/wallet/smart/<token>", "client":"L00005", "campaign":"CP0161", "externalId":"L00005", "tier":"blue" }
+```
+
+Notas
+- El smart link incluye el tier dentro del token firmado; no se altera con query params.
+- Si la tarjeta ya está instalada en el móvil, usar el smart link permite re‑guardarla para aplicar el nuevo color/beneficio.
+
+---
+
+## Refresh (esqueleto para actualización silenciosa)
+
+Endpoints preparados para futura integración de actualización automática en dispositivos (sin correo):
+
+- POST `/wallet/refresh/google`
+  - Body: `{ "client": "L00005", "campaign": "CP0161", "externalId": "L00005" }`
+  - Si no hay credenciales de Google Wallet, responde `mode: "smart-link"` con `saveUrl` para re‑guardar.
+  - Con credenciales, hoy responde `mode: "stub"` (lugar donde implementar el PATCH).
+
+- POST `/wallet/refresh/apple`
+  - Body: `{ "client": "L00005", "campaign": "CP0161", "externalId": "L00005" }`
+  - Devuelve `smartUrl` (APNS push no implementado aún; requiere device tokens + APNS).
+
+Variables esperadas para Google
+- `GOOGLE_WALLET_ISSUER_ID`
+- `GOOGLE_SA_EMAIL`, `GOOGLE_SA_PRIVATE_KEY`
+
+Notas
+- Estos endpoints NO rompen tu flujo actual: si faltan credenciales, siguen devolviendo smart link para re‑guardar.
+- Cuando tengas las credenciales, puedo completar el PATCH (Google) y el push APNS (Apple).
 
 ---
 

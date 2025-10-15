@@ -820,6 +820,147 @@ router.get("/wallet/smart/:token", async (req, res) => {
   }
 });
 
+// ===================== Refresh endpoints (skeleton) =====================
+// Estos endpoints dejan lista la estructura para refrescar tarjetas instaladas.
+// Google: PATCH del objeto (requiere credenciales de Service Account y issuer).
+// Apple: Push Notification a dispositivos registrados (requiere APNS y almacenamiento de device tokens).
+
+function googleEnvReady() {
+  return !!(process.env.GOOGLE_WALLET_ISSUER_ID && (process.env.GOOGLE_SA_EMAIL && process.env.GOOGLE_SA_PRIVATE_KEY));
+}
+
+router.post("/wallet/refresh/google", async (req, res) => {
+  try {
+    const client   = String(req.body.client   || "").trim();
+    const campaign = String(req.body.campaign || "").trim();
+    const ext      = String(req.body.externalId || "").trim();
+    const tierRaw  = req.body.tier;
+    if (!client || !campaign) return res.status(400).json({ ok:false, error:"Faltan client/campaign" });
+
+    // Resolver desde DB si falta externalId
+    let externalId = ext || client;
+    let tipoCliente = null; let displayName = client;
+    try {
+      const r = await findMemberFlexible(client, campaign);
+      if (r) {
+        externalId = r.external_id || externalId;
+        tipoCliente = r.tipoCliente || null;
+        displayName = getDisplayName(r) || displayName;
+      }
+    } catch {}
+
+    const tier = normalizeTier(tierRaw) || normalizeTier(tipoCliente, { loose:true }) || 'blue';
+
+    // Si no hay credenciales, retornamos smart link para re-guardar manualmente (funciona hoy)
+    if (!googleEnvReady()) {
+      const saveUrl = buildGoogleSaveUrl({ client, campaign, externalId, displayName, tier });
+      return res.json({ ok:true, mode:'smart-link', saveUrl, message:'Credenciales de Google Wallet faltantes; usa saveUrl para re-guardar' });
+    }
+
+    // TODO: implementar PATCH del objeto con googleapis (requiere configuración completa)
+    // Por ahora, devolvemos smart link además del stub
+    const saveUrl = buildGoogleSaveUrl({ client, campaign, externalId, displayName, tier });
+    return res.json({ ok:true, mode:'stub', message:'PATCH no implementado aún; credenciales presentes', saveUrl });
+  } catch (e) {
+    console.error('refresh/google error:', e?.message || e);
+    return res.status(500).json({ ok:false, error:String(e?.message || e) });
+  }
+});
+
+router.post("/wallet/refresh/apple", async (req, res) => {
+  try {
+    const client   = String(req.body.client   || "").trim();
+    const campaign = String(req.body.campaign || "").trim();
+    if (!client || !campaign) return res.status(400).json({ ok:false, error:'Faltan client/campaign' });
+
+    // En esta base aún no almacenamos device tokens de Apple (registrations) para hacer APNS push.
+    // Devolvemos el smart link (funciona en iOS):
+    const tokenPayload = { client, campaign };
+    if (req.body.externalId) tokenPayload.externalId = String(req.body.externalId);
+    if (req.body.name) tokenPayload.name = String(req.body.name);
+    const token = jwt.sign(tokenPayload, SECRET, { expiresIn:'2d' });
+    const smartUrl = `${baseUrl()}/api/wallet/smart/${token}`;
+    return res.json({ ok:true, mode:'smart-link', smartUrl, message:'APNS push no implementado; usa smartUrl para re-guardar' });
+  } catch (e) {
+    console.error('refresh/apple error:', e?.message || e);
+    return res.status(500).json({ ok:false, error:String(e?.message || e) });
+  }
+});
+
+router.post("/wallet/refresh", async (req, res) => {
+  try {
+    const platform = String(req.body.platform || 'both').toLowerCase();
+    const out = {};
+    if (platform === 'google' || platform === 'both') {
+      const r = await (await fetchLike(req, '/wallet/refresh/google')).json();
+      out.google = r;
+    }
+    if (platform === 'apple' || platform === 'both') {
+      const r = await (await fetchLike(req, '/wallet/refresh/apple')).json();
+      out.apple = r;
+    }
+    return res.json({ ok:true, ...out });
+  } catch (e) {
+    console.error('refresh both error:', e?.message || e);
+    return res.status(500).json({ ok:false, error:String(e?.message || e) });
+  }
+});
+
+// Helper interno: invoca nuestros endpoints con el mismo req (sin salir del proceso)
+async function fetchLike(req, pathname) {
+  const url = new URL(`http://internal${pathname}`);
+  // Construir payload igual a req.body
+  const body = JSON.stringify(req.body || {});
+  const headers = { 'Content-Type':'application/json' };
+  // Usamos node-fetch dinámico sin dependencia: implementamos minimal wrapper
+  return await new Promise((resolve) => {
+    const { Readable } = require('stream');
+    const http = require('http');
+    const options = { method:'POST', headers };
+    const req2 = http.request(url, options, (res2) => {
+      const chunks = [];
+      res2.on('data', (c) => chunks.push(c));
+      res2.on('end', () => {
+        const text = Buffer.concat(chunks).toString('utf8');
+        resolve({ json: async () => { try { return JSON.parse(text); } catch { return { ok:false, raw:text }; } } });
+      });
+    });
+    if (body) Readable.from([body]).pipe(req2); else req2.end();
+  });
+}
+// ===================== Smart link by member id (helper) =====================
+router.get("/wallet/smart-link/member/:id", async (req, res) => {
+  try {
+    const id = String(req.params.id || "").trim();
+    if (!id) return res.status(400).json({ ok:false, error:"missing id" });
+    if (!pool || typeof pool.query !== 'function') return res.status(500).json({ ok:false, error:"db not available" });
+
+    const [rows] = await pool.query(
+      "SELECT id, external_id, nombre, apellido, codigoCliente, codigoCampana, tipoCliente FROM members WHERE id=? LIMIT 1",
+      [id]
+    );
+    const m = rows && rows[0];
+    if (!m) return res.status(404).json({ ok:false, error:"member not found" });
+
+    const client   = String(m.codigoCliente || "").trim();
+    const campaign = String(m.codigoCampana || "").trim();
+    if (!client || !campaign) return res.status(400).json({ ok:false, error:"member missing client/campaign" });
+
+    const displayName = getDisplayName(m) || client;
+    const externalId  = String(m.external_id || client);
+    const tierParam   = normalizeTier(m.tipoCliente, { loose: true }) || "blue";
+
+    const payload = { client, campaign, tier: tierParam, externalId, name: displayName };
+    const token   = jwt.sign(payload, SECRET, { expiresIn: "2d" });
+    const smartUrl = `${baseUrl()}/api/wallet/smart/${token}`;
+
+    return res.json({ ok:true, smartUrl, client, campaign, externalId, displayName, tier: tierParam });
+  } catch (e) {
+    console.error("smart-link/member error:", e?.message || e);
+    return res.status(500).json({ ok:false, error: String(e?.message || e) });
+  }
+});
+
 // valida PUBLIC_BASE_URL al cargar
 baseUrl();
 

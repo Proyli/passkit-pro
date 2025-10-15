@@ -16,16 +16,24 @@ const DEFAULT_SETTINGS = {
   subject: "Tu tarjeta de lealtad",
   fromName: "Distribuidora Alcazarén, S. A.",
   buttonText: "Añadir a mi Wallet",
+  preheader: "Guarde su tarjeta digital y disfrute de sus beneficios en segundos.",
+  logoUrl: process.env.EMAIL_LOGO_URL || "https://raw.githubusercontent.com/Proyli/wallet-assets/main/program-logo.png",
   lightBg: "#143c5c",
   darkBg: "#0f2b40",
   bodyColorLight: "#c69667",
   bodyColorDark: "#0f2b40",
   htmlBody:
-    '<p>Estimado/a' +
-      '<span style="display:{{SHOW_NAME}};"> <strong>{{DISPLAY_NAME}}</strong>,</span>' +
+    '<p style="margin:0 0 12px 0;">Estimado/a' +
+      '<span style="display:{{SHOW_NAME}};"> <strong>{{DISPLAY_NAME}}</strong></span>,</p>' +
+    '<p style="margin:0 0 12px 0;">Bienvenido al programa <em>Lealtad Alcazarén</em>. Guarde su tarjeta en su billetera digital y acceda a todos sus beneficios.</p>' +
+    '<p style="margin:0 0 16px 0;"><strong>ID de membresía:</strong> {{MEMBERSHIP_ID}}</p>' +
+    '<p style="margin:0 0 20px 0;">Toca el botón para guardar tu tarjeta en segundos.</p>' +
+    '<p style="margin:24px 0;text-align:center;">' +
+      '<a href="{{SMART_URL}}" style="display:inline-block;padding:12px 22px;border-radius:12px;background:#8B173C;color:#ffffff;text-decoration:none;font-weight:600;font-family:Segoe UI,Roboto,Arial,sans-serif;">' +
+        '{{BUTTON_TEXT}}' +
+      '</a>' +
     '</p>' +
-    '<p>Bienvenido al programa <em>Lealtad Alcazarén</em>. Guarde su tarjeta en su billetera móvil.</p>' +
-    '<p><a href="{{SMART_URL}}"><strong>{{BUTTON_TEXT}}</strong></a></p>',
+    '<p style="margin:24px 0 0 0;">Saludos cordiales,<br><strong>Distribuidora Alcazarén</strong></p>',
 };
 
 const DEFAULT_TIERS = [
@@ -203,9 +211,11 @@ router.get("/distribution/settings", async (_req, res) => {
 
 router.post("/distribution/settings", async (req, res) => {
   try {
-    await saveSettingsToDb(req.body || {});
+    const incoming = req.body || {};
+    await saveSettingsToDb(incoming);
     const fresh = await fetchSettingsFromDb();
-    res.json({ ok: true, settings: fresh });
+    const merged = normalizeSettingsRow({ ...fresh, ...incoming });
+    res.json({ ok: true, settings: merged });
   } catch (e) {
     console.error("[distribution] settings POST error:", e?.message || e);
     res.status(500).json({ ok: false, error: e?.message || "fail" });
@@ -316,9 +326,10 @@ async function sendWelcomeEmail(memberObj, provider = "outlook") {
   const membershipId = memberObj.external_id || memberObj.externalId || memberObj.codigoCliente || "";
 
   const settings = await fetchSettingsFromDb();
+  // Enviar siempre desde el flujo de Perfil (aunque settings.enabled sea false)
+  // Deja rastro en logs por si el admin desactiva temporalmente la distribución.
   if (settings && settings.enabled === false) {
-    console.log("[dist] settings.enabled=false, skipping welcome email for", memberObj.email);
-    return { ok: false, skipped: true };
+    console.warn("[dist] settings.enabled=false -> override (perfil). Enviando a", memberObj.email);
   }
 
   return sendWelcomeEmailHtml(

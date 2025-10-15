@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useProfileStore } from "@/store/profileStore";
+import { ArrowLeft, Save, ChevronRight } from "lucide-react";
 
 // === Tier options (para el select) ===
 const TIER_OPTIONS = [
@@ -141,104 +142,127 @@ const Profile: React.FC = () => {
   };
 
   const handleAdvance = () => navigate("/members");
+  // Marca visual de requerido (no afecta validación)
+  const Required = () => <span className="text-red-500 ml-1">*</span>;
+
   return (
-    <div className="container mx-auto p-4">
-      <h1 className="text-2xl mb-4">Perfil</h1>
-      <div className="bg-white p-6 rounded shadow">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <Label>Nombre</Label>
-            <Input name="nombre" value={formData.nombre} onChange={handleChange} />
-          </div>
-          <div>
-            <Label>Apellido</Label>
-            <Input name="apellido" value={formData.apellido} onChange={handleChange} />
-          </div>
-          <div>
-            <Label>Fecha de nacimiento</Label>
-            <Input
-              type="date"
-              name="fechaNacimiento"
-              value={formData.fechaNacimiento}
-              onChange={handleChange}
-            />
-          </div>
-          <div>
-            <Label>Código del cliente</Label>
-            <Input
-              name="codigoCliente"
-              value={formData.codigoCliente}
-              onChange={handleChange}
-            />
+    <div className="container mx-auto px-6 py-8">
+      {/* Header */}
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">Perfil</h1>
+        <p className="text-muted-foreground mt-1">Completa la información del cliente para emitir y gestionar su tarjeta digital.</p>
+      </div>
+
+      {/* Card */}
+      <div className="relative rounded-2xl border border-slate-200 bg-white/70 backdrop-blur supports-[backdrop-filter]:bg-white/60 shadow-xl">
+        {/* top accent bar */}
+        <div className="h-1 w-full rounded-t-2xl bg-gradient-to-r from-indigo-500 via-sky-500 to-cyan-400" />
+
+        <div className="p-8">
+          {/* Section: Datos personales */}
+          <h2 className="text-lg font-semibold text-foreground mb-4">Datos personales</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div>
+              <Label className="text-base text-foreground">Nombre<Required /></Label>
+              <Input name="nombre" value={formData.nombre} onChange={handleChange} className="h-12 text-base rounded-xl" />
+            </div>
+            <div>
+              <Label className="text-base text-foreground">Apellido<Required /></Label>
+              <Input name="apellido" value={formData.apellido} onChange={handleChange} className="h-12 text-base rounded-xl" />
+            </div>
+            <div>
+              <Label className="text-base text-foreground">Fecha de nacimiento</Label>
+              <Input
+                type="date"
+                name="fechaNacimiento"
+                value={formData.fechaNacimiento}
+                onChange={handleChange}
+                className="h-12 text-base rounded-xl"
+              />
+            </div>
+            <div>
+              <Label className="text-base text-foreground">Código del cliente<Required /></Label>
+              <Input
+                name="codigoCliente"
+                value={formData.codigoCliente}
+                onChange={handleChange}
+                className="h-12 text-base rounded-xl"
+              />
+            </div>
+            <div>
+              <Label className="text-base text-foreground">Código de la campaña</Label>
+              <Input
+                name="codigoCampana"
+                value={formData.codigoCampana}
+                onChange={handleChange}
+                className="h-12 text-base rounded-xl"
+              />
+            </div>
+            <div>
+              <Label className="text-base text-foreground">Tipo de cliente<Required /></Label>
+              <select
+                name="tipoCliente"
+                value={formData.tipoCliente}
+                onChange={(e) => {
+                  const tipo = e.target.value;
+                  const next = { ...formData, tipoCliente: tipo };
+                  setFormData(next);
+                  setProfileData(next);
+                }}
+                className="w-full h-12 rounded-xl border border-input bg-background text-foreground px-3 text-base focus:outline-none focus:ring-2 focus:ring-sky-400"
+              >
+                <option value=""></option>
+                {TIER_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label className="text-base text-foreground">Email<Required /></Label>
+              <Input name="email" value={formData.email} onChange={handleChange} className="h-12 text-base rounded-xl" />
+            </div>
+            <div>
+              <Label className="text-base text-foreground">Teléfono</Label>
+              <Input name="telefono" value={formData.telefono} onChange={handleChange} className="h-12 text-base rounded-xl" />
+            </div>
+            <div className="w-full">
+              <Label className="mb-1 block text-base text-foreground">Género</Label>
+              <select
+                name="genero"
+                value={formData.genero}
+                onChange={handleChange}
+                className="w-full h-12 rounded-xl border border-input bg-background text-foreground px-3 text-base focus:outline-none focus:ring-2 focus:ring-sky-400"
+              >
+                <option value=""></option>
+                <option value="Masculino">Masculino</option>
+                <option value="Femenino">Femenino</option>
+                <option value="Otro">Otro</option>
+              </select>
+            </div>
+            <div>
+              <Label className="text-base text-foreground">Puntos</Label>
+              <Input name="puntos" value={formData.puntos} onChange={handleChange} className="h-12 text-base rounded-xl" />
+            </div>
           </div>
 
-          <div>
-            <Label>Código de la campaña</Label>
-            <Input
-              name="codigoCampana"
-              value={formData.codigoCampana}
-              onChange={handleChange}
-            />
-          </div>
+          {/* Divider */}
+          <div className="my-6 h-px w-full bg-gradient-to-r from-transparent via-slate-200 to-transparent" />
 
-          <div>
-            <Label>Tipo de cliente</Label>
-            <select
-              name="tipoCliente"
-              value={formData.tipoCliente}
-              onChange={(e) => {
-                const tipo = e.target.value;
-                const next = { ...formData, tipoCliente: tipo };
-                setFormData(next);
-                setProfileData(next);
-              }}
-              className="w-full border rounded-md px-3 py-2"
-            >
-              <option value="">Selecciona un tipo</option>
-              {TIER_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <Label>Email</Label>
-            <Input name="email" value={formData.email} onChange={handleChange} />
-          </div>
-          <div>
-            <Label>Teléfono</Label>
-            <Input name="telefono" value={formData.telefono} onChange={handleChange} />
-          </div>
-          <div className="w-full">
-            <Label className="mb-1 block">Género</Label>
-            <select
-              name="genero"
-              value={formData.genero}
-              onChange={handleChange}
-              className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Selecciona</option>
-              <option value="Masculino">Masculino</option>
-              <option value="Femenino">Femenino</option>
-              <option value="Otro">Otro</option>
-            </select>
-          </div>
-          <div>
-            <Label>Puntos</Label>
-            <Input name="puntos" value={formData.puntos} onChange={handleChange} />
-          </div>
-          {/* ID Externo no se muestra en el formulario (es un identificador primario interno) */}
-        </div>
-
-        <div className="flex justify-between pt-4">
-          <Button variant="outline" onClick={() => navigate("/dashboard")}>
-            Regresar
-          </Button>
-          <div className="flex gap-4">
-            <Button onClick={handleGuardar}>Guardar</Button>
-            <Button onClick={handleAdvance}>Avanzar</Button>
+          {/* Action bar */}
+          <div className="flex items-center justify-between gap-3">
+            <Button variant="outline" onClick={() => navigate("/dashboard")} className="rounded-xl h-12 px-5 text-base">
+              <ArrowLeft className="w-4 h-4 mr-2" /> Regresar
+            </Button>
+            <div className="flex gap-3">
+              <Button onClick={handleGuardar} className="rounded-xl h-12 px-6 text-base bg-gradient-to-r from-indigo-600 to-sky-500 hover:from-indigo-500 hover:to-sky-500 text-white">
+                <Save className="w-4 h-4 mr-2" /> Guardar
+              </Button>
+              <Button onClick={handleAdvance} className="rounded-xl h-12 px-6 text-base bg-gradient-to-r from-sky-500 to-cyan-400 hover:from-sky-500 hover:to-cyan-500 text-white">
+                Avanzar <ChevronRight className="w-4 h-4 ml-2" />
+              </Button>
+            </div>
           </div>
         </div>
 

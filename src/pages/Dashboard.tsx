@@ -94,6 +94,52 @@ const Dashboard = () => {
   const [to, setTo] = useState<string>("");
   const [overview, setOverview] = useState<Overview | null>(null);
 
+  // Helpers: formato DD/MM/YYYY
+  const toDMY = (d: Date) => {
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const yyyy = d.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+  };
+  const parseDMY = (s: string): Date | null => {
+    const m = /^([0-3]?\d)\/([0-1]?\d)\/(\d{4})$/.exec(String(s || "").trim());
+    if (!m) return null;
+    const d = parseInt(m[1], 10);
+    const mo = parseInt(m[2], 10);
+    const y = parseInt(m[3], 10);
+    if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+    const dt = new Date(y, mo - 1, d);
+    if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return null;
+    return dt;
+  };
+  const maskDMY = (raw: string) => {
+    const digits = String(raw || "").replace(/\D/g, "").slice(0, 8);
+    const p1 = digits.slice(0, 2);
+    const p2 = digits.slice(2, 4);
+    const p3 = digits.slice(4);
+    if (digits.length <= 2) return p1;
+    if (digits.length <= 4) return `${p1}/${p2}`;
+    return `${p1}/${p2}/${p3}`;
+  };
+  const normalizeRange = (f: string, t: string): [string, string] => {
+    const df = parseDMY(f);
+    const dt = parseDMY(t);
+    if (!df || !dt) return [f, t];
+    if (df.getTime() > dt.getTime()) return [toDMY(dt), toDMY(df)];
+    return [toDMY(df), toDMY(dt)];
+  };
+
+  // Inicializa por defecto últimos 7 días (DD/MM/YYYY)
+  useEffect(() => {
+    if (from || to) return;
+    const today = new Date();
+    const start = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 6);
+    const toStr = toDMY(today);
+    const fromStr = toDMY(start);
+    setFrom(fromStr);
+    setTo(toStr);
+  }, []);
+
   useEffect(() => {
     const params = new URLSearchParams();
     if (from) params.set("from", from);
@@ -197,26 +243,53 @@ const Dashboard = () => {
           {/* From */}
           <div className="col-span-6 sm:col-span-3">
             <Input
-              type="date"
+              type="text"
+              inputMode="numeric"
+              placeholder="DD/MM/YYYY"
               className="h-12 rounded-2xl"
               value={from}
-              onChange={(e) => setFrom(e.target.value)}
+              onChange={(e) => setFrom(maskDMY(e.target.value))}
+              onBlur={(e) => {
+                const d = parseDMY(e.target.value);
+                if (d) setFrom(toDMY(d));
+              }}
             />
           </div>
 
           {/* To */}
           <div className="col-span-6 sm:col-span-3">
             <Input
-              type="date"
+              type="text"
+              inputMode="numeric"
+              placeholder="DD/MM/YYYY"
               className="h-12 rounded-2xl"
               value={to}
-              onChange={(e) => setTo(e.target.value)}
+              onChange={(e) => setTo(maskDMY(e.target.value))}
+              onBlur={(e) => {
+                const d = parseDMY(e.target.value);
+                if (d) setTo(toDMY(d));
+              }}
             />
           </div>
 
           {/* Filter */}
           <div className="col-span-6 sm:col-span-2">
-            <Button variant="outline" className="h-12 w-full rounded-2xl">
+            <Button
+              variant="outline"
+              className="h-12 w-full rounded-2xl"
+              onClick={() => {
+                if (!from && !to) return; // nada que aplicar
+                let f = from;
+                let t = to;
+                // Si sólo hay uno, usa el otro como mismo día
+                if (f && !t) t = f;
+                if (t && !f) f = t;
+                // Normaliza a DD/MM/YYYY y corrige invertido
+                const [nf, nt] = normalizeRange(f, t);
+                setFrom(nf);
+                setTo(nt);
+              }}
+            >
               <Filter className="w-4 h-4 mr-2" />
               Filter
             </Button>

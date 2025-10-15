@@ -94,7 +94,7 @@ All colors MUST be HSL.
   }
 
   body {
-    @apply bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 text-foreground min-h-screen;
+    @apply bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950 text-foreground min-h-screen;
   }
 }
 

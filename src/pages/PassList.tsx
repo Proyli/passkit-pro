@@ -318,10 +318,6 @@ const PassList: React.FC = () => {
                     <li className="px-3 py-2 hover:bg-gray-100 cursor-pointer" onClick={() => nav(`/passes/${pass.id}`)}>
                       ✏️ Edit
                     </li>
-                    <li className="px-3 py-2 hover:bg-gray-100 cursor-pointer" onClick={() => nav(`/passes/${pass.id}`)}>
-                      🔍 View details
-                    </li>
-                    <li className="px-3 py-2 text-red-600 hover:bg-red-50 cursor-pointer">🗑️ Delete</li>
                   </ul>
                 </div>
               )}
@@ -329,19 +325,46 @@ const PassList: React.FC = () => {
 
             {/* Encabezado */}
             <div className="flex items-start justify-between gap-2 pr-8">
-              <h3 className="text-base font-semibold leading-5 line-clamp-1">{pass.title}</h3>
+              <div className="flex items-center gap-2 min-w-0">
+                <h3 className="text-base font-semibold leading-5 line-clamp-1">
+                  {(() => {
+                    const t = String(pass.title || "").toLowerCase();
+                    const bg = String(pass.backgroundColor || "").toLowerCase();
+                    const titleSuggestsGold = t.includes("gold") || /\b15\b|15%/.test(t);
+                    const titleSuggestsBlue = t.includes("blue") || /\b5\b|5%/.test(t);
+                    if (titleSuggestsGold) return "Gold 15%";
+                    if (titleSuggestsBlue) return "Blue 5%";
+                    if (bg.includes("daa520")) return "Gold 15%";
+                    if (bg.includes("007aff") || bg.includes("2350c6")) return "Blue 5%";
+                    return pass.title;
+                  })()}
+                </h3>
+                {(() => {
+                  const t = String(pass.title || "").toLowerCase();
+                  const bg = String(pass.backgroundColor || "").toLowerCase();
+                  const titleSuggestsGold = t.includes("gold") || /\b15\b|15%/.test(t);
+                  const titleSuggestsBlue = t.includes("blue") || /\b5\b|5%/.test(t);
+                  const isGold = titleSuggestsGold || bg.includes("daa520");
+                  const isBlue = !isGold && (titleSuggestsBlue || bg.includes("007aff") || bg.includes("2350c6"));
+                  if (isGold)
+                    return <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 shrink-0">Gold 15%</span>;
+                  if (isBlue)
+                    return <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 shrink-0">Blue 5%</span>;
+                  return null;
+                })()}
+              </div>
               <span className={`text-xs font-medium px-2.5 py-1 rounded-full shrink-0 ${typeColors[pass.type] ?? "bg-gray-200 text-gray-800"}`}>
                 {pass.type}
               </span>
             </div>
 
             {/* Descripción */}
-            <p className="text-sm text-gray-600 leading-5 line-clamp-2">
+            <p className="text-sm text-gray-600 dark:text-gray-300 leading-5 line-clamp-2">
               {pass.description || "Información del cliente"}
             </p>
 
             {/* Meta */}
-            <div className="text-[11px] text-gray-500">
+            <div className="text-[11px] text-gray-500 dark:text-gray-400">
               <span className="mr-3">Created: {safeShortDate(pass.createdAt)}</span>
               <span>Scans: {pass.scans ?? 0}</span>
             </div>

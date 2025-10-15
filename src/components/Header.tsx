@@ -1,10 +1,12 @@
 // src/components/Header.tsx
-import { Ticket, User, Settings, Share2 } from "lucide-react";
+import { Ticket, User, Settings, Share2, Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "react-router-dom";
+import { useTheme } from "@/context/ThemeContext";
 
 const Header = () => {
   const { pathname } = useLocation();
+  const { theme, toggle } = useTheme();
 
   return (
     <header className="glass-effect sticky top-0 z-50 border-b border-white/20">
@@ -72,6 +74,16 @@ const Header = () => {
                 Profile
               </Button>
             </Link>
+
+            {/* Theme toggle */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={toggle}
+              title={theme === "dark" ? "Cambiar a claro" : "Cambiar a oscuro"}
+            >
+              {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </Button>
           </div>
         </div>
       </div>

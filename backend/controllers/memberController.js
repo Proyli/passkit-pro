@@ -6,9 +6,37 @@ const Member = db.Member;
 const { sendWelcomeEmail } = require("../routes/distribution");
 
 
-// Obtener todos los miembros
-exports.getAllMembers = async (_req, res) => {
+// Obtener todos los miembros o uno por codigoCliente+codigoCampana
+exports.getAllMembers = async (req, res) => {
   try {
+    const idClient = req.query.idClient || req.query.clientCode;
+    const idCampaing = req.query.idCampaing || req.query.idCampaign || req.query.campaignCode;
+
+    // Si vienen ambos códigos, responde solo ese miembro
+    if (idClient && idCampaing) {
+      const m = await Member.findOne({ where: { codigoCliente: idClient, codigoCampana: idCampaing } });
+      if (!m) return res.status(404).json({ ok: false, error: "Miembro no encontrado" });
+
+      const one = {
+        id: m.id,
+        externalId: m.external_id,
+        firstName: m.nombre,
+        lastName: m.apellido,
+        dateOfBirth: m.fechaNacimiento,
+        clientCode: m.codigoCliente,
+        campaignCode: m.codigoCampana,
+        tier: m.tipoCliente,
+        email: m.email,
+        mobile: m.telefono,
+        points: m.puntos,
+        gender: m.genero,
+        createdAt: m.createdAt,
+        updatedAt: m.updatedAt,
+      };
+      return res.json(one);
+    }
+
+    // Si no hay filtros, devuelve la lista completa
     const members = await Member.findAll({ order: [["id", "ASC"]] });
 
     const formattedMembers = members.map((m) => ({
@@ -38,7 +66,7 @@ exports.getAllMembers = async (_req, res) => {
 // Crear un nuevo miembro
 exports.createMember = async (req, res) => {
   try {
-    console.log("🟡 Datos recibidos desde el frontend:", req.body);
+    console.log("[member] Datos recibidos desde el frontend:", req.body);
 
     const externalId = nanoid(10);
 
@@ -93,7 +121,28 @@ exports.createMember = async (req, res) => {
 // Actualizar un miembro
 exports.updateMember = async (req, res) => {
   try {
-    await Member.update(req.body, { where: { id: req.params.id } });
+    const { id } = req.params;
+    await Member.update(req.body, { where: { id } });
+
+    // Si actualizaron tipoCliente, reflejar color en los passes del miembro
+    if (req.body && typeof req.body.tipoCliente !== "undefined") {
+      try {
+        const db = require("../models");
+        const Pass = db.Pass;
+        if (Pass) {
+          const mapTierToColor = (raw) => {
+            const s = String(raw || "").toLowerCase();
+            if (s.includes("gold") || s.includes("oro") || s.includes("15")) return "#DAA520"; // Gold
+            return "#2350C6"; // Blue por defecto
+          };
+          const bg = mapTierToColor(req.body.tipoCliente);
+          await Pass.update({ backgroundColor: bg }, { where: { member_id: id } });
+        }
+      } catch (e) {
+        console.warn("[members] no se pudieron actualizar colores de passes del miembro", id, e?.message || e);
+      }
+    }
+
     res.json({ message: "Miembro actualizado correctamente" });
   } catch (error) {
     console.error("❌ Error al actualizar el miembro:", error);

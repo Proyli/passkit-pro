@@ -1,5 +1,6 @@
 // src/components/PassCard.tsx
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { MoreHorizontal, Edit, Copy, QrCode, Trash2, Mail } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,7 @@ interface PassCardProps {
 
 const PassCard = ({ pass, onDuplicate, onDelete, compact = false }: PassCardProps) => {
   const [isModalOpen, setModalOpen] = useState(false);
+  const nav = useNavigate();
   const { toast } = useToast();
 
   // Si tu pass viene con el member incluido:
@@ -122,6 +124,19 @@ const PassCard = ({ pass, onDuplicate, onDelete, compact = false }: PassCardProp
                 <h3 className={`font-semibold ${compact ? "text-base" : "text-lg"} text-gray-900 truncate`}>
                   {pass.title}
                 </h3>
+                {(() => {
+                  const t = String(pass.title || "").toLowerCase();
+                  const bg = String(pass.backgroundColor || "").toLowerCase();
+                  const titleSuggestsGold = t.includes("gold") || /\b15\b|15%/.test(t);
+                  const titleSuggestsBlue = t.includes("blue") || /\b5\b|5%/.test(t);
+                  const isGold = titleSuggestsGold || bg.includes("daa520");
+                  const isBlue = !isGold && (titleSuggestsBlue || bg.includes("007aff") || bg.includes("2350c6"));
+                  if (isGold)
+                    return <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">Gold 15%</span>;
+                  if (isBlue)
+                    return <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">Blue 5%</span>;
+                  return null;
+                })()}
                 <Badge variant="secondary" className="text-xs capitalize">
                   {pass.type}
                 </Badge>
@@ -155,7 +170,7 @@ const PassCard = ({ pass, onDuplicate, onDelete, compact = false }: PassCardProp
                 <DropdownMenuItem
                   onClick={(e) => {
                     e.stopPropagation();
-                    /* editar */
+                    nav(`/passes/${pass.id}`);
                   }}
                 >
                   <Edit className="w-4 h-4 mr-2" /> Edit
@@ -173,29 +188,9 @@ const PassCard = ({ pass, onDuplicate, onDelete, compact = false }: PassCardProp
                 </DropdownMenuItem>
               )}
 
-              <DropdownMenuItem
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setModalOpen(true);
-                }}
-              >
-                <QrCode className="w-4 h-4 mr-2" /> QR Code
-              </DropdownMenuItem>
+              {/* View details eliminado: Edit navega al detalle con preview */}
 
-              {can.deleteMember() && onDelete && (
-                <DropdownMenuItem
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (window.confirm("¿Eliminar este pase? Esta acción no se puede deshacer.")) {
-                      onDelete(pass.id);
-                    }
-                  }}
-                  className="text-red-600 focus:text-red-600"
-                >
-                  <Trash2 className="w-4 h-4 mr-2" /> Delete
-                </DropdownMenuItem>
-              )}
+              {/* Delete oculto por solicitud */}
             </DropdownMenuContent>
 
             </DropdownMenu>
@@ -270,16 +265,36 @@ const PassCard = ({ pass, onDuplicate, onDelete, compact = false }: PassCardProp
       </Card>
 
       {isModalOpen && (
-        <PassModal
+          <PassModal
           open={isModalOpen}
           onOpenChange={setModalOpen}
           passData={{
             title: pass.title,
             description: pass.description,
-            backgroundColor: pass.backgroundColor || "#007AFF",
+            backgroundColor: (() => {
+              const t = String(pass.title || '').toLowerCase();
+              const bg = String(pass.backgroundColor || '').toLowerCase();
+              if ((!bg || bg === '#007aff') && (t.includes('gold') || /\b15\b|15%/.test(t))) return '#DAA520';
+              if ((!bg || bg === '#007aff') && (t.includes('blue') || /\b5\b|5%/.test(t))) return '#2350C6';
+              return pass.backgroundColor || '#007AFF';
+            })(),
             textColor: pass.textColor || "#FFFFFF",
             type: pass.type,
-            fields: (pass as any).fields || {},
+            fields: (() => {
+              const raw = (pass as any).fields || {};
+              const out: Record<string, string> = {};
+              Object.entries(raw).forEach(([k, v]) => {
+                const key = String(k).toLowerCase();
+                if (key.includes('client') || key.includes('codigo') || key.includes('camp')) return; // oculta cliente/campaña
+                out[k] = String(v);
+              });
+              // Si no hay fields útiles, mostrar nivel si viene del member
+              if (Object.keys(out).length === 0) {
+                const tier = String(((pass as any).member?.tipoCliente) || '').toLowerCase();
+                if (tier) out['Nivel'] = tier.includes('gold') ? 'GOLD 15%' : 'BLUE 5%';
+              }
+              return out;
+            })(),
           }}
         />
       )}

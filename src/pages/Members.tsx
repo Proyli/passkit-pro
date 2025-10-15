@@ -15,6 +15,7 @@ import { getRole, can, Role } from "@/lib/authz";
 import { useToast } from "@/hooks/use-toast";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import axios from "axios";
+type UIPass = { id: string; title: string; type?: string };
 
 import { QrCodeModal } from "@/components/modals/QrCodeModal";
 import { QrCode } from "lucide-react";
@@ -46,7 +47,7 @@ const DEFAULT_VISIBLE: Record<ColumnKey, boolean> = {
 
   email: false,
   mobile: false,
-  tier: false,
+  tier: true,
   gender: false,
   points: false,
   dateOfBirth: false,
@@ -217,6 +218,8 @@ const [qrPass, setQrPass] = useState<any>(null);
 const [qrClient, setQrClient] = useState("");     // 👈 existe
 const [qrCampaign, setQrCampaign] = useState(""); 
 
+// Lista de passes para selector de tier/plantilla
+const [passes, setPasses] = useState<UIPass[]>([]);
 
 
 const [visibleColumns, setVisibleColumns] =
@@ -254,6 +257,55 @@ useEffect(() => {
     }
   })();
 }, [location.key, toast]);
+
+// Cargar lista de passes (para desplegable en editar)
+useEffect(() => {
+  (async () => {
+    try {
+      const res = await fetch(`${API_BASE}/passes`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      const arr = Array.isArray(json) ? json : [];
+      setPasses(arr.map((p: any) => ({ id: String(p.id), title: String(p.title || p.name || `Pass ${p.id}`), type: p.type })));
+    } catch (e) {
+      console.warn('No se pudieron cargar passes:', e);
+      setPasses([]);
+    }
+  })();
+}, []);
+
+const tierFromPassTitle = (t: string) => {
+  const s = String(t || '').toLowerCase();
+  if (s.includes('gold') || s.includes('oro') || s.includes('15')) return 'gold';
+  if (s.includes('blue') || s.includes('azul') || s.includes('5')) return 'blue';
+  return 'blue';
+}
+const labelForPass = (t: string) => {
+  const s = String(t || '').toLowerCase();
+  if (s.includes('gold') || /\b15\b|15%/.test(s)) return 'Gold 15%';
+  if (s.includes('blue') || /\b5\b|5%/.test(s)) return 'Blue 5%';
+  return t || 'Pass';
+}
+
+const labelForTier = (t: string) => {
+  const s = String(t || '').toLowerCase();
+  if (s.includes('gold') || /\b15\b|15%/.test(s)) return 'Gold 15%';
+  if (s.includes('blue') || /\b5\b|5%/.test(s)) return 'Blue 5%';
+  return t || '—';
+};
+
+const badgeForTier = (t: string) => {
+  const s = String(t || '').toLowerCase();
+  const isGold = s.includes('gold') || /\b15\b|15%/.test(s);
+  const isBlue = s.includes('blue') || /\b5\b|5%/.test(s);
+  const label = isGold ? 'Gold 15%' : isBlue ? 'Blue 5%' : (t || '—');
+  const cls = isGold
+    ? 'bg-amber-100 text-amber-800'
+    : isBlue
+      ? 'bg-blue-100 text-blue-800'
+      : 'bg-gray-100 text-gray-800';
+  return <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${cls}`}>{label}</span>;
+};
 
 const [membersEndpoint, setMembersEndpoint] = useState<string | null>(null);
 
@@ -360,6 +412,68 @@ const handleSelectAll = () => {
     // Para simplificar, asumimos que 'member' ya tiene las propiedades en inglés si se cargó así.
     setSelectedMember(member);
     setIsDetailsModalOpen(true);
+  };
+
+  // === Actions in Member Details header ===
+  const [resending, setResending] = useState(false);
+  const [visiting, setVisiting] = useState(false);
+  const [qrUrlData, setQrUrlData] = useState<{client:string;campaign:string;externalId?:string}|null>(null);
+
+  const handleResendWelcome = async () => {
+    try {
+      if (!selectedMember) return;
+      if (!selectedMember.email) {
+        toast({ title: "Falta email", description: "Este miembro no tiene email para enviar.", variant: "destructive" });
+        return;
+      }
+      setResending(true);
+      const body = {
+        email: selectedMember.email,
+        displayName: `${selectedMember.firstName || ''} ${selectedMember.lastName || ''}`.trim(),
+        clientCode: selectedMember.clientCode || selectedMember.codigoCliente || '',
+        campaignCode: selectedMember.campaignCode || selectedMember.codigoCampana || '',
+        // opcionalmente tier actual
+        settings: {},
+      };
+      const r = await fetch(`${API_BASE}/distribution/send-test-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const j = await r.json().catch(() => ({} as any));
+      if (!r.ok || (j && j.ok === false)) throw new Error(j?.error || `HTTP ${r.status}`);
+      toast({ title: 'Enviado', description: 'Correo de bienvenida reenviado.' });
+    } catch (e: any) {
+      toast({ title: 'No se pudo enviar', description: String(e?.message || e), variant: 'destructive' });
+    } finally {
+      setResending(false);
+    }
+  };
+
+  const handleVisitPassUrl = async () => {
+    try {
+      if (!selectedMember) return;
+      const client = selectedMember.clientCode || selectedMember.codigoCliente || '';
+      const campaign = selectedMember.campaignCode || selectedMember.codigoCampana || '';
+      if (!client || !campaign) {
+        toast({ title: 'Faltan datos', description: 'Falta clientCode o campaignCode.', variant: 'destructive' });
+        return;
+      }
+      setVisiting(true);
+      const url = new URL(`${API_BASE}/wallet/resolve`);
+      url.searchParams.set('client', client);
+      url.searchParams.set('campaign', campaign);
+      if (selectedMember.externalId) url.searchParams.set('externalId', selectedMember.externalId);
+      // abre en nueva pestaña
+      window.open(url.toString(), '_blank');
+      // y prepara QR modal por si quieres escanearlo con el móvil
+      setQrUrlData({ client, campaign, externalId: selectedMember.externalId });
+      setQrOpen(true);
+    } catch (e: any) {
+      toast({ title: 'No se pudo abrir', description: String(e?.message || e), variant: 'destructive' });
+    } finally {
+      setVisiting(false);
+    }
   };
 
   const handleCopyLink = (externalId: string) => {
@@ -599,6 +713,24 @@ const handleAssignCard = async (member: any) => {
                   </Select>
                 </div>
                 <div>
+                  <Label>Pass / Tier</Label>
+                  <Select
+                    value={String((editMember.tipoCliente || '').toLowerCase())}
+                    onValueChange={(value) => {
+                      // value será 'blue' o 'gold'
+                      setEditMember({ ...editMember, tipoCliente: value });
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona tier" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="blue">Blue 5%</SelectItem>
+                      <SelectItem value="gold">Gold 15%</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
                   <Label>Puntos</Label>
                   <Input
                     type="number"
@@ -664,7 +796,7 @@ const handleAssignCard = async (member: any) => {
  <DropdownMenu.Content
   align="start"
   sideOffset={8}
-  className="bg-white rounded-md shadow-md border p-2 w-56"
+  className="rounded-md shadow-md border p-2 w-56 bg-white text-slate-800 dark:bg-slate-800 dark:text-slate-100"
   loop
 >
   <div className="px-2 pb-2 text-xs text-muted-foreground">
@@ -678,7 +810,7 @@ const handleAssignCard = async (member: any) => {
       onCheckedChange={(checked) =>
         setVisibleColumns((prev) => ({ ...prev, [key]: !!checked }))
       }
-      className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-md cursor-pointer hover:bg-gray-100 data-[state=checked]:bg-blue-100 data-[state=checked]:text-blue-700"
+      className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-md cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-700 data-[state=checked]:bg-blue-100 data-[state=checked]:text-blue-700 dark:data-[state=checked]:bg-blue-900 dark:data-[state=checked]:text-blue-100"
     >
       {formatLabel(key)}
     </DropdownMenu.CheckboxItem>
@@ -687,14 +819,14 @@ const handleAssignCard = async (member: any) => {
   <DropdownMenu.Separator />
 
   <DropdownMenu.Item
-    className="px-2 py-1.5 text-sm cursor-pointer hover:bg-gray-100"
+    className="px-2 py-1.5 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-700"
     onClick={() => setVisibleColumns(DEFAULT_VISIBLE)}
   >
     Reset a 4 columnas
   </DropdownMenu.Item>
 
   <DropdownMenu.Item
-    className="px-2 py-1.5 text-sm cursor-pointer hover:bg-gray-100"
+    className="px-2 py-1.5 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-700"
     onClick={() =>
       setVisibleColumns(
         Object.fromEntries(COLUMN_KEYS.map((k) => [k, true])) as Record<
@@ -708,7 +840,7 @@ const handleAssignCard = async (member: any) => {
   </DropdownMenu.Item>
 
   <DropdownMenu.Item
-    className="px-2 py-1.5 text-sm cursor-pointer hover:bg-gray-100"
+    className="px-2 py-1.5 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-700"
     onClick={() =>
       setVisibleColumns(
         Object.fromEntries(COLUMN_KEYS.map((k) => [k, false])) as Record<
@@ -807,7 +939,7 @@ const handleAssignCard = async (member: any) => {
                   {visibleColumns.lastName && <td className="py-2">{member.lastName || "—"}</td>}
                   {visibleColumns.email && <td className="py-2">{member.email || "—"}</td>}
                   {visibleColumns.mobile && <td className="py-2">{member.mobile || "—"}</td>}
-                  {visibleColumns.tier && <td className="py-2">{member.tier || "—"}</td>}
+                  {visibleColumns.tier && <td className="py-2">{badgeForTier(member.tier)}</td>}
                   {visibleColumns.gender && <td className="py-2">{member.gender || "—"}</td>}
                   {visibleColumns.points && <td className="py-2">{member.points ?? "—"}</td>}
                   {visibleColumns.dateOfBirth && (
@@ -974,12 +1106,11 @@ const handleAssignCard = async (member: any) => {
             <div className="flex justify-between items-center">
               <DialogTitle>Member Details</DialogTitle>
               <div className="flex gap-2">
-               
-                <Button size="sm" variant="outline">
-                  Resend Welcome Email
+                <Button size="sm" variant="outline" onClick={handleResendWelcome} disabled={resending}>
+                  {resending ? 'Sending…' : 'Resend Welcome Email'}
                 </Button>
-                <Button size="sm" variant="outline">
-                  Visit Pass URL
+                <Button size="sm" variant="outline" onClick={handleVisitPassUrl} disabled={visiting}>
+                  {visiting ? 'Opening…' : 'Visit Pass URL'}
                 </Button>
               </div>
             </div>
@@ -1001,7 +1132,7 @@ const handleAssignCard = async (member: any) => {
                   </div>
                   <div>
                     <Label className="text-sm text-muted-foreground">Tier</Label>
-                    <p className="text-sm">{selectedMember?.tier || "—"}</p>
+                    <div className="mt-1">{badgeForTier(selectedMember?.tier)}</div>
                   </div>
                   <div>
                     <Label className="text-sm text-muted-foreground">External ID</Label>
@@ -1071,6 +1202,19 @@ const handleAssignCard = async (member: any) => {
                 </div>
               </TabsContent>
             </Tabs>
+          )}
+
+          {/* QR Modal para actualizar en dispositivo */}
+          {qrOpen && qrUrlData && (
+            <QrCodeModal
+              isOpen={qrOpen}
+              onClose={() => setQrOpen(false)}
+              passData={{ id: String(selectedMember?.id||''), title: 'Wallet', description: 'Actualizar tarjeta', createdAt: '', estado: 'active', type: 'loyalty' } as any}
+              clientCode={qrUrlData.client}
+              campaignCode={qrUrlData.campaign}
+              externalId={qrUrlData.externalId}
+              defaultMode="qr"
+            />
           )}
         </DialogContent>
       </Dialog>

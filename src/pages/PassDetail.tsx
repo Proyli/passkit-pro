@@ -3,6 +3,9 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { Button } from "@/components/ui/button";
+import PassPreview from "@/components/PassPreview";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 const API_BASE_PASSES =
   (import.meta as any).env?.VITE_API_BASE_URL?.replace(/\/$/, "") ||
@@ -26,11 +29,37 @@ export default function PassDetail() {
   const nav = useNavigate();
   const [data, setData] = useState<PassDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [editMode, setEditMode] = useState(false);
+  const [draft, setDraft] = useState<PassDetail | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const isGold = () => {
+    const bg = String(draft?.backgroundColor || '').toLowerCase();
+    const t = String(draft?.title || '').toLowerCase();
+    return bg.includes('#daa520') || bg.includes('daa520') || t.includes('gold') || /\b15\b|15%/.test(t);
+  };
+  const isBlue = () => {
+    const bg = String(draft?.backgroundColor || '').toLowerCase();
+    const t = String(draft?.title || '').toLowerCase();
+    return bg.includes('#2350c6') || bg.includes('2350c6') || bg.includes('#007aff') || bg.includes('007aff') || t.includes('blue') || /\b5\b|5%/.test(t);
+  };
+  const applyTier = (tier: 'blue' | 'gold') => {
+    const color = tier === 'gold' ? '#DAA520' : '#2350C6';
+    setDraft(prev => ({ ...(prev || {}), backgroundColor: color, textColor: '#FFFFFF' }));
+  };
 
   async function load() {
     try {
       const res = await axios.get(`${API_BASE_PASSES}/passes/${id}`);
-      setData(res.data || {});
+      const raw = res.data || {};
+      const t = String(raw.title || '').toLowerCase();
+      const bg = String(raw.backgroundColor || '').toLowerCase();
+      const correctedBg = (!bg || bg === '#007aff')
+        ? (t.includes('gold') || /\b15\b|15%/.test(t)) ? '#DAA520' : (t.includes('blue') || /\b5\b|5%/.test(t)) ? '#2350C6' : raw.backgroundColor
+        : raw.backgroundColor;
+      const fixed = { ...raw, backgroundColor: correctedBg };
+      setData(fixed);
+      setDraft(fixed);
     } catch {
       setData(null);
     } finally {
@@ -40,13 +69,25 @@ export default function PassDetail() {
 
   useEffect(() => { load(); }, [id]);
 
-  async function handleDelete() {
-    if (!confirm("¿Eliminar este pase?")) return;
+  async function handleSave() {
+    if (!draft) return;
+    setSaving(true);
     try {
-      await axios.delete(`${API_BASE_PASSES}/passes/${id}`);
-      nav("/passes");
+      const payload: any = {
+        title: draft.title,
+        description: draft.description,
+        type: draft.type,
+        backgroundColor: draft.backgroundColor,
+        textColor: draft.textColor,
+      };
+      const res = await axios.put(`${API_BASE_PASSES}/passes/${id}`, payload);
+      setData(res.data || draft);
+      setDraft(res.data || draft);
+      setEditMode(false);
     } catch (e: any) {
-      alert(e?.response?.data?.message || e?.message || "Error al eliminar");
+      alert(e?.response?.data?.error || e?.message || "Error al guardar");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -58,38 +99,86 @@ export default function PassDetail() {
     </div>
   );
 
+  const filteredFields = (() => {
+    const raw: any = data?.fields || {};
+    const out: Record<string,string> = {};
+    Object.entries(raw).forEach(([k,v]) => {
+      const key = String(k).toLowerCase();
+      if (key.includes('client') || key.includes('codigo') || key.includes('camp')) return; // oculta cliente/campaña
+      out[String(k)] = String(v);
+    });
+    return out;
+  })();
+
   return (
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
         <Button variant="outline" onClick={() => nav("/passes")}>← Back</Button>
         <div className="flex gap-2">
-          <Button onClick={() => nav(`/passes/${id}/edit`)}>Edit</Button>
-          <Button variant="outline" onClick={() => window.print()}>Distribute</Button>
-          <Button variant="destructive" onClick={handleDelete}>Delete</Button>
+          <Button onClick={() => setEditMode((v) => !v)}>{editMode ? "Cancel" : "Edit"}</Button>
         </div>
       </div>
 
-      <h1 className="text-2xl font-semibold">{data.title || `Pass #${id}`}</h1>
-      <p className="text-gray-600">{data.description || "Sin descripción"}</p>
+      <h1 className="text-2xl font-semibold">{(editMode ? draft?.title : data.title) || `Pass #${id}`}</h1>
+      {!editMode && <p className="text-gray-600">{data.description || "Sin descripción"}</p>}
 
       <div className="grid md:grid-cols-2 gap-4">
-        <div className="rounded-xl border p-4">
-          <div><b>Type:</b> {data.type || "-"}</div>
-          <div><b>Status:</b> {data.estado || data.status || "active"}</div>
-          <div><b>Created:</b> {data.createdAt?.slice?.(0,10) || "-"}</div>
-          <div><b>Scans:</b> {data.scans ?? 0}</div>
-          <div><b>BG:</b> {data.backgroundColor}</div>
-          <div><b>FG:</b> {data.textColor}</div>
+        <div className="rounded-xl border p-4 space-y-3">
+          {editMode ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="md:col-span-2">
+                <Label>Tier quick select</Label>
+                <div className="flex gap-2 mt-1">
+                  <Button type="button" variant={isBlue() ? 'default' : 'outline'} onClick={() => applyTier('blue')}>Blue 5%</Button>
+                  <Button type="button" variant={isGold() ? 'default' : 'outline'} onClick={() => applyTier('gold')}>Gold 15%</Button>
+                </div>
+              </div>
+              <div>
+                <Label>Title</Label>
+                <Input value={draft?.title || ''} onChange={(e) => setDraft({ ...(draft as any), title: e.target.value })} />
+              </div>
+              <div>
+                <Label>Type</Label>
+                <Input value={draft?.type || ''} onChange={(e) => setDraft({ ...(draft as any), type: e.target.value })} />
+              </div>
+              <div className="md:col-span-2">
+                <Label>Description</Label>
+                <Input value={draft?.description || ''} onChange={(e) => setDraft({ ...(draft as any), description: e.target.value })} />
+              </div>
+              <div>
+                <Label>Background</Label>
+                <Input type="color" value={(draft?.backgroundColor as string) || '#007AFF'} onChange={(e) => setDraft({ ...(draft as any), backgroundColor: e.target.value })} />
+              </div>
+              <div>
+                <Label>Text color</Label>
+                <Input type="color" value={(draft?.textColor as string) || '#FFFFFF'} onChange={(e) => setDraft({ ...(draft as any), textColor: e.target.value })} />
+              </div>
+              <div className="md:col-span-2 flex justify-end">
+                <Button onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : 'Save'}</Button>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div><b>Type:</b> {data.type || "-"}</div>
+              <div><b>Status:</b> {data.estado || data.status || "active"}</div>
+              <div><b>Created:</b> {data.createdAt?.slice?.(0,10) || "-"}</div>
+              <div><b>Scans:</b> {data.scans ?? 0}</div>
+              <div><b>BG:</b> {data.backgroundColor}</div>
+              <div><b>FG:</b> {data.textColor}</div>
+            </div>
+          )}
         </div>
 
         <div className="rounded-xl border p-4">
-          <div className="mb-2 font-medium">Preview</div>
-          <div
-            className="h-48 rounded-xl flex items-center justify-center text-sm"
-            style={{ background: data.backgroundColor || "#f3f4f6", color: data.textColor || "#111827" }}
-          >
-            {data.title || "Preview"}
-          </div>
+          <div className="mb-2 font-medium">Card Preview</div>
+          <PassPreview passData={{
+            title: String((editMode ? draft?.title : data.title) || ''),
+            description: String((editMode ? draft?.description : data.description) || ''),
+            backgroundColor: String((editMode ? draft?.backgroundColor : data.backgroundColor) || '#007AFF'),
+            textColor: String((editMode ? draft?.textColor : data.textColor) || '#FFFFFF'),
+            type: String((editMode ? draft?.type : data.type) || 'loyalty'),
+            fields: filteredFields,
+          }} />
         </div>
       </div>
     </div>

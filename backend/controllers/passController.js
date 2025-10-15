@@ -104,6 +104,8 @@ exports.getAllPasses = async (_req, res) => {
         if (!j.backgroundColor) j.backgroundColor = "#2350C6";
       }
 
+      // no forzar por título si ya hay color establecido
+
       return j;
     });
 
@@ -111,6 +113,52 @@ exports.getAllPasses = async (_req, res) => {
   } catch (error) {
     console.error("getAllPasses error:", error);
     return res.status(500).json({ ok: false, error: "Error al obtener los pases" });
+  }
+};
+
+/**
+ * GET /api/passes/:id
+ * Devuelve un pass por id (incluye member básico)
+ */
+exports.getPassById = async (req, res) => {
+  try {
+    const id = req.params.id;
+    const row = await Pass.findByPk(id, {
+      include: [{
+        model: Member,
+        as: "member",
+        attributes: ["id", "external_id", "codigoCliente", "codigoCampana", "tipoCliente"]
+      }],
+    });
+    if (!row) return res.status(404).json({ ok: false, message: "Pass no encontrado" });
+
+    const j = row.toJSON();
+    if (typeof j.fields === "string") {
+      try { j.fields = JSON.parse(j.fields); } catch { j.fields = {}; }
+    }
+    j.status = j.status ?? j.estado ?? "active";
+
+    const mapTierToColor = (raw) => {
+      if (!raw) return "#2350C6"; // default blue
+      const s = String(raw).toLowerCase();
+      if (s.includes("gold")) return "#DAA520"; // gold
+      if (s.includes("silver")) return "#C0C0C0"; // silver
+      if (s.includes("bronze") || s.includes("bronce")) return "#CD7F32"; // bronze
+      return "#2350C6";
+    };
+    try {
+      if (!j.backgroundColor) {
+        const memberTier = j.member && (j.member.tipoCliente || j.member.tipo || null);
+        j.backgroundColor = mapTierToColor(memberTier);
+      }
+    } catch {}
+
+    // no forzar por título si ya hay color establecido
+
+    return res.json(j);
+  } catch (e) {
+    console.error("getPassById error:", e);
+    return res.status(500).json({ ok: false, error: "Error al obtener el pass" });
   }
 };
 
@@ -129,6 +177,40 @@ exports.deletePass = async (req, res) => {
   }
 };
 
+/**
+ * PUT /api/passes/:id
+ * Actualiza campos básicos del pass
+ */
+exports.updatePass = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const allowed = [
+      "title",
+      "description",
+      "type",
+      "status",
+      "backgroundColor",
+      "textColor",
+      "fields",
+    ];
+    const payload = {};
+    for (const k of allowed) {
+      if (req.body[k] !== undefined) payload[k] = req.body[k];
+    }
+    if (payload.fields && typeof payload.fields !== "string") {
+      try { payload.fields = JSON.stringify(payload.fields); } catch {}
+    }
+
+    const [n] = await Pass.update(payload, { where: { id } });
+    if (!n) return res.status(404).json({ ok: false, error: "Pass no encontrado" });
+
+    const fresh = await Pass.findByPk(id, { include: [{ model: Member, as: "member" }] });
+    return res.json(fresh);
+  } catch (e) {
+    console.error("updatePass error:", e);
+    return res.status(500).json({ ok: false, error: "Error al actualizar pass" });
+  }
+};
 /**
  * (Opcional) PUT /api/passes/:id/assign-member
  * Vincula un pass a un member.

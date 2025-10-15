@@ -55,7 +55,7 @@ const App = () => {
   const isLoggedIn = !!localStorage.getItem("passkit_session");
 
   return (
-    <div className="bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 min-h-screen">
+    <div className="min-h-screen">
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <Toaster />

@@ -68,8 +68,8 @@ const StatsCards = ({
                 <p className="text-sm font-medium text-muted-foreground mb-1">
                   {stat.title}
                 </p>
-                <p className="text-3xl font-bold text-gray-900">{stat.value}</p>
-                <p className="text-sm text-green-600 font-medium mt-1">
+                <p className="text-3xl font-bold text-gray-900 dark:text-white">{stat.value}</p>
+                <p className="text-sm text-green-600 dark:text-green-400 font-medium mt-1">
                   {stat.change} from last month
                 </p>
               </div>

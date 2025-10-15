@@ -19,6 +19,22 @@
       }
     },
     {
+      "name": "Members - Get by codes",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{API_BASE}}/members?idClient={{idClient}}&idCampaing={{idCampaing}}",
+          "host": ["{{API_BASE}}"],
+          "path": ["members"],
+          "query": [
+            { "key": "idClient", "value": "{{idClient}}" },
+            { "key": "idCampaing", "value": "{{idCampaing}}" }
+          ]
+        }
+      }
+    },
+    {
       "name": "Members - Create",
       "request": {
         "method": "POST",
@@ -71,11 +87,60 @@
         "body": { "mode": "raw", "raw": "{\n  \"client\": \"C1\",\n  \"campaign\": \"CP1\",\n  \"to\": \"user@example.com\",\n  \"tier\": \"gold\",\n  \"name\": \"Nombre Apellido\",\n  \"externalId\": \"ext123\"\n}" },
         "url": { "raw": "https://backend-passforge.onrender.com/api/wallet/email", "protocol": "https", "host": ["backend-passforge","onrender","com"], "path": ["api","wallet","email"] }
       }
+    },
+    {
+      "name": "Wallet - Resolve (smart link)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{API_BASE}}/wallet/resolve?client={{clientCode}}&campaign={{campaignCode}}&externalId={{externalId}}",
+          "host": ["{{API_BASE}}"],
+          "path": ["wallet","resolve"],
+          "query": [
+            {"key":"client","value":"{{clientCode}}"},
+            {"key":"campaign","value":"{{campaignCode}}"},
+            {"key":"externalId","value":"{{externalId}}"}
+          ]
+        }
+      }
+    },
+    {
+      "name": "Wallet - Smart link by member id",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{API_BASE}}/wallet/smart-link/member/{{memberId}}", "host": ["{{API_BASE}}"], "path": ["wallet","smart-link","member","{{memberId}}"] }
+      }
+    },
+    {
+      "name": "Wallet - Refresh Google",
+      "request": {
+        "method": "POST",
+        "header": [{"key":"Content-Type","value":"application/json"}],
+        "body": {"mode":"raw","raw":"{\n  \"client\": \"{{clientCode}}\",\n  \"campaign\": \"{{campaignCode}}\",\n  \"externalId\": \"{{externalId}}\"\n}"},
+        "url": {"raw":"{{API_BASE}}/wallet/refresh/google","host":["{{API_BASE}}"],"path":["wallet","refresh","google"]}
+      }
+    },
+    {
+      "name": "Wallet - Refresh Apple",
+      "request": {
+        "method": "POST",
+        "header": [{"key":"Content-Type","value":"application/json"}],
+        "body": {"mode":"raw","raw":"{\n  \"client\": \"{{clientCode}}\",\n  \"campaign\": \"{{campaignCode}}\",\n  \"externalId\": \"{{externalId}}\"\n}"},
+        "url": {"raw":"{{API_BASE}}/wallet/refresh/apple","host":["{{API_BASE}}"],"path":["wallet","refresh","apple"]}
+      }
     }
   ],
   "variable": [
     { "key": "API_BASE", "value": "http://localhost:3900/api" },
     { "key": "from", "value": "2025-01-01" },
-    { "key": "to", "value": "2025-01-07" }
+    { "key": "to", "value": "2025-01-07" },
+    { "key": "idClient", "value": "L00005" },
+    { "key": "idCampaing", "value": "CP0161" },
+    { "key": "clientCode", "value": "L00005" },
+    { "key": "campaignCode", "value": "CP0161" },
+    { "key": "externalId", "value": "L00005" },
+    { "key": "memberId", "value": "1" }
   ]
 }
