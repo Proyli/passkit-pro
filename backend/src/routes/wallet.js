@@ -116,6 +116,24 @@ function getInfoText(tier) {
   );
 }
 
+function formatFrontInfo(infoText, { maxLines = 2, maxChars = 110 } = {}) {
+  if (!infoText) return "";
+
+  const normalizedLines = String(infoText)
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (!normalizedLines.length) return "";
+
+  const compact = normalizedLines.slice(0, maxLines).join(" • ");
+
+  if (compact.length <= maxChars) return compact;
+
+  const truncated = compact.slice(0, maxChars).replace(/[\s•]+$/u, "");
+  return `${truncated}…`;
+}
+
 function getDisplayName(row) {
   if (!row) return null;
   const f = row.firstname ?? row.first_name ?? row.nombre ?? row.name ?? "";
@@ -168,7 +186,7 @@ if (!PRIVATE_KEY) console.warn("⚠️  PRIVATE_KEY vacío. Google Wallet fallar
 
 const router = express.Router();
 
-// ===================== Salud =====================
+
 // ===================== Salud =====================
 router.get("/healthz", (req, res) => {
   res.set("x-app-rev", process.env.WALLET_OBJECT_REV || "dev");
@@ -258,6 +276,15 @@ function buildGoogleSaveUrl({ client, campaign, externalId, displayName, tier })
   const heroUri  = getHeroUrl();
   const origin   = baseUrl();
 
+  const infoTextFull = getInfoText(tierNorm);
+  const infoFront = infoTextFull
+    ? infoTextFull
+        .split(/\n+/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .join(" ")
+    : "";
+
   // ID nuevo para forzar refresco en el teléfono
   const objectId = `${issuer}.${sanitize(
     `${displayId}-${(campaignCode || "").toLowerCase()}-${tierNorm}-r${verTag}`
@@ -290,14 +317,33 @@ function buildGoogleSaveUrl({ client, campaign, externalId, displayName, tier })
     infoModuleData: {
       labelValueRows: [
         { columns: [{ label: "Nombre", value: displayName || displayId }] },
-        { columns: [{ label: "Nivel",  value: tierLabel }] },   // <- ya no rompe
+        ...(infoFront
+          ? [{ columns: [{ label: "Información", value: infoFront }] }]
+          : []),
+        { columns: [{ label: "Nivel", value: tierLabel }] },   // <- ya no rompe
         { columns: [{ label: "Código", value: displayId }] }
       ],
       showLastUpdateTime: false
     },
 
-    imageModulesData: [{ id: "alcazaren_hero", mainImage: { sourceUri: { uri: heroUri } } }],
-    textModulesData:  [{ header: "Información", body: getInfoText(tierNorm) }],
+    imageModulesData: [
+      {
+        id: "alcazaren_hero",
+        mainImage: {
+          sourceUri: { uri: heroUri },
+          contentDescription: {
+            defaultValue: { language: "es", value: "Celebremos juntos" }
+          }
+        }
+      }
+    ],
+    textModulesData: [
+      {
+        id: "alcazaren_info",
+        header: "Información",
+        body: infoTextFull
+      }
+    ],
     linksModuleData:  { uris: [{ uri: `${origin}/public/terminos`, description: "Términos y condiciones" }] },
     barcode: { type: "CODE_128", value: barcodeValue, alternateText: displayId },
   };
@@ -390,6 +436,15 @@ router.get("/wallet/ios/:token", async (req, res) => {
     console.log("[ios-pass] ids:", { client, campaign, displayId, barcodeValue });
     const serial = `${sanitize(client)}-${sanitize(campaign)}-${tier}`;
 
+    const infoTextFull = getInfoText(tier);
+    const infoFront = infoTextFull
+      ? infoTextFull
+          .split(/\n+/)
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .join(" ")
+      : "";
+
     const pass = await Pass.from(
       {
         model: MODEL,
@@ -428,14 +483,17 @@ router.get("/wallet/ios/:token", async (req, res) => {
           headerFields:    [{ key: "tier", label: "Nivel", value: tierLabel }],
           primaryFields:   [{ key: "name", label: "Nombre", value: displayName }],
           secondaryFields: [{ key: "code", label: "Código", value: displayId }],
-          auxiliaryFields: []
+          auxiliaryFields: infoFront
+            ? [{ key: "info", label: "Información", value: infoFront }]
+            : []
         }
       }
     );
 
     // Texto al dorso
-    const infoTxt = getInfoText(tier);
-    if (infoTxt) pass.backFields = [{ key:"info", label:"Información", value: infoTxt }];
+    if (infoTextFull) {
+      pass.backFields = [{ key: "info", label: "Información", value: infoTextFull }];
+    }
 
     // Responder .pkpass
     const buffer = await pass.getAsBuffer();
