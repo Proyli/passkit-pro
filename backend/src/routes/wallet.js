@@ -194,7 +194,6 @@ router.get("/healthz", (req, res) => {
 });
 
 
-
 // ===================== DB Helper =====================
 async function tryQuery(sql, params) {
   try {
