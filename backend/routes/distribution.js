@@ -265,6 +265,8 @@ async function sendWelcomeEmailHtml(
   // Incluir `tier` en el token para que viaje seguro con el smart URL
   const tokenPayload = { client, campaign };
   if (tier) tokenPayload.tier = tier;
+  const membershipIdNormalized = membershipId == null ? "" : String(membershipId).trim();
+  if (membershipIdNormalized) tokenPayload.externalId = membershipIdNormalized;
   const token = jwt.sign(tokenPayload, process.env.WALLET_TOKEN_SECRET, { expiresIn: "7d" });
   const smartUrl = `${API_BASE}/api/wallet/smart/${token}`;
 

@@ -189,8 +189,16 @@ const router = express.Router();
 
 // ===================== Salud =====================
 router.get("/healthz", (req, res) => {
-  res.set("x-app-rev", process.env.WALLET_OBJECT_REV || "dev");
-  res.status(200).send("ok");
+  const revision = process.env.WALLET_OBJECT_REV || "dev";
+  const uptimeSeconds = Number(process.uptime().toFixed(3));
+
+  res.set("x-app-rev", revision);
+  res.status(200).json({
+    status: "ok",
+    revision,
+    uptimeSeconds,
+    timestamp: new Date().toISOString(),
+  });
 });
 
 
@@ -702,7 +710,6 @@ router.get("/wallet/codes", async (req, res) => {
   </script>`);
 });
 
-// ===================== Email con Smart Link =====================
 
 // ===================== Email con Smart Link =====================
 router.post("/wallet/email", async (req, res) => {
