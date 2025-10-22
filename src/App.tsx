@@ -179,7 +179,7 @@ const App = () => {
 
               {/* Ruta para no encontrados (siempre la última) */}
               <Route path="*" element={<NotFound />} />
-            </Routes>
+            </Routes> n
           </BrowserRouter>
         </TooltipProvider>
       </QueryClientProvider>
