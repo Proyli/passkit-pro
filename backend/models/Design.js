@@ -11,8 +11,8 @@ module.exports = (sequelize, DataTypes) => {
     backgroundColor:{ type: DataTypes.STRING(7),  allowNull: false, defaultValue: '#0A4A76' },
     textColor:      { type: DataTypes.STRING(7),  allowNull: false, defaultValue: '#FFFFFF' },
 
-    // si `data` es JSON en MySQL 5.7+/8.0, usa DataTypes.JSON; si es TEXT, cambia a STRING/TEXT
-    data:           { type: DataTypes.JSON, allowNull: false },
+    // si `data` es JSON en PostgreSQL, usa DataTypes.JSONB; si prefieres texto plano, cambia a STRING/TEXT
+    data:           { type: DataTypes.JSONB, allowNull: false },
   }, {
     tableName: 'designs',
     timestamps: true,

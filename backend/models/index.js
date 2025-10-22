@@ -3,14 +3,30 @@ const path = require("path");
 const { Sequelize } = require("sequelize");
 require("dotenv").config({ path: path.join(__dirname, "..", "..", ".env") });
 
+const sslMode = String(process.env.DB_SSL || '').toLowerCase();
+const dialectOptions = {};
+
+if (["require", "required", "true"].includes(sslMode)) {
+  const ssl = { require: true, rejectUnauthorized: false };
+  if (Object.prototype.hasOwnProperty.call(process.env, "DB_SSL_REJECT_UNAUTHORIZED")) {
+    ssl.rejectUnauthorized = String(process.env.DB_SSL_REJECT_UNAUTHORIZED).toLowerCase() === "true";
+  }
+  if (process.env.DB_SSL_CA_B64) {
+    ssl.ca = Buffer.from(process.env.DB_SSL_CA_B64, "base64").toString("utf8");
+  }
+  dialectOptions.ssl = ssl;
+}
+
 const sequelize = new Sequelize(
   process.env.DB_NAME,
   process.env.DB_USER,
   process.env.DB_PASSWORD,
   {
     host: process.env.DB_HOST,
-    dialect: "mysql",
+    port: Number(process.env.DB_PORT || 5432),
+    dialect: "postgres",
     logging: false,
+    dialectOptions,
   }
 );
 
@@ -32,10 +48,10 @@ try {
 }
 
 // ---- NO te conectes aquí. Lo hace server.js cuando SKIP_DB=false ----
-// (Quita/Comenta el authenticate para evitar que Render intente MySQL siempre)
+// (Quita/Comenta el authenticate para evitar que Render intente PostgreSQL siempre)
 // sequelize
 //   .authenticate()
-//   .then(() => console.log("✅ Conectado a MySQL"))
+//   .then(() => console.log("✅ Conectado a PostgreSQL"))
 //   .catch((err) => console.error("❌ Error en conexión:", err));
 
 // ---- Ejecutar asociaciones (si el modelo las define) ----

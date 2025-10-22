@@ -16,7 +16,7 @@ exports.resolve = async (req, res) => {
       return res.status(400).json({ message: "Faltan parámetros: client, campaign" });
     }
 
-    // TODO: Busca el miembro en tu BD real (Sequelize / pool MySQL).
+    // TODO: Busca el miembro en tu BD real (Sequelize / pool PostgreSQL).
     // Ejemplo con Sequelize (ajústalo a tus modelos):
     // const db = require("../models");
     // const member = await db.Member.findOne({ where: { codigoCliente: client, codigoCampana: campaign }});
