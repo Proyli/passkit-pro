@@ -1,96 +1,32 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Search, Filter as FilterIcon, X, ArrowLeft, Plus } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import type { Pass as UIPass } from "@/types/pass.types";
+import { PassesService } from "@/services/passesService";
+import { adaptPass } from "@/lib/adapters";
 
 /* ================== Tipos ================== */
-type Estado = "active" | "inactive" | "expired";
-
-interface Pass {
-  id: string;
-  title: string;
-  description: string;
-  type: "coupon" | "loyalty" | "event" | string;
-  estado: Estado;
-  createdAt: string;
-  backgroundColor: string;
-  textColor: string;
-  scans: number;
-}
+type Status = "active" | "inactive" | "expired" | string;
 
 /* ================== Helpers ================== */
-const API_BASE =
-  (import.meta as any).env?.VITE_API_BASE_URL?.replace(/\/$/, "") ||
-  `http://${location.hostname}:3900/api`;
-
-const readErrorMessage = (err: any) => {
-  if (err?.response?.data) {
-    if (typeof err.response.data === "string") return err.response.data;
-    if (typeof err.response.data.message === "string") return err.response.data.message;
-    try { return JSON.stringify(err.response.data); } catch {}
-  }
-  return err?.message || "Error desconocido";
-};
-
-const normalizeEstado = (x: any): Estado => {
-  const v = String(x ?? "").toLowerCase();
-  if (v === "expired") return "expired";
-  if (v === "inactive" || v === "disabled") return "inactive";
-  return "active";
-};
-
-const normalizePass = (raw: any): Pass => ({
-  id: String(raw?.id ?? raw?.passId ?? raw?.uuid ?? Math.random().toString(36).slice(2, 10)),
-  title: raw?.title ?? raw?.name ?? "Untitled",
-  description: raw?.description ?? "",
-  type: raw?.type ?? raw?.passType ?? "loyalty",
-  estado: normalizeEstado(raw?.estado ?? raw?.status),
-  createdAt: raw?.createdAt ?? raw?.created_at ?? raw?.dateCreated ?? new Date().toISOString(),
-  // Detect tier from member or raw fields to derive color if not provided
-  backgroundColor: (function(){
-    if (raw?.backgroundColor) return raw.backgroundColor;
-    if (raw?.bgColor) return raw.bgColor;
-    // derive tier from member fields or campaign codes (tolerant)
-    const tierFromMember = String(raw?.member?.tipoCliente || raw?.member?.tier || raw?.tipoCliente || raw?.tier || "");
-    const campaign = String(raw?.member?.codigoCampana || raw?.member?.codigoCampaña || raw?.campaignCode || "");
-    const probe = (tierFromMember + " " + campaign).toLowerCase();
-
-    // Priority: explicit gold/silver/bronze words, then numeric rules (15% -> gold, 5% -> blue)
-    if (/gold/.test(probe)) return "#DAA520"; // GOLD
-    if (/silver/.test(probe)) return "#9CA3AF"; // SILVER
-    if (/bronze|bronce/.test(probe)) return "#CD7F32"; // BRONZE
-
-    // numeric-based mapping (campaign names like 'gold_15', 'blue_5', or tiers like '15%')
-    if (/\b15\b|15%|_15|15\D|\b15\z/.test(probe)) return "#DAA520"; // treat 15 as gold
-    if (/\b5\b|5%|_5|\b05\b/.test(probe)) return "#2350C6"; // treat 5 as blue
-
-    return "#2350C6"; // default BLUE
-  })(),
-  textColor: raw?.textColor ?? raw?.fgColor ?? "#FFFFFF",
-  scans: Number(raw?.scans ?? 0),
-});
-
-const toArray = (data: any): Pass[] => {
-  const arr = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
-  return arr.map(normalizePass);
-};
+// Nota: adaptPass crea backgroundColor/textColor si existen; aquí solo consumimos.
 
 const safeShortDate = (iso: string) => {
   const d = new Date(iso);
   return isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10);
 };
 
-const statusColors: Record<Estado, string> = {
+const statusColors: Record<string, string> = {
   active: "bg-green-100 text-green-800",
   expired: "bg-red-100 text-red-800",
   inactive: "bg-gray-100 text-gray-800",
 };
 
-const statusDotColors: Record<Estado, string> = {
+const statusDotColors: Record<string, string> = {
   active: "bg-green-500",
   expired: "bg-red-500",
   inactive: "bg-gray-500",
@@ -107,18 +43,18 @@ const PassList: React.FC = () => {
   const nav = useNavigate();
   const { toast } = useToast();
 
-  const [passes, setPasses] = useState<Pass[]>([]);
+  const [passes, setPasses] = useState<UIPass[]>([]);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   // ------- Filtro de búsqueda -------
-  type PassFieldKey = "title" | "description" | "type" | "estado";
+  type PassFieldKey = "title" | "description" | "type" | "status";
   const PASS_FIELD_LABEL: Record<PassFieldKey, string> = {
     title: "Title",
     description: "Description",
     type: "Type",
-    estado: "Status",
+    status: "Status",
   };
-  const PASS_FIELD_KEYS: PassFieldKey[] = ["title", "description", "type", "estado"];
+  const PASS_FIELD_KEYS: PassFieldKey[] = ["title", "description", "type", "status"];
   const DEFAULT_PASS_FIELDS: PassFieldKey[] = ["title", "description", "type"];
 
   const [query, setQuery] = useState("");
@@ -152,25 +88,28 @@ const PassList: React.FC = () => {
 
   // ------- Data load -------
   useEffect(() => {
-    axios
-      .get(`${API_BASE}/passes`)
-      .then((res) => setPasses(toArray(res.data)))
-      .catch((err) => {
+    (async () => {
+      try {
+        const list = await PassesService.list();
+        const normalized = Array.isArray(list) ? list.map(adaptPass) : [];
+        setPasses(normalized);
+      } catch (err) {
         console.error("Error al obtener pases:", err);
         toast({ title: "No se pudieron cargar los pases", variant: "destructive" });
         setPasses([]);
-      });
+      }
+    })();
   }, [toast]);
 
   // ------- UI handlers -------
   const toggleMenu = (id: string) => setOpenMenuId(openMenuId === id ? null : id);
 
-  const handleSaveWallet = (pass: Pass, e: React.MouseEvent) => {
+  const handleSaveWallet = (pass: UIPass, e: React.MouseEvent) => {
     e.stopPropagation();
     nav(`/passes/${pass.id}`); // aquí implementarás Add-to-Wallet en el detalle
   };
 
-  const handleSendEmail = (pass: Pass, e: React.MouseEvent) => {
+  const handleSendEmail = (pass: UIPass, e: React.MouseEvent) => {
     e.stopPropagation();
     toast({
       title: "Próximamente",
@@ -365,17 +304,25 @@ const PassList: React.FC = () => {
 
             {/* Meta */}
             <div className="text-[11px] text-gray-500 dark:text-gray-400">
-              <span className="mr-3">Created: {safeShortDate(pass.createdAt)}</span>
-              <span>Scans: {pass.scans ?? 0}</span>
+              <span className="mr-3">Created: {pass.createdAt ? safeShortDate(pass.createdAt) : ""}</span>
+              <span>Scans: {typeof pass.scans === 'number' ? pass.scans : 0}</span>
             </div>
 
             {/* Estado + Acciones */}
             <div className="flex items-center justify-between pt-1">
               <div className="flex items-center gap-2">
-                <span className={`h-2.5 w-2.5 rounded-full ${statusDotColors[pass.estado]}`}></span>
-                <span className={`text-xs font-semibold px-2.5 py-1 rounded-full capitalize ${statusColors[pass.estado]}`}>
-                  {pass.estado}
-                </span>
+                {(() => {
+                  const s = String(pass.status || 'active').toLowerCase();
+                  const k = (s === 'expired' || s === 'inactive') ? s : 'active';
+                  return (
+                    <>
+                      <span className={`h-2.5 w-2.5 rounded-full ${statusDotColors[k]}`}></span>
+                      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full capitalize ${statusColors[k]}`}>
+                        {s}
+                      </span>
+                    </>
+                  );
+                })()}
               </div>
 
               <div className="flex gap-2">
