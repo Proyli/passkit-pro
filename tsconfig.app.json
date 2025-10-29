@@ -27,5 +27,5 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src", "src/types"]
+  "include": ["src", "src/types", "public/runtime-config.js"]
 }
