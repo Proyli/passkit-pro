@@ -1,28 +1,15 @@
 // src/pages/PassDetail.tsx
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import axios from "axios";
 import { Button } from "@/components/ui/button";
 import PassPreview from "@/components/PassPreview";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PassesService } from "@/services/passesService";
+import { adaptPass } from "@/lib/adapters";
+import type { Pass as UIPass } from "@/types/pass.types";
 
-const API_BASE_PASSES =
-  (import.meta as any).env?.VITE_API_BASE_URL?.replace(/\/$/, "") ||
-  `${window.location.protocol}//${window.location.hostname}:3900/api`;
-
-type PassDetail = {
-  id?: string | number;
-  title?: string;
-  description?: string;
-  type?: string;
-  estado?: "active" | "inactive" | "expired" | string;
-  backgroundColor?: string;
-  textColor?: string;
-  createdAt?: string;
-  scans?: number;
-  [k: string]: any;
-};
+type PassDetail = UIPass & { [k: string]: any };
 
 export default function PassDetail() {
   const { id } = useParams();
@@ -50,16 +37,10 @@ export default function PassDetail() {
 
   async function load() {
     try {
-      const res = await axios.get(`${API_BASE_PASSES}/passes/${id}`);
-      const raw = res.data || {};
-      const t = String(raw.title || '').toLowerCase();
-      const bg = String(raw.backgroundColor || '').toLowerCase();
-      const correctedBg = (!bg || bg === '#007aff')
-        ? (t.includes('gold') || /\b15\b|15%/.test(t)) ? '#DAA520' : (t.includes('blue') || /\b5\b|5%/.test(t)) ? '#2350C6' : raw.backgroundColor
-        : raw.backgroundColor;
-      const fixed = { ...raw, backgroundColor: correctedBg };
-      setData(fixed);
-      setDraft(fixed);
+      const raw = await PassesService.get(String(id ?? ""));
+      const normalized = adaptPass(raw);
+      setData(normalized);
+      setDraft(normalized);
     } catch {
       setData(null);
     } finally {
@@ -80,9 +61,10 @@ export default function PassDetail() {
         backgroundColor: draft.backgroundColor,
         textColor: draft.textColor,
       };
-      const res = await axios.put(`${API_BASE_PASSES}/passes/${id}`, payload);
-      setData(res.data || draft);
-      setDraft(res.data || draft);
+      const updated = await PassesService.update(Number(id), payload);
+      const normalized = adaptPass(updated);
+      setData(normalized || draft);
+      setDraft(normalized || draft);
       setEditMode(false);
     } catch (e: any) {
       alert(e?.response?.data?.error || e?.message || "Error al guardar");

@@ -8,6 +8,7 @@ export interface Pass {
 }
 
 export const PassesService = {
+  get: (id: string | number) => api.get<Pass>(`/api/passes/${id}`).then(r => r.data),
   list: () => api.get<Pass[]>("/api/passes").then(r => r.data),
   create: (payload: Partial<Pass>) => api.post<Pass>("/api/passes", payload).then(r => r.data),
   update: (id: number, payload: Partial<Pass>) =>

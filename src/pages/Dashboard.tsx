@@ -7,9 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Search, Filter, Plus, LogOut } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Toaster } from "@/components/ui/toaster";
-import type { Pass } from "@/types/pass.types";
-import { API } from "@/config/api";
-
+import type { Pass as UIPass } from "@/types/pass.types";
+import { adaptPass } from "@/lib/adapters";
+import { PassesService } from "@/services/passesService";
+import { API_BASE } from "@/lib/api";
 // Gráficos
 import {
   ResponsiveContainer,
@@ -67,27 +68,24 @@ const Dashboard = () => {
   };
 
   // ========= PASES (solo para KPIs) =========
-  const [passes, setPasses] = useState<Pass[]>([]);
+  const [passes, setPasses] = useState<UIPass[]>([]);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch(`${API}/passes`);
-        if (!res.ok) throw new Error(`GET /passes ${res.status}`);
-        const data = await res.json();
-        const list: any[] = Array.isArray(data) ? data : [];
-        const normalized: Pass[] = list.map((p: any) => ({
-          ...p,
-          id: String(p.id),
-          status: p.status ?? p.estado ?? "active",
-        }));
-        setPasses(normalized);
-      } catch (e) {
-        console.error(e);
-        toast({ title: "No se pudieron cargar los pases", variant: "destructive" });
-      }
-    })();
-  }, [toast]);
+useEffect(() => {
+  (async () => {
+    try {
+      const list = await PassesService.list();
+      const normalized: UIPass[] = Array.isArray(list) ? list.map(adaptPass) : [];
+      setPasses(normalized);
+    } catch (e) {
+      console.error("❌ Error al cargar los pases:", e);
+      toast({
+        title: "No se pudieron cargar los pases",
+        variant: "destructive",
+      });
+    }
+  })();
+}, []);
+
 
   // ========= ANALYTICS =========
   const [from, setFrom] = useState<string>(""); // YYYY-MM-DD
@@ -144,7 +142,7 @@ const Dashboard = () => {
     const params = new URLSearchParams();
     if (from) params.set("from", from);
     if (to) params.set("to", to);
-    fetch(`${API}/analytics/overview?${params.toString()}`)
+    fetch(`${API_BASE}/analytics/overview?${params.toString()}`)
       .then((r) => r.json())
       .then((json) => setOverview(json as Overview))
       .catch((err) => {
