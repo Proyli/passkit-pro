@@ -1,3 +1,4 @@
+// src/components/Login.tsx
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -9,9 +10,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { LogIn, Shield, User } from 'lucide-react';
 import { useAuth } from "@/context/AuthContext";
-import { nanoid } from 'nanoid';
-
-
+import { AuthService } from "@/services/authService"; // ✅ usa el backend
 
 interface LoginCredentials {
   email: string;
@@ -23,128 +22,70 @@ const Login = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { setUser } = useAuth();
+
   const [credentials, setCredentials] = useState<LoginCredentials>({
     email: '',
     password: '',
-    role: 'user'
+    role: 'user',
   });
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-
-  // System credentials - Only authorized personnel
-  const testCredentials = {
-    admin: { email: 'admin@alcazaren.com.gt', password: 'admin123' },
-    users: [
-      'andrea@alcazaren.com.gt',
-      'julio@alcazaren.com.gt', 
-      'linda.perez@alcazaren.com.gt'
-    ]
-  };
-
-  const allowedUserEmails = [
-  'linda.perez@alcazaren.com.gt'
-];
-
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
 
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 800));
-
-    // Validate credentials
-    let isValidUser = false;
-    
-    if (credentials.role === 'admin') {
-      isValidUser = credentials.email === testCredentials.admin.email && 
-                   credentials.password === testCredentials.admin.password;
-    } else {
-      // For standard users, check if email is in allowed list and use standard password
-      isValidUser = testCredentials.users.includes(credentials.email) && 
-                   credentials.password === 'user123';
-    }
-    
-    if (isValidUser) {
-      // Store session in localStorage (prepare for future backend integration)
-      const sessionData = {
-  id: nanoid(12), // ✅ ID generado automáticamente
-  email: credentials.email,
-  role: credentials.role,
-  loginTime: new Date().toISOString()
-};
-
-setUser(sessionData);
-localStorage.setItem("passkit_session", JSON.stringify(sessionData));
-
-  toast({
-        title: "Login successful",
-        description: `Welcome ${credentials.role === 'admin' ? 'Administrator' : 'User'}!`,
+    try {
+      // 🔐 Llamada real al backend (POST /api/auth/login)
+      const data = await AuthService.login({
+        email: credentials.email,
+        password: credentials.password,
       });
 
-   
-        navigate('/dashboard'); // ahora tanto admin como user van al dashboard
+      // data: { token, user: { id, name, role } }
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
 
+      // Si tu AuthContext espera otro shape, adapta aquí:
+      setUser({
+        id: data.user.id,
+        name: data.user.name,
+        role: data.user.role,
+        email: credentials.email,
+      } as any);
 
-    } else {
-      setError('Access denied. Only authorized personnel can access this system.');
+      // Sesión “histórica” que ya usabas (si quieres mantenerla)
+      localStorage.setItem(
+        "passkit_session",
+        JSON.stringify({
+          email: credentials.email,
+          role: data.user.role,
+          loginTime: new Date().toISOString(),
+        })
+      );
+
+      toast({
+        title: "Login exitoso",
+        description: `Bienvenido ${data.user.role === 'admin' ? 'Administrador' : 'Usuario'}.`,
+      });
+
+      navigate('/dashboard');
+    } catch (err: any) {
+      // Mensaje desde backend o genérico
+      const msg =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        "Credenciales inválidas o servidor no disponible.";
+      setError(msg);
+    } finally {
+      setIsLoading(false);
     }
-
-    const testCred = testCredentials[credentials.role];
-
-// Validar usuario estándar por correo
-if (
-  credentials.role === "user" &&
-  allowedUserEmails.includes(credentials.email) &&
-  credentials.password === testCred.password
-) {
-  localStorage.setItem('passkit_session', JSON.stringify({
-    email: credentials.email,
-    role: credentials.role,
-    loginTime: new Date().toISOString()
-  }));
-
-  toast({
-    title: "Login exitoso",
-    description: `Bienvenido ${credentials.email}`,
-  });
-
-  navigate('/dashboard');
-  setIsLoading(false);
-  return;
-}
-
-// Validar administrador
-if (
-  credentials.role === "admin" &&
-  credentials.email === testCred.email &&
-  credentials.password === testCred.password
-) {
-  localStorage.setItem('passkit_session', JSON.stringify({
-    email: credentials.email,
-    role: credentials.role,
-    loginTime: new Date().toISOString()
-  }));
-
-  toast({
-    title: "Login exitoso",
-    description: `Bienvenido administrador`,
-  });
-
-  navigate('/dashboard');
-  setIsLoading(false);
-  return;
-}
-
-// Si ninguna validación pasó
-setError("Credenciales inválidas.");
-setIsLoading(false);
   };
 
   const handleInputChange = (field: keyof LoginCredentials, value: string) => {
     setCredentials(prev => ({ ...prev, [field]: value }));
-    if (error) setError(''); // Clear error when user starts typing
+    if (error) setError('');
   };
 
   return (
@@ -170,8 +111,8 @@ setIsLoading(false);
 
             <div className="space-y-2">
               <Label htmlFor="role">Account Type</Label>
-              <Select 
-                value={credentials.role} 
+              <Select
+                value={credentials.role}
                 onValueChange={(value: 'admin' | 'user') => handleInputChange('role', value)}
               >
                 <SelectTrigger>
@@ -218,7 +159,7 @@ setIsLoading(false);
               />
             </div>
 
-            {/* Authorized users info */}
+            {/* Info visible (opcional): puedes quitarla si ya usas backend */}
             <div className="bg-muted/50 p-3 rounded-lg text-sm">
               <p className="font-medium mb-2">Access Information:</p>
               <div className="space-y-1 text-muted-foreground">
@@ -234,9 +175,9 @@ setIsLoading(false);
           </CardContent>
 
           <CardFooter>
-            <Button 
-              type="submit" 
-              className="w-full" 
+            <Button
+              type="submit"
+              className="w-full"
               disabled={isLoading || !credentials.email || !credentials.password}
             >
               {isLoading ? (

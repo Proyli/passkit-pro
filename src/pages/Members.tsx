@@ -9,12 +9,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { User, Edit3, Link, Plus, Upload, Download, Columns3, Trash2 } from "lucide-react";
-import { getRole, can, Role } from "@/lib/authz";
+import { can } from "@/lib/authz";
 // Se eliminan los imports de Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 // porque estás usando directamente elementos <table>, <thead>, etc.
 import { useToast } from "@/hooks/use-toast";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import axios from "axios";
+import { MembersService, Member, NewMember, UpdateMember } from "@/services/membersService";
+import { CardsService } from "@/services/cardsService";
+import { CsvService } from "@/services/csvService";
 type UIPass = { id: string; title: string; type?: string };
 
 import { QrCodeModal } from "@/components/modals/QrCodeModal";
@@ -198,7 +200,6 @@ const Members = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
-  const role: Role = getRole();
 
 
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
@@ -543,7 +544,7 @@ const handleSelectAll = () => {
 };
 
 const handleDeleteSelected = async () => {
-  if (!can.deleteMember(role)) {
+  if (!can.deleteMember()) {
   toast({
     title: "Acción no permitida",
     description: "Solo un administrador puede eliminar miembros.",
@@ -584,9 +585,7 @@ const handleDeleteSelected = async () => {
 
  const handleExport = async () => {
   try {
-    const response = await fetch(`${API_BASE}/csv/export`, { method: "GET" });
-    if (!response.ok) throw new Error("Error al exportar CSV");
-    const blob = await response.blob();
+    const blob = await CsvService.exportCsv();
     const link = document.createElement("a");
     link.href = window.URL.createObjectURL(blob);
     link.download = "members.csv";
@@ -601,18 +600,10 @@ const handleDeleteSelected = async () => {
 const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
   const file = event.target.files?.[0];
   if (!file) return;
-  const formData = new FormData();
-  formData.append("csvFile", file);
 
   try {
-    const response = await fetch(`${API_BASE}/csv/import`, {
-      method: "POST",
-      body: formData,
-    });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.message || "Error al importar CSV");
-
-    toast({ title: "Importación exitosa", description: `${result.message}` });
+    const result = await CsvService.importCsv(file);
+    toast({ title: "Importación exitosa", description: `${result?.message ?? "Archivo importado."}` });
 
     const res = await fetch(`${API_BASE}/members`);
     const updated = await res.json();
@@ -631,18 +622,18 @@ const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
 
 const handleAssignCard = async (member: any) => {
   try {
-    const response = await axios.post(`${API_BASE}/cards`, {
+    const result: any = await CardsService.assignCard({
       codigoCliente: member.clientCode,
       codigoCampana: member.campaignCode,
     });
 
-    if ((response.data as any)?.success) {
+    if (result?.success || result === true) {
       toast({ title: "Tarjeta asignada correctamente" });
     } else {
       toast({ variant: "destructive", title: "Hubo un problema al asignar la tarjeta" });
     }
-  } catch (error) {
-    console.error("❌ Error al asignar tarjeta:", error);
+  } catch (error: any) {
+    console.error("❌ Error al asignar tarjeta:", error?.message || error);
     toast({ variant: "destructive", title: "Error al asignar la tarjeta" });
   }
 };
@@ -751,7 +742,7 @@ const handleAssignCard = async (member: any) => {
 
       <div className="flex gap-3 mb-6">
   {/* ADD MEMBER: solo admin */}
-  {can.addMember(role) && (
+  {can.addMember() && (
     <Button
       onClick={() => navigate("/profile")}
       className="bg-[#8B5CF6] hover:bg-[#7C3AED] text-white font-semibold px-4 py-2 rounded-lg"
@@ -762,7 +753,7 @@ const handleAssignCard = async (member: any) => {
   )}
 
   {/* IMPORT CSV: solo admin */}
-  {can.importExport(role) && (
+  {can.importExport() && (
     <label htmlFor="importCSV">
       <input id="importCSV" type="file" accept=".csv" onChange={handleImport} style={{ display: "none" }} />
       <Button variant="outline" className="text-muted-foreground" asChild>
@@ -775,7 +766,7 @@ const handleAssignCard = async (member: any) => {
   )}
 
   {/* EXPORT CSV: solo admin */}
-  {can.importExport(role) && (
+  {can.importExport() && (
     <Button variant="outline" className="text-muted-foreground" onClick={handleExport}>
       <Download className="w-4 h-4 mr-2" />
       EXPORT CSV
@@ -865,7 +856,7 @@ const handleAssignCard = async (member: any) => {
   <table className="min-w-[1200px] table-auto w-full">
     <thead>
       <tr className="border-b bg-muted/50">
-        {can.deleteMember(role) ? (
+        {can.deleteMember() ? (
           <th className="w-12">
             <Checkbox
               checked={selectedMembers.length === membersFromBackend.length && membersFromBackend.length > 0}
@@ -923,7 +914,7 @@ const handleAssignCard = async (member: any) => {
               {membersFromBackend.map((member: any) => (
                 <tr key={member.id} className="border-b hover:bg-muted/50">
                  <td className="py-2">
-                  {can.deleteMember(role) ? (
+                  {can.deleteMember() ? (
                     <Checkbox
                       checked={selectedMembers.includes(String(member.id))}
                       onCheckedChange={() => handleSelectMember(member.id)}
@@ -962,7 +953,7 @@ const handleAssignCard = async (member: any) => {
                         <User className="w-4 h-4 text-muted-foreground" />
                       </Button>
 
-                      {can.editMember(role) && (
+                      {can.editMember() && (
                       <Button
                         variant="ghost"
                         size="sm"
@@ -1030,7 +1021,7 @@ const handleAssignCard = async (member: any) => {
                   </table>
                    </div>
 
-       {can.deleteMember(role) && selectedMembers.length > 0 && (
+       {can.deleteMember() && selectedMembers.length > 0 && (
   <div className="w-full flex justify-end mt-4 pr-4 mb-2">
     <Button
       variant="destructive"

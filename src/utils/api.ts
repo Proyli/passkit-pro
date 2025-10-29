@@ -1,10 +1,25 @@
+// api.ts
 import axios from "axios";
-
-const API_URL = import.meta.env.VITE_API_URL; // ← del .env
-
 export const api = axios.create({
-  baseURL: API_URL,
-  // withCredentials: true, // si algún día usas cookies/sesiones
+  baseURL: import.meta.env.VITE_API_URL, // ← usa tu backend
+  withCredentials: false,
 });
 
-export default api;
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem("token");
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+api.interceptors.response.use(
+  (r) => r,
+  (err) => {
+    console.error("[API ERROR]", {
+      url: err?.config?.url,
+      method: err?.config?.method,
+      status: err?.response?.status,
+      data: err?.response?.data,
+    });
+    return Promise.reject(err);
+  }
+);
