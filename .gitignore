@@ -46,3 +46,12 @@ backend/certs/*               # certificados Apple
 # ===== Otros (si usas uploads temporales) =====
 backend/uploads/
 echo "# keep" > backend/keys/.gitkeep
+
+# ===== Bundles locales del backend (NO versionar) =====
+backend.zip
+backend_pack/
+
+# Backups y archivos auxiliares
+archive/**/.DS_Store
+
+pubprofile.xml

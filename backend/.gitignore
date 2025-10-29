@@ -6,7 +6,7 @@ certs/*
 # Node
 node_modules/
 npm-debug.log*
-package-lock.json
+
 
 # Entorno/secretos
 .env
