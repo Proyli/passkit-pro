@@ -87,7 +87,10 @@ app.use("/applews", require("./routes/applews"));
 
 /* ---- Extras útiles ---- */
 app.get("/", (_req, res) => res.status(200).send("PassForge backend up")); // ping rápido
-app.get("/health", (_req, res) => res.status(200).send("OK"));             // healthcheck
+// Healthcheck (ambas rutas por compatibilidad: raíz y bajo /api)
+app.get(["/health", "/api/health"], (_req, res) => {
+  res.status(200).json({ ok: true });
+});
 
 // 404 handler (después de las rutas)
 app.use((req, res, _next) => {

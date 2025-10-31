@@ -158,6 +158,7 @@ type MembersLoadResult = { list: UIMember[] };
 async function fetchMembers(): Promise<MembersLoadResult> {
   const { data } = await api.get(`/api/members`);
   const list = toArray(data).map(adaptMember).sort((a, b) => a.id - b.id);
+  try { localStorage.setItem("members.cache", JSON.stringify(list)); } catch {}
   return { list };
 }
 
@@ -213,8 +214,18 @@ useEffect(() => {
     try {
       const { list } = await fetchMembers();
       setMembersFromBackend(list);
-    } catch (err) {
-      console.error("❌ Error al cargar miembros:", err);
+    } catch (err: any) {
+      console.error("❌ Error al cargar miembros:", err?.message || err);
+      // Fallback: cache local si existe
+      try {
+        const raw = localStorage.getItem("members.cache");
+        if (raw) {
+          const cached: UIMember[] = JSON.parse(raw);
+          setMembersFromBackend(cached);
+          toast({ title: "Modo offline", description: "Mostrando copia local de miembros." });
+          return;
+        }
+      } catch {}
       setMembersFromBackend([]);
       toast({
         title: "Error de carga",
@@ -326,6 +337,7 @@ const handleAddMember = async () => {
     const { data: updatedJson } = await api.get(`/api/members`);
     const normalized = toArray(updatedJson).map(adaptMember).sort((a, b) => a.id - b.id);
     setMembersFromBackend(normalized);
+    try { localStorage.setItem("members.cache", JSON.stringify(normalized)); } catch {}
   } catch (error: any) {
     console.error("❌ Error al guardar:", error?.message || error);
     toast({
@@ -537,6 +549,8 @@ const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const { data: updated } = await api.get(`/api/members`);
     const normalized = toArray(updated).map(adaptMember).sort((a, b) => a.id - b.id);
     setMembersFromBackend(normalized);
+    try { localStorage.setItem("members.cache", JSON.stringify(normalized)); } catch {}
+    try { localStorage.setItem("members.cache", JSON.stringify(normalized)); } catch {}
   } catch (error: any) {
     console.error("❌ Error al importar CSV:", error.message);
     toast({ title: "Error", description: `No se pudo importar: ${error.message}` });
