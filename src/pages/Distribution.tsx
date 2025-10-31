@@ -8,7 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Card } from "@/components/ui/card";
 import HtmlEditor from "@/components/forms/HtmlEditor";
 import { useToast } from "@/hooks/use-toast";
-import { API } from "@/config/api";
+import { api } from "@/lib/api";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 
 type SendArgs = {
@@ -47,37 +47,21 @@ async function sendPassEmail(args: SendArgs) {
     settings,
   } = args;
 
-  const response = await fetch(`${API}/distribution/send-test-email`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "x-role": "admin" },
-    body: JSON.stringify({
-      to,
-      displayName,
-      clientCode,
-      campaignCode,
-      settings,
-      htmlTemplate,
-      buttonText,
-      membershipId,
-      logoUrl,
-      subject: settings?.subject,
-      from: settings?.fromName,
-      provider: "outlook", // o "gmail"
-    }),
-  });
-
-  let payload: any = {};
-  try {
-    payload = await response.json();
-  } catch (_err) {
-    payload = {};
-  }
-
-  if (!response.ok) {
-    throw new Error(payload?.error || `HTTP ${response.status}`);
-  }
-
-  return payload;
+  const { data } = await api.post(`/api/distribution/send-test-email`, {
+    to,
+    displayName,
+    clientCode,
+    campaignCode,
+    settings,
+    htmlTemplate,
+    buttonText,
+    membershipId,
+    logoUrl,
+    subject: settings?.subject,
+    from: settings?.fromName,
+    provider: "outlook",
+  }, { headers: { "x-role": "admin" } });
+  return data;
 }
 // ================= Types =================
 type Settings = {
@@ -163,11 +147,9 @@ export default function Distribution() {
     (async () => {
       // 1) Settings (solo admin)
       try {
-        const r1 = await fetch(`${API}/distribution/settings`, { headers: ADMIN_GET_HEADERS });
-        if (r1.ok) {
-          const s = await r1.json();
-          setSettings((prev) => ({ ...prev, ...s }));
-        }
+        const r1 = await api.get(`/api/distribution/settings`, { headers: ADMIN_GET_HEADERS });
+        const s = r1.data;
+        setSettings((prev) => ({ ...prev, ...s }));
       } catch {}
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -278,25 +260,22 @@ return `
     try {
       // 1) guardar settings
       {
-        const r = await fetch(`${API}/distribution/settings`, {
-          method: "POST",
-          headers: ADMIN_POST_HEADERS,
-          body: JSON.stringify({
-            enabled: settings.enabled,
-            subject: settings.subject,
-            fromName: settings.fromName,
-            preheader: settings.preheader,
-            buttonText: settings.buttonText,
-            lightBg: settings.lightBg,
-            darkBg: settings.darkBg,
-            bodyColorLight: settings.bodyColorLight,
-            bodyColorDark: settings.bodyColorDark,
-            htmlBody: settings.htmlBody,
-            logoUrl: settings.logoUrl,
-          }),
-        });
-        const j = await r.json().catch(() => ({} as any));
-        if (!r.ok || (j && j.ok === false)) throw new Error(j?.error || `HTTP ${r.status}`);
+        const payload = {
+          enabled: settings.enabled,
+          subject: settings.subject,
+          fromName: settings.fromName,
+          preheader: settings.preheader,
+          buttonText: settings.buttonText,
+          lightBg: settings.lightBg,
+          darkBg: settings.darkBg,
+          bodyColorLight: settings.bodyColorLight,
+          bodyColorDark: settings.bodyColorDark,
+          htmlBody: settings.htmlBody,
+          logoUrl: settings.logoUrl,
+        };
+        const r = await api.post(`/api/distribution/settings`, payload, { headers: ADMIN_POST_HEADERS });
+        const j = r.data;
+        if (j && j.ok === false) throw new Error(j?.error || `Save failed`);
       }
 
       toast({ title: "Guardado", description: "Preferencias actualizadas" });

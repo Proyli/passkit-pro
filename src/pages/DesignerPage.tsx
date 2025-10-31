@@ -1,5 +1,6 @@
 // src/pages/Designer/DesignerPage.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { api } from "@/lib/api";
 import { useNavigate } from "react-router-dom"; // si no usas Router, ver fallback más abajo
 
 // Tipos
@@ -48,9 +49,7 @@ const seedId = () => Math.random().toString(36).slice(2, 9);
 
 export default function DesignerPage() {
   const navigate = useNavigate?.(); // puede ser undefined si no hay router
-  const API_BASE =
-    (import.meta as any).env?.VITE_API_BASE ??
-    `${window.location.protocol}//${window.location.hostname}:3900`;
+  // Cliente HTTP centralizado via axios
 
   // refs para abrir el color picker
   const bgRef = useRef<HTMLInputElement | null>(null);
@@ -171,16 +170,7 @@ const saveDesign = async () => {
   };
 
   try {
-    const res = await fetch(`${API_BASE}/api/designs`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    if (!res.ok) {
-      const msg = await res.text().catch(() => "");
-      throw new Error(`HTTP ${res.status} ${msg}`);
-    }
+    const res = await api.post(`/api/designs`, payload);
 
     // Puedes leer el id/fechas si las usas:
     // const savedFromServer = await res.json();

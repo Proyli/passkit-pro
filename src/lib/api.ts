@@ -1,36 +1,28 @@
 // src/lib/api.ts
+import axios from "axios";
 
-// 1) Base robusta: usa .env si existe; si no, mismo host del front en :3900/api
-export const API_BASE =
-  (import.meta as any).env?.VITE_API_BASE_URL?.replace(/\/$/, "") ||
-  (import.meta as any).env?.VITE_API_URL?.replace(/\/$/, "") ||
-  `${window.location.protocol}//${window.location.hostname}:3900/api`;
+// Axios centralizado para toda la app
+// Base URL se obtiene de Vite (VITE_API_URL). Permite override por window.__API_BASE__.
+const FALLBACK_PROD = "https://passforge-backend-alcazaren.azurewebsites.net";
+const FALLBACK_DEV = typeof window !== "undefined"
+  ? `${window.location.protocol}//${window.location.hostname}:3900`
+  : "http://localhost:3900";
 
-// 2) Builder de URL (NO hace fetch)
-export const apiUrl = (path: string) =>
-  `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
+const envBase = (import.meta as any)?.env?.VITE_API_URL?.toString()?.trim?.();
+const runtimeBase = (typeof window !== "undefined" && (window as any).__API_BASE__) as string | undefined;
 
-// 3) Helper fetch con JSON (si prefieres 1 sola llamada)
-export async function fetchJson(path: string, init?: RequestInit) {
-  const res = await fetch(apiUrl(path), {
-    headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
-    ...init,
-  });
-  return res;
-}
+const baseURL = (envBase || runtimeBase || (import.meta as any).env?.DEV ? FALLBACK_DEV : FALLBACK_PROD) as string;
 
-// 4) Lectura de errores (cuando el servidor devuelve HTML o JSON)
-export const errorMsg = async (res: Response) => {
-  const text = await res.text();
-  try {
-    const j = JSON.parse(text);
-    return j?.message || text;
-  } catch {
-    return text;
-  }
-};
+export const api = axios.create({ baseURL, withCredentials: false });
 
-// 5) Versión para axios
+// Adjunta token si existiera (no obliga a usarlo)
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem("token");
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+// Utilidad para mensajes de error coherentes
 export const errorMsgAxios = (err: any) => {
   if (err?.response?.data) {
     if (typeof err.response.data === "string") return err.response.data;

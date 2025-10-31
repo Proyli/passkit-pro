@@ -1,4 +1,4 @@
-import { api } from "@/utils/api";
+import { api } from "@/lib/api";
 
 export interface Member {
   id: number;

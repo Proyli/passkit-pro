@@ -1,4 +1,4 @@
-import { api } from "@/utils/api";
+import { api } from "@/lib/api";
 
 export const CsvService = {
   exportCsv: () =>
@@ -15,4 +15,3 @@ export const CsvService = {
       .then((r) => r.data);
   },
 };
-

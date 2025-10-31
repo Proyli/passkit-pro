@@ -1,4 +1,3 @@
-import "@/lib/api-bootstrap";
 
 // UI y componentes comunes
 import { Toaster } from "@/components/ui/toaster";

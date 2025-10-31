@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useProfileStore } from "@/store/profileStore";
 import { ArrowLeft, Save, ChevronRight } from "lucide-react";
+import { api } from "@/lib/api";
 
 // === Tier options (para el select) ===
 const TIER_OPTIONS = [
@@ -46,12 +47,7 @@ const EMPTY_FORM: FormData = {
   idExterno: "",
 };
 
-const API_BASE =
-  (import.meta as any).env?.VITE_API_BASE_URL?.replace(/\/$/, "") ||
-  "http://localhost:3900/api";
-
-// === Email de Wallet ===
-const BACKEND = "https://backend-passforge.onrender.com";
+// Cliente HTTP centralizado via axios
 
 async function enviarWalletEmailDesdePerfil(form: Partial<FormData>) {
   const payload = {
@@ -63,16 +59,11 @@ async function enviarWalletEmailDesdePerfil(form: Partial<FormData>) {
     externalId: form.idExterno || "",
   };
 
-  const res = await fetch(`${BACKEND}/api/wallet/email`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const data = await res.json();
-  if (!res.ok || !data.ok) {
-    throw new Error(data.error || data.message || `HTTP ${res.status}`);
+  const { data } = await api.post(`/api/wallet/email`, payload);
+  if (!(data as any)?.ok) {
+    throw new Error((data as any)?.error || (data as any)?.message || `Send failed`);
   }
-  return data; // { ok:true, smartUrl:"..." }
+  return data as any; // { ok:true, smartUrl:"..." }
 }
 
 const Profile: React.FC = () => {
@@ -115,14 +106,7 @@ const Profile: React.FC = () => {
     };
 
     try {
-      const res = await fetch(`${API_BASE}/members`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(nuevoCliente),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-      const data = await res.json();
+      const { data } = await api.post(`/api/members`, nuevoCliente);
       console.log("✅ Cliente guardado:", data);
 
       // Fire-and-forget the wallet email: don't block the UI if the external service fails

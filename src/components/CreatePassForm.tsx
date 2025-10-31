@@ -1,5 +1,5 @@
 // src/components/CreatePassForm.tsx
-import axios from "axios";
+import { api } from "@/lib/api";
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -32,9 +32,7 @@ export type CreatePassFormProps = {
   initialValues?: Partial<PassData>;
 };
 
-const API_BASE_PASSES =
-  (import.meta as any).env?.VITE_API_BASE_URL?.replace(/\/$/, "") ||
-  `${window.location.protocol}//${window.location.hostname}:3900/api`;
+// Todas las llamadas deben usar el cliente central `api`
 
 const CreatePassForm: React.FC<CreatePassFormProps> = ({
   onCreated,
@@ -122,7 +120,7 @@ const CreatePassForm: React.FC<CreatePassFormProps> = ({
         fields: passData.fields,
       };
 
-      const res = await axios.post(`${API_BASE_PASSES}/passes`, body);
+      const res = await api.post(`/api/passes`, body);
       const data = res.data || {};
       const newId = data.id || data.passId || data.uuid || "";
 

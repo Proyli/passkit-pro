@@ -12,6 +12,7 @@ import { toast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 import type { Pass } from "@/types/pass.types";
 import { useState, useEffect } from "react";
+import { api } from "@/lib/api";
 // src/pages/Designer/DesignerPage.tsx (o index.tsx)
 
 
@@ -28,11 +29,7 @@ const Index = () => {
   // 🔹 Cargar datos desde la API
   const fetchPasses = async () => {
     try {
-      // GET
-      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/passes`);
-
-      if (!res.ok) throw new Error(`Error al cargar pases: ${res.status}`);
-      const data = await res.json();
+      const { data } = await api.get(`/api/passes`);
 
       const normalized: Pass[] = data.map((p: any) => ({
         ...p,
@@ -55,16 +52,7 @@ const Index = () => {
     if (!window.confirm("¿Eliminar este pase? Esta acción no se puede deshacer.")) return;
 
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/passes/${id}`, {
-        method: "DELETE",
-        // headers: { Authorization: `Bearer ${token}` }, // Descomenta si tu API pide token
-      });
-
-      if (!res.ok) {
-        const errorText = await res.text();
-        console.error("Error al eliminar pase:", errorText);
-        throw new Error("Delete failed");
-      }
+      await api.delete(`/api/passes/${id}`);
 
       setPasses(prev => prev.filter(p => p.id !== id));
       toast({ title: "Pase eliminado" });

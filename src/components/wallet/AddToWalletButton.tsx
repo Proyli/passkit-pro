@@ -1,7 +1,6 @@
 // src/components/wallet/AddToWalletButton.tsx
 import { useMemo, useState } from "react";
-
-const API = import.meta.env.VITE_API_BASE_URL || "/api";
+import { api } from "@/lib/api";
 
 type Size = "sm" | "md" | "lg";
 
@@ -72,16 +71,11 @@ export default function AddToWalletButton({
     setLoading(true);
     try {
       // Telemetría (no bloquea)
-      fetch(`${API}/telemetry/install`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        keepalive: true,
-        body: JSON.stringify({
-          member_id: memberId ?? null,
-          pass_id: passId ?? null,
-          platform: env.platform,
-          source: "link",
-        }),
+      api.post(`/api/telemetry/install`, {
+        member_id: memberId ?? null,
+        pass_id: passId ?? null,
+        platform: env.platform,
+        source: "link",
       }).catch(() => {});
 
       // Resolver destino con platform+source

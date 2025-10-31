@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { QRCodeSVG } from "qrcode.react";
 import JsBarcode from "jsbarcode";
+import { api } from "@/lib/api";
 //import Code128Pane from "@/components/Code128Pane";
 
 
@@ -68,10 +69,8 @@ const barcodeBoxRef = useRef<HTMLDivElement | null>(null);
     setExternalId(externalIdProp || "");
   }, [clientCodeProp, campaignCodeProp, externalIdProp]);
 
-  // Base robusta de API (.env si existe; si no, el mismo host con :3900/api)
-  const API_BASE =
-    (import.meta as any).env?.VITE_API_BASE_URL?.replace(/\/$/, "") ||
-    `${window.location.protocol}//${window.location.hostname}:3900/api`;
+  // Base del backend desde el cliente centralizado
+  const API_BASE = (api.defaults.baseURL || '').replace(/\/$/, '') + '/api';
 
   // URL que debe contener el QR para resolver en backend y entregar Apple/Google Wallet
   const walletUrl = useMemo(() => {

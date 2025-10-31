@@ -1,6 +1,6 @@
 // src/pages/PublicRegister.tsx
 import { useEffect, useState } from "react";
-import { API } from "@/config/api";
+import { api } from "@/lib/api";
 import { useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,24 +25,18 @@ export default function PublicRegister() {
   useEffect(()=> {
     (async ()=>{
       if (!slug) return;
-      const r = await fetch(`${API}/distribution/register-config-by-slug?slug=${encodeURIComponent(slug)}`);
-      const j = await r.json();
-      if (j?.ok) setCfg(j);
+      const { data: j } = await api.get(`/api/distribution/register-config-by-slug`, { params: { slug } });
+      if ((j as any)?.ok) setCfg(j as any);
     })();
   }, [slug]);
 
   const submit = async (e?:React.FormEvent) => {
     e?.preventDefault();
-    const r = await fetch(`${API}/distribution/register-submit`, {
-      method: "POST",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({ slug, ...data }),
-    });
-    const j = await r.json();
-    if (j?.ok) {
-      setDone({ resolveUrl: j.resolveUrl });
+    const { data: j } = await api.post(`/api/distribution/register-submit`, { slug, ...data });
+    if ((j as any)?.ok) {
+      setDone({ resolveUrl: (j as any).resolveUrl });
       // opcional: redirigir directo
-      window.location.assign(j.resolveUrl);
+      window.location.assign((j as any).resolveUrl);
     }
   };
 

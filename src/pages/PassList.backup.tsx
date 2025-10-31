@@ -1,7 +1,7 @@
 // @ts-nocheck
 
 import { useEffect, useState } from "react";
-import axios from "axios";
+import { api } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DuplicatePassModal } from "@/components/modals/DuplicatePassModal";
@@ -45,8 +45,8 @@ const PassList = () => {
   };
 
   useEffect(() => {
-    axios
-      .get(`${import.meta.env.VITE_API_BASE_URL}/passes`)
+    api
+      .get(`/api/passes`)
       .then((res) => setPasses(res.data))
       .catch((err) => {
         console.error("Error al obtener pases:", err);
@@ -54,8 +54,8 @@ const PassList = () => {
       });
   }, []);
  const handleDuplicate = (duplicatedData: Omit<Pass, "id" | "createdAt">) => {
-  axios
-    .post(`${import.meta.env.VITE_API_BASE_URL}/passes`, duplicatedData)
+  api
+    .post(`/api/passes`, duplicatedData)
     .then((res) => {
       // Agrega el nuevo pase al estado
       setPasses((prev) => [...prev, res.data]);

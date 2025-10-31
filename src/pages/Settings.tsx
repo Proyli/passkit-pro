@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Home, Shield, Eye, EyeOff } from "lucide-react";
 import AdminSettings from "@/components/AdminSettings";
 import { useAuth } from "@/context/AuthContext";
+import { api } from "@/lib/api";
 
 const Settings = () => {
   const navigate = useNavigate();
@@ -41,21 +42,13 @@ const Settings = () => {
     }
 
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/auth/change-password`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          userId: user?.id,
-          currentPassword,
-          newPassword,
-        }),
+      const { data } = await api.post(`/api/auth/change-password`, {
+        userId: user?.id,
+        currentPassword,
+        newPassword,
       });
 
-      const data = await response.json();
-
-      if (response.ok) {
+      if (data) {
         toast({
           title: "Éxito",
           description: "Contraseña actualizada correctamente",
@@ -67,7 +60,7 @@ const Settings = () => {
       } else {
         toast({
           title: "Error",
-          description: data.error || "No se pudo cambiar la contraseña",
+          description: (data as any)?.error || "No se pudo cambiar la contraseña",
           variant: "destructive"
         });
       }

@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { API } from "@/config/api";
+import { api } from "@/lib/api";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 type Field = { name: string; label: string; type: "text" | "email" | "tel"; required?: boolean };
@@ -46,9 +46,8 @@ export default function DesignerRegister() {
     (async () => {
       if (!tierId) return;
       try {
-        const r = await fetch(`${API}/distribution/register-config?tier=${encodeURIComponent(tierId)}`);
-        const j = await r.json();
-        if (j?.ok) setCfg(j);
+        const { data: j } = await api.get(`/api/distribution/register-config`, { params: { tier: tierId } });
+        if (j?.ok) setCfg(j as any);
       } catch {
         /* noop */
       }
@@ -69,14 +68,9 @@ export default function DesignerRegister() {
 
   const save = async () => {
     try {
-      const r = await fetch(`${API}/distribution/register-config`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(cfg),
-      });
-      const j = await r.json();
-      if (!r.ok || j.ok === false) throw new Error(j?.error || `HTTP ${r.status}`);
-      if (j.slug) setCfg((s) => ({ ...s, slug: j.slug }));
+      const { data: j } = await api.post(`/api/distribution/register-config`, cfg);
+      if ((j as any)?.ok === false) throw new Error((j as any)?.error || `Save failed`);
+      if ((j as any).slug) setCfg((s) => ({ ...s, slug: (j as any).slug }));
       toast({ title: "Guardado", description: "Registro actualizado" });
     } catch (e: any) {
       toast({ title: "Error", description: String(e?.message || e), variant: "destructive" });

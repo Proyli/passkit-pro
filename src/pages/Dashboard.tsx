@@ -10,7 +10,7 @@ import { Toaster } from "@/components/ui/toaster";
 import type { Pass as UIPass } from "@/types/pass.types";
 import { adaptPass } from "@/lib/adapters";
 import { PassesService } from "@/services/passesService";
-import { API_BASE } from "@/lib/api";
+import { api } from "@/lib/api";
 // Gráficos
 import {
   ResponsiveContainer,
@@ -139,16 +139,18 @@ useEffect(() => {
   }, []);
 
   useEffect(() => {
-    const params = new URLSearchParams();
-    if (from) params.set("from", from);
-    if (to) params.set("to", to);
-    fetch(`${API_BASE}/analytics/overview?${params.toString()}`)
-      .then((r) => r.json())
-      .then((json) => setOverview(json as Overview))
-      .catch((err) => {
+    (async () => {
+      try {
+        const params: Record<string, string> = {};
+        if (from) params.from = from;
+        if (to) params.to = to;
+        const { data } = await api.get<Overview>(`/api/analytics/overview`, { params });
+        setOverview(data);
+      } catch (err) {
         console.error(err);
         toast({ title: "No se pudo cargar analytics", variant: "destructive" });
-      });
+      }
+    })();
   }, [from, to, toast]);
 
   // Conteos por plataforma derivados

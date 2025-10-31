@@ -1,123 +1,183 @@
-# Welcome to your Lovable project
+# Digital Pass Forge – Guía de API central (Axios + Vite)
 
-## Project info
+Este frontend usa React + Vite + TypeScript y ahora todas las llamadas HTTP pasan por un cliente Axios centralizado. Esta guía explica cómo consumir la API, cómo configurar entornos y cómo migrar (o crear) código siguiendo las nuevas reglas.
 
-**URL**: https://lovable.dev/projects/cc4ee0da-972a-449e-bb55-46ae93f41110
+## TL;DR (uso de la API)
 
-````markdown
-# passkit-pro — API Documentation (Frontend + Backend)
+- Importa siempre el cliente:
+  - `import { api } from "@/lib/api";`
+- Llama con rutas que empiecen por `/api/...`:
+  - `const { data } = await api.get('/api/passes');`
+  - `await api.post('/api/members', payload);`
+  - `await api.put(`/api/members/${id}`, payload);`
+  - `await api.delete(`/api/members/${id}`);`
 
-This README documents the API endpoints used by the project (frontend + backend). It collects the routes that appear in the codebase and provides curl / fetch / TypeScript snippets for quick testing.
+Nunca uses `fetch('/api/...')` ni construyas URLs con `API_BASE` o puertos fijos.
 
-Base URL
---------
-- Default base used by frontend: `VITE_API_BASE_URL` or `VITE_API_URL` env vars.
-- If not set, frontend falls back to `http://localhost:3900/api`.
+## Cliente Axios central
 
-Usage in code:
-```ts
-const API_BASE =
-	(import.meta as any).env?.VITE_API_BASE_URL?.replace(/\/$/, "") ||
-	(import.meta as any).env?.VITE_API_URL?.replace(/\/$/, "") ||
-	`http://${location.hostname}:3900/api`;
-```
+- Archivo: `src/lib/api.ts:1`
+- Implementación:
+  - Crea un `axios.create({ baseURL })` compartido.
+  - Inyecta `Authorization` si hay `localStorage.getItem('token')`.
+  - Expone `api` y un helper `errorMsgAxios`.
 
----
+## Base URL del backend
 
-## Overview of endpoints
+Orden de resolución de la base (dominio, sin `/api`):
 
-`````markdown
-# passkit-pro — Documentación de la API (Frontend + Backend)
+1) `import.meta.env.VITE_API_URL` (recomendada)
+2) `window.__API_BASE__` (override en tiempo de ejecución)
+3) Fallbacks:
+   - Dev: `http://<host-local>:3900`
+   - Prod: `https://passforge-backend-alcazaren.azurewebsites.net`
 
-Este README documenta los endpoints de la API usados por el proyecto (frontend + backend). Recopila las rutas que aparecen en el código y proporciona ejemplos curl / fetch / TypeScript para pruebas rápidas.
+La ruta del recurso va siempre con el prefijo `/api/...` en cada llamada.
 
-URL base
---------
-- Base usada por defecto en el frontend: variables de entorno `VITE_API_BASE_URL` o `VITE_API_URL`.
-- Si no están definidas, el frontend usa `http://localhost:3900/api`.
+## Variables de entorno (Vite)
 
-Uso en el código:
-```ts
-const API_BASE =
-	(import.meta as any).env?.VITE_API_BASE_URL?.replace(/\/$/, "") ||
-	(import.meta as any).env?.VITE_API_URL?.replace(/\/$/, "") ||
-	`http://${location.hostname}:3900/api`;
-```
+- `.env.development:1`
+  - `VITE_API_URL=http://localhost:3900`
+- `.env.production:1`
+  - `VITE_API_URL=https://passforge-backend-alcazaren.azurewebsites.net`
 
----
+Puedes definir `VITE_API_URL` en otros entornos (p. ej. staging). Vite inyecta estas variables en `import.meta.env`.
 
-## Resumen de endpoints
+## Override opcional en runtime
 
-- GET /members
-- POST /members
-- PUT /members/:id
-- DELETE /members/:id
+- `index.html:18` define opcionalmente `window.__API_BASE__`:
+  - `window.__API_BASE__ = window.__API_BASE__ || import.meta.env.VITE_API_URL;`
+- Esto permite cambiar el dominio del backend sin reconstruir, colocando un script antes del bundle.
 
-- GET /passes
-- GET /passes/:id
+## Reglas y reemplazos de migración
 
-- GET /analytics/overview?from=YYYY-MM-DD&to=YYYY-MM-DD
+El código debe cumplir estas reglas:
 
-- POST https://backend-passforge.onrender.com/api/wallet/email
+- Elimina cualquier constante tipo `API_BASE = ...` o URLs con `:3900`, `/api` embebidos, etc.
+- Nunca uses rutas relativas `'/api/...'` con `fetch` o `axios` directo.
+- Siempre usa el cliente central:
+  - `import { api } from "@/lib/api";`
+  - `const { data } = await api.get('/api/RECURSO');`
 
----
+Reemplazos típicos (equivalentes):
 
-## Miembros (Members)
+- `fetch('/api/RECURSO', ...)` → `const { data } = await api.get('/api/RECURSO');`
+- <code>fetch(`${API_BASE}/RECURSO`, ...)</code> → `api.get('/api/RECURSO')`
+- <code>fetch(`${API_BASE}/api/RECURSO`, ...)</code> → `api.get('/api/RECURSO')`
+- `axios.get('/api/RECURSO')` → `api.get('/api/RECURSO')`
+- <code>axios.get(`${API_BASE}/RECURSO`)</code> → `api.get('/api/RECURSO')`
+- <code>axios.get(`${API_BASE}/api/RECURSO`)</code> → `api.get('/api/RECURSO')`
 
-Forma de un Member (ejemplo JSON):
-```json
-{
-	"id":"string",
-	"externalId":"string",
-	"firstName":"string",
-	"lastName":"string",
-	"email":"user@example.com",
-	"mobile":"1234567890",
-	"tier":"gold",
-	"points":100,
-	"gender":"Male",
-	"dateOfBirth":"YYYY-MM-DD",
-	"dateCreated":"ISO",
-	"expiryDate":"YYYY-MM-DD"
-}
-```
+Para POST/PUT/DELETE:
 
-Listar miembros
----------------
-- GET /members
+- `await api.post('/api/RECURSO', payload)`
+- `await api.put(`/api/RECURSO/${id}`, payload)`
+- `await api.delete(`/api/RECURSO/${id}`)`
 
-curl
-```bash
-curl -sS -X GET "${API_BASE}/members"
-```
+## Qué cambió en este repo
 
-fetch (TS)
-```ts
-const res = await fetch(`${API_BASE}/members`);
-const list = await res.json();
-```
+- Cliente central: `src/lib/api.ts` (nuevo core)
+- Eliminados: `src/utils/api.ts`, `src/config/api.ts`, `src/lib/api-bootstrap.ts`
+- Importaciones de servicios actualizadas a `@/lib/api`:
+  - `src/services/analyticsService.ts:1`
+  - `src/services/passesService.ts:1`
+  - `src/services/csvService.ts:1`
+  - `src/services/cardsService.ts:1`
+  - `src/services/membersService.ts:1`
+  - `src/services/authService.ts:1`
+- Páginas y componentes refactorizados para usar `api`:
+  - Dashboard, Index, Members, Distribution, Designer, PublicRegister, Profile, Settings
+  - PassCard, AddToWalletButton, QrCodeModal
 
-Buscar 1 miembro por códigos
-----------------------------
-- GET /members?idClient=...&idCampaing=...
-  - Parámetros aceptados (alias):
-    - `idClient` o `clientCode` → coincide con `codigoCliente`
-    - `idCampaing`, `idCampaign` o `campaignCode` → coincide con `codigoCampana`
-- Si envías ambos parámetros devuelve UN objeto del miembro. Si falta alguno, devuelve la lista completa.
+## Ejemplos rápidos (antes → después)
 
-curl (localhost)
-```bash
-curl -sS "http://localhost:3900/api/members?idClient=L00005&idCampaing=CP0161"
-```
+- Antes:
+  - `fetch('/api/passes').then(r => r.json())`
+- Después:
+  - `const { data } = await api.get('/api/passes');`
 
-fetch (TS)
-```ts
-const url = new URL(`${API_BASE}/members`);
-url.searchParams.set("idClient", "L00005");
-url.searchParams.set("idCampaing", "CP0161");
-const res = await fetch(url.toString());
-if (!res.ok) throw new Error(`HTTP ${res.status}`);
-const member = await res.json();
+- Antes:
+  - <code>axios.post(`${API_BASE}/members`, body)</code>
+- Después:
+  - `await api.post('/api/members', body)`
+
+## Desarrollo y build
+
+- Dev: `npm run dev`
+- Build: `npm run build`
+- Preview: `npm run preview`
+
+Asegúrate de tener `VITE_API_URL` configurada en tus `.env` según el entorno.
+
+## Verificación rápida
+
+Para confirmar que no quedan llamadas directas, puedes buscar en `src`:
+
+- `rg -n "\bfetch\(" src`
+- `rg -n "\baxios\.(get|post|put|delete)\b" src`
+- `rg -n ":3900|VITE_API_BASE_URL|API_BASE" src`
+
+Si aparece algo, conviene migrarlo a `api`.
+
+## Ejemplos por endpoint
+
+Todos los ejemplos usan: `import { api } from "@/lib/api";`
+
+- Members
+  - Listar: `const { data } = await api.get('/api/members');`
+  - Crear: `await api.post('/api/members', { nombre, apellido, email, telefono, tipoCliente, puntos });`
+  - Actualizar: `await api.put(`/api/members/${id}`, payload);`
+  - Eliminar: `await api.delete(`/api/members/${id}`);`
+
+- Passes
+  - Listar: `const { data } = await api.get('/api/passes');`
+  - Crear: `await api.post('/api/passes', body);`
+
+- Analytics
+  - Resumen: `const { data } = await api.get('/api/analytics/overview', { params: { from: '01/10/2025', to: '31/10/2025' } });`
+
+- Distribution (admin)
+  - Leer settings: `const { data } = await api.get('/api/distribution/settings', { headers: { 'x-role': 'admin' } });`
+  - Guardar settings: `await api.post('/api/distribution/settings', settings, { headers: { 'x-role': 'admin', 'Content-Type': 'application/json' } });`
+  - Enviar email prueba: `await api.post('/api/distribution/send-test-email', { to, clientCode, campaignCode, htmlTemplate }, { headers: { 'x-role': 'admin' } });`
+
+- Register público
+  - Config por slug: `const { data } = await api.get('/api/distribution/register-config-by-slug', { params: { slug } });`
+  - Envío de formulario: `await api.post('/api/distribution/register-submit', { slug, ...formData });`
+
+- Designer
+  - Guardar diseño: `await api.post('/api/designs', { title, tier, backgroundColor, textColor, data: modules });`
+
+- Wallet
+  - Resolver (link de redirección):
+    ```ts
+    const base = (api.defaults.baseURL || '').replace(/\/$/, '');
+    const url = `${base}/api/wallet/resolve?client=L00005&campaign=CP0160&externalId=ABC123`;
+    window.location.assign(url);
+    ```
+  - Enviar wallet por email: `await api.post('/api/wallet/email', { client, campaign, to, tier, name, externalId });`
+  - Telemetría: `await api.post('/api/telemetry/install', { member_id, pass_id, platform, source: 'link' });`
+
+## Troubleshooting
+
+- 404 con `/api/api/...`
+  - Asegúrate de que `baseURL` NO tenga `/api`. El path debe incluir `/api/...` una sola vez.
+
+- CORS en local
+  - Backend debe permitir el origen del front (p. ej. `http://localhost:5173`). Si falla en dev, revisa las cabeceras CORS del backend.
+
+- No toma la URL correcta en producción
+  - Revisa `VITE_API_URL` en `.env.production` o variables de despliegue. También puedes definir `window.__API_BASE__` antes del bundle.
+
+- Cambiar backend sin rebuild
+  - Usa `window.__API_BASE__` (ver `index.html`). Debe declararse antes de cargar `src/main.tsx`.
+
+- 401/403
+  - El cliente adjunta `Authorization: Bearer <token>` desde `localStorage.getItem('token')`. Asegúrate de guardar el token tras login o añade las cabeceras requeridas (p. ej. `x-role: 'admin'`).
+
+- Rutas de assets rotas
+  - Usa `fetch` normal o imports para recursos del frontend. Solo las rutas que empiezan por `/api/...` deben ir por `api`.
+
 ```
 
 Nota Postman (Error ENOTFOUND api)

@@ -16,8 +16,7 @@ import { Pass } from "@/types/pass.types";
 import AddToWalletButton from "@/components/wallet/AddToWalletButton";
 import { useToast } from "@/hooks/use-toast";
 import { can } from "@/lib/authz";
-
-const API = import.meta.env.VITE_API_BASE_URL || "/api";
+import { api } from "@/lib/api";
 
 interface PassCardProps {
   pass: Pass;
@@ -64,7 +63,8 @@ const PassCard = ({ pass, onDuplicate, onDelete, compact = false }: PassCardProp
             source: "link",
           });
           if (externalId) params.set("externalId", String(externalId));
-          return `${API}/wallet/resolve?${params.toString()}`;
+          const base = (api.defaults.baseURL || '').replace(/\/$/, '');
+          return `${base}/api/wallet/resolve?${params.toString()}`;
         })()
       : "";
 
@@ -77,18 +77,13 @@ const PassCard = ({ pass, onDuplicate, onDelete, compact = false }: PassCardProp
     if (!email) return;
 
     try {
-      const res = await fetch(`${API}/wallet/send`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          client,
-          campaign,
-          email,
-          platform: "google", // o "apple"
-        }),
+      const { data: json } = await api.post(`/api/wallet/send`, {
+        client,
+        campaign,
+        email,
+        platform: "google",
       });
-      const json = await res.json();
-      if (!res.ok || !json.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      if (!(json as any)?.ok) throw new Error((json as any)?.error || `Send failed`);
       toast({ title: "Correo enviado", description: `Hemos enviado el pase a ${email}` });
     } catch (e: any) {
       console.error(e);

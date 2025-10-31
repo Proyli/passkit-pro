@@ -20,6 +20,7 @@ import { CsvService } from "@/services/csvService";
 type UIPass = { id: string; title: string; type?: string };
 
 import { QrCodeModal } from "@/components/modals/QrCodeModal";
+import { api } from "@/lib/api";
 import { QrCode } from "lucide-react";
 
 
@@ -75,11 +76,7 @@ const formatLabel = (k: ColumnKey) =>
   }[k]);
 
 
-// ==== API base unificada ====
-const API_BASE =
-  (import.meta as any).env?.VITE_API_BASE_URL?.replace(/\/$/, "") ||
-  (import.meta as any).env?.VITE_API_URL?.replace(/\/$/, "") ||
-  `http://${location.hostname}:3900/api`;
+// Client HTTP centralizado: usar `api` con rutas `/api/...`
 
 // ==== Tipos del backend (ES) ====
 type BackendMember = {
@@ -156,42 +153,12 @@ const toArray = (data: any): BackendMember[] => {
 };
 
 // Autodetección de base + path
-const API_GUESSES = [
-  (import.meta as any).env?.VITE_API_BASE_URL?.replace(/\/$/, ""),
-  (import.meta as any).env?.VITE_API_URL?.replace(/\/$/, ""),
-  `http://${location.hostname}:3900/api`,
-  `http://${location.hostname}:3900`,
-].filter(Boolean) as string[];
+type MembersLoadResult = { list: UIMember[] };
 
-type MembersLoadResult = { list: UIMember[]; endpoint: string }; // endpoint termina en /members
-
-async function fetchMembersAuto(): Promise<MembersLoadResult> {
-  const tried: string[] = [];
-  let lastErr: any = null;
-
-  for (const base of API_GUESSES) {
-    for (const path of ["/members", "/api/members"]) {
-      const url =
-        base.endsWith("/api") && path.startsWith("/api")
-          ? base + path.replace("/api", "")
-          : base + path;
-
-      tried.push(url);
-      try {
-        const res = await fetch(url);
-        if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { url, status: res.status });
-        const json = await res.json();
-        const list = toArray(json).map(adaptMember).sort((a, b) => a.id - b.id);
-        console.log("✅ LIST from:", url, "→", list.length, "items");
-        return { list, endpoint: url }; // ← guardamos el endpoint real que funcionó
-      } catch (e) {
-        console.warn("❌ Fail", url, e);
-        lastErr = e;
-      }
-    }
-  }
-  console.error("None worked. Tried:", tried);
-  throw lastErr ?? new Error("Cannot resolve /members endpoint");
+async function fetchMembers(): Promise<MembersLoadResult> {
+  const { data } = await api.get(`/api/members`);
+  const list = toArray(data).map(adaptMember).sort((a, b) => a.id - b.id);
+  return { list };
 }
 
 
@@ -244,9 +211,8 @@ const visibleCount = Object.values(visibleColumns).filter(Boolean).length;
 useEffect(() => {
   (async () => {
     try {
-      const { list, endpoint } = await fetchMembersAuto();
+      const { list } = await fetchMembers();
       setMembersFromBackend(list);
-      setMembersEndpoint(endpoint); // ← guardamos el endpoint /members que sí funcionó
     } catch (err) {
       console.error("❌ Error al cargar miembros:", err);
       setMembersFromBackend([]);
@@ -263,10 +229,8 @@ useEffect(() => {
 useEffect(() => {
   (async () => {
     try {
-      const res = await fetch(`${API_BASE}/passes`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      const arr = Array.isArray(json) ? json : [];
+      const { data } = await api.get(`/api/passes`);
+      const arr = Array.isArray(data) ? data : [];
       setPasses(arr.map((p: any) => ({ id: String(p.id), title: String(p.title || p.name || `Pass ${p.id}`), type: p.type })));
     } catch (e) {
       console.warn('No se pudieron cargar passes:', e);
@@ -308,13 +272,7 @@ const badgeForTier = (t: string) => {
   return <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${cls}`}>{label}</span>;
 };
 
-const [membersEndpoint, setMembersEndpoint] = useState<string | null>(null);
-
-// Builder que asegura que todas las escrituras usen la MISMA base que el GET
-const api = (path: string) => {
-  const base = (membersEndpoint ?? `${API_BASE}/members`).replace(/\/members$/, "");
-  return `${base}${path}`;
-};
+// Ya no se necesita resolver endpoint dinámico; usar `api` central.
 
 // Helper para leer errores que vienen en HTML sin romper JSON.parse
 const readJsonSafe = async (res: Response) => {
@@ -348,16 +306,7 @@ const handleAddMember = async () => {
 
   try {
     // ⬇️ usa la misma base que funcionó en el GET
-    const res = await fetch(api("/members"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(memberToSend),
-    });
-
-    if (!res.ok) {
-      const errorData = await readJsonSafe(res);
-      throw new Error(errorData.message || "Error al guardar el miembro.");
-    }
+    await api.post(`/api/members`, memberToSend);
 
     toast({ title: "Miembro agregado", description: "Guardado exitosamente." });
     setIsAddModalOpen(false);
@@ -374,8 +323,7 @@ const handleAddMember = async () => {
     });
 
     // 🔄 refresca la lista usando el MISMO endpoint
-    const updatedRes = await fetch(api("/members"));
-    const updatedJson = await updatedRes.json();
+    const { data: updatedJson } = await api.get(`/api/members`);
     const normalized = toArray(updatedJson).map(adaptMember).sort((a, b) => a.id - b.id);
     setMembersFromBackend(normalized);
   } catch (error: any) {
@@ -436,13 +384,8 @@ const handleSelectAll = () => {
         // opcionalmente tier actual
         settings: {},
       };
-      const r = await fetch(`${API_BASE}/distribution/send-test-email`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const j = await r.json().catch(() => ({} as any));
-      if (!r.ok || (j && j.ok === false)) throw new Error(j?.error || `HTTP ${r.status}`);
+      const { data: j } = await api.post(`/api/distribution/send-test-email`, body);
+      if (j && j.ok === false) throw new Error(j?.error || `Send failed`);
       toast({ title: 'Enviado', description: 'Correo de bienvenida reenviado.' });
     } catch (e: any) {
       toast({ title: 'No se pudo enviar', description: String(e?.message || e), variant: 'destructive' });
@@ -461,7 +404,8 @@ const handleSelectAll = () => {
         return;
       }
       setVisiting(true);
-      const url = new URL(`${API_BASE}/wallet/resolve`);
+      const base = (api.defaults.baseURL || '').replace(/\/$/, '');
+      const url = new URL(`${base}/api/wallet/resolve`);
       url.searchParams.set('client', client);
       url.searchParams.set('campaign', campaign);
       if (selectedMember.externalId) url.searchParams.set('externalId', selectedMember.externalId);
@@ -520,21 +464,12 @@ const handleSelectAll = () => {
   };
 
   try {
-    const res = await fetch(`${API_BASE}/members/${editMember.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(memberToUpdate),
-    });
-    if (!res.ok) {
-      const errorData = await res.json();
-      throw new Error(errorData.message || "Error al actualizar.");
-    }
+    await api.put(`/api/members/${editMember.id}`, memberToUpdate);
 
     toast({ title: "Actualización exitosa", description: "Datos actualizados." });
     setIsEditModalOpen(false);
 
-    const updatedRes = await fetch(`${API_BASE}/members`);
-    const updated = await updatedRes.json();
+    const { data: updated } = await api.get(`/api/members`);
     const normalized = toArray(updated).map(adaptMember).sort((a, b) => a.id - b.id);
     setMembersFromBackend(normalized);
   } catch (error: any) {
@@ -554,12 +489,7 @@ const handleDeleteSelected = async () => {
 }
 
   try {
-    const deletePromises = selectedMembers.map((id) =>
-      fetch(`${API_BASE}/members/${id}`, { method: "DELETE" }).then((res) => {
-        if (!res.ok) throw new Error(`Error al eliminar ID ${id}`);
-        return res.json();
-      })
-    );
+    const deletePromises = selectedMembers.map((id) => api.delete(`/api/members/${id}`));
     await Promise.all(deletePromises);
 
     toast({
@@ -568,8 +498,7 @@ const handleDeleteSelected = async () => {
     });
     setSelectedMembers([]);
 
-    const res = await fetch(`${API_BASE}/members`);
-    const updated = await res.json();
+    const { data: updated } = await api.get(`/api/members`);
     const normalized = toArray(updated).map(adaptMember).sort((a, b) => a.id - b.id);
     setMembersFromBackend(normalized);
   } catch (error: any) {
@@ -605,8 +534,7 @@ const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const result = await CsvService.importCsv(file);
     toast({ title: "Importación exitosa", description: `${result?.message ?? "Archivo importado."}` });
 
-    const res = await fetch(`${API_BASE}/members`);
-    const updated = await res.json();
+    const { data: updated } = await api.get(`/api/members`);
     const normalized = toArray(updated).map(adaptMember).sort((a, b) => a.id - b.id);
     setMembersFromBackend(normalized);
   } catch (error: any) {
