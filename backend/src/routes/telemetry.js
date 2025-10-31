@@ -20,5 +20,9 @@ router.post("/telemetry/install", (req, res) => {
   }
 });
 
-module.exports = router;
+// GET para ver rápido en el navegador (comodidad)
+router.get("/telemetry/install", (_req, res) => {
+  res.json({ ok: true });
+});
 
+module.exports = router;
