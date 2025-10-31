@@ -11,7 +11,8 @@ const FALLBACK_DEV = typeof window !== "undefined"
 const envBase = (import.meta as any)?.env?.VITE_API_URL?.toString()?.trim?.();
 const runtimeBase = (typeof window !== "undefined" && (window as any).__API_BASE__) as string | undefined;
 
-const baseURL = (envBase || runtimeBase || (import.meta as any).env?.DEV ? FALLBACK_DEV : FALLBACK_PROD) as string;
+// Importante: escoger en orden env -> runtime -> fallback segun modo
+const baseURL = (envBase || runtimeBase || ((import.meta as any).env?.DEV ? FALLBACK_DEV : FALLBACK_PROD)) as string;
 
 export const api = axios.create({ baseURL, withCredentials: false });
 

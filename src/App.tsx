@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 
 // React Query
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import HealthCheck from "@/components/HealthCheck";
 
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
@@ -59,6 +60,7 @@ const App = () => {
         <TooltipProvider>
           <Toaster />
           <Sonner />
+          <HealthCheck />
           <BrowserRouter>
             <Routes>
               {/* Redirección automática según login */}
@@ -178,7 +180,7 @@ const App = () => {
 
               {/* Ruta para no encontrados (siempre la última) */}
               <Route path="*" element={<NotFound />} />
-            </Routes> n
+            </Routes>
           </BrowserRouter>
         </TooltipProvider>
       </QueryClientProvider>
