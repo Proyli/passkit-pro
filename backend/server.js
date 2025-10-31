@@ -120,10 +120,12 @@ async function start() {
       await db.sequelize.sync({ alter: true });
       console.log("🗄️  DB conectada y sincronizada.");
     } else {
-      console.warn("⏭️  DB_HOST no definido o es 127.0.0.1 → se omite la conexión en Render.");
+      console.warn("⏭️  DB_HOST no definido o es 127.0.0.1 → se omite la conexión.");
     }
   } catch (err) {
     console.error("⚠️  Falló la conexión a DB, pero el servidor seguirá:", err.message);
+    // Permite operar sin DB (GET /api/members devolverá []), útil para health y front
+    process.env.SKIP_DB = "true";
   }
 
   // (Opcional) chequeo de certificados Apple si los necesitas ahora
