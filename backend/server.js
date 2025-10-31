@@ -121,6 +121,7 @@ async function start() {
       console.log("🗄️  DB conectada y sincronizada.");
     } else {
       console.warn("⏭️  DB_HOST no definido o es 127.0.0.1 → se omite la conexión.");
+      process.env.SKIP_DB = "true";
     }
   } catch (err) {
     console.error("⚠️  Falló la conexión a DB, pero el servidor seguirá:", err.message);

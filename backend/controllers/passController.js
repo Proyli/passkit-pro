@@ -65,6 +65,10 @@ exports.createPass = async (req, res) => {
  * Lista todos los passes con su member (id, codigoCliente, codigoCampana).
  */
 exports.getAllPasses = async (_req, res) => {
+  // Si no hay DB disponible, no romper el frontend
+  if (process.env.SKIP_DB === "true" || !Pass || typeof Pass.findAll !== "function") {
+    return res.json([]);
+  }
   try {
     const rows = await Pass.findAll({
       order: [["id", "ASC"]],
@@ -111,8 +115,9 @@ exports.getAllPasses = async (_req, res) => {
 
     return res.json(data);
   } catch (error) {
-    console.error("getAllPasses error:", error);
-    return res.status(500).json({ ok: false, error: "Error al obtener los pases" });
+    console.error("getAllPasses error:", error?.message || error);
+    // Evitar tumbar la UI si hay error de DB
+    return res.status(200).json([]);
   }
 };
 
@@ -121,6 +126,9 @@ exports.getAllPasses = async (_req, res) => {
  * Devuelve un pass por id (incluye member básico)
  */
 exports.getPassById = async (req, res) => {
+  if (process.env.SKIP_DB === "true" || !Pass || typeof Pass.findByPk !== "function") {
+    return res.status(404).json({ ok: false, message: "Pass no encontrado" });
+  }
   try {
     const id = req.params.id;
     const row = await Pass.findByPk(id, {
@@ -157,8 +165,8 @@ exports.getPassById = async (req, res) => {
 
     return res.json(j);
   } catch (e) {
-    console.error("getPassById error:", e);
-    return res.status(500).json({ ok: false, error: "Error al obtener el pass" });
+    console.error("getPassById error:", e?.message || e);
+    return res.status(404).json({ ok: false, message: "Pass no encontrado" });
   }
 };
 
