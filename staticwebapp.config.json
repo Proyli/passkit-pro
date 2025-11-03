@@ -10,7 +10,24 @@
     ]
   },
   "routes": [
-    { "route": "/apple-touch-icon.png", "rewrite": "/alcazaren-favicon.jpg" },
-    { "route": "/favicon.ico", "rewrite": "/alcazaren-favicon.jpg" }
+    {
+      "route": "/apple-touch-icon.png",
+      "rewrite": "/alcazaren-favicon.jpg"
+    },
+    {
+      "route": "/favicon.ico",
+      "rewrite": "/alcazaren-favicon.jpg"
+    },
+    {
+      "route": "/*",
+      "methods": [
+        "get"
+      ],
+      "rewrite": "/index.html",
+      "statusCode": 200,
+      "allowedRoles": [
+        "anónimo"
+      ]
+    }
   ]
 }
