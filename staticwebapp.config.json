@@ -2,19 +2,15 @@
   "navigationFallback": {
     "rewrite": "/index.html",
     "exclude": [
+      "/api/*",
       "/assets/*",
-      "/*.css",
-      "/*.js",
-      "/*.png",
-      "/*.jpg",
-      "/*.svg",
-      "/*.ico",
-      "/site.webmanifest"
+      "/favicon.ico",
+      "/site.webmanifest",
+      "/*.{png,jpg,jpeg,gif,ico,svg,css,js,map,txt,xml,webmanifest}"
     ]
   },
   "routes": [
     { "route": "/apple-touch-icon.png", "rewrite": "/alcazaren-favicon.jpg" },
     { "route": "/favicon.ico", "rewrite": "/alcazaren-favicon.jpg" }
-  ],
-  "responseOverrides": { "404": { "rewrite": "/index.html" } }
+  ]
 }
