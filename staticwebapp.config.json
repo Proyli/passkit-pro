@@ -1,4 +1,20 @@
 {
-  "navigationFallback": { "rewrite": "/index.html", "exclude": ["/assets/*","/*.css","/*.js","/*.png","/*.jpg","/*.svg","/*.ico"] },
+  "navigationFallback": {
+    "rewrite": "/index.html",
+    "exclude": [
+      "/assets/*",
+      "/*.css",
+      "/*.js",
+      "/*.png",
+      "/*.jpg",
+      "/*.svg",
+      "/*.ico",
+      "/site.webmanifest"
+    ]
+  },
+  "routes": [
+    { "route": "/apple-touch-icon.png", "rewrite": "/alcazaren-favicon.jpg" },
+    { "route": "/favicon.ico", "rewrite": "/alcazaren-favicon.jpg" }
+  ],
   "responseOverrides": { "404": { "rewrite": "/index.html" } }
 }
