@@ -19,6 +19,7 @@ const walletRoutes       = require(path.join(__dirname, "src", "routes", "wallet
 const analyticsRoutes    = require("./src/routes/analytics");
 const telemetryRoutes    = require("./src/routes/telemetry");
 const { router: distributionRouter } = require("./routes/distribution");
+const adminRoutes        = require("./routes/admin");
 // Load applePass routes conditionally: missing Apple certs should not crash the server in dev
 let applePassRoutes = null;
 try {
@@ -79,6 +80,7 @@ app.use("/api",         barcodeRouter);
 app.use("/api",         analyticsRoutes);
 app.use("/api",         telemetryRoutes);
 app.use("/api",         distributionRouter);
+app.use("/api",         adminRoutes);
 if (applePassRoutes) {
   app.use("/api", applePassRoutes);
 } else {
