@@ -378,8 +378,14 @@ function buildGoogleSaveUrl({ client, campaign, externalId, displayName, tier })
   };
 
 
+  // Allow disabling origin enforcement if the console UI doesn't expose website origins
+  const payload = { loyaltyObjects: [loyaltyObject] };
+  if (String(process.env.GW_DISABLE_ORIGINS || "").toLowerCase() !== "true") {
+    payload.origins = [origin];
+  }
+
   const saveToken = jwt.sign(
-    { iss: SA_EMAIL, aud: "google", typ: "savetowallet", payload: { loyaltyObjects: [loyaltyObject], origins: [origin] } },
+    { iss: SA_EMAIL, aud: "google", typ: "savetowallet", payload },
     PRIVATE_KEY, { algorithm: "RS256" }
   );
   return `https://pay.google.com/gp/v/save/${saveToken}`;
@@ -1055,3 +1061,4 @@ module.exports = router;
 module.exports.normalizeTier = normalizeTier;
 module.exports.tierFromAll = tierFromAll;
 module.exports.buildGoogleSaveUrl = buildGoogleSaveUrl;
+
