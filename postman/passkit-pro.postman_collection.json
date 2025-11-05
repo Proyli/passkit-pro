@@ -85,7 +85,7 @@
         "method": "POST",
         "header": [{ "key": "Content-Type", "value": "application/json" }],
         "body": { "mode": "raw", "raw": "{\n  \"client\": \"C1\",\n  \"campaign\": \"CP1\",\n  \"to\": \"user@example.com\",\n  \"tier\": \"gold\",\n  \"name\": \"Nombre Apellido\",\n  \"externalId\": \"ext123\"\n}" },
-        "url": { "raw": "https://backend-passforge.onrender.com/api/wallet/email", "protocol": "https", "host": ["backend-passforge","onrender","com"], "path": ["api","wallet","email"] }
+        "url": { "raw": "https://passforge-backend-alcazaren.azurewebsites.net/api/wallet/email", "protocol": "https", "host": ["passforge-backend-alcazaren","azurewebsites","net"], "path": ["api","wallet","email"] }
       }
     },
     {

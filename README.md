@@ -296,7 +296,7 @@ Respuesta de ejemplo esperada
 
 Endpoint utilizado en `Profile` para enviar un email de wallet:
 
-- POST https://backend-passforge.onrender.com/api/wallet/email
+- POST https://passforge-backend-alcazaren.azurewebsites.net/api/wallet/email
 
 Cuerpo (body)
 ```json
@@ -312,14 +312,14 @@ Cuerpo (body)
 
 curl
 ```bash
-curl -X POST "https://backend-passforge.onrender.com/api/wallet/email" \
+curl -X POST "https://passforge-backend-alcazaren.azurewebsites.net/api/wallet/email" \
 	-H "Content-Type: application/json" \
 	-d '{"client":"C1","campaign":"CP1","to":"u@x.com","tier":"blue","name":"Ana P","externalId":"ext123"}'
 ```
 
 fetch
 ```ts
-const res = await fetch('https://backend-passforge.onrender.com/api/wallet/email', {
+const res = await fetch('https://passforge-backend-alcazaren.azurewebsites.net/api/wallet/email', {
 	method: 'POST',
 	headers: {'Content-Type':'application/json'},
 	body: JSON.stringify(payload)
