@@ -161,13 +161,35 @@ const DEFAULT_KEY_PATH = "./keys/wallet-sa.json";
 const KEY_PATH = process.env.GOOGLE_WALLET_KEY_PATH || DEFAULT_KEY_PATH;
 
 let PRIVATE_KEY = null;
-// 1) variable
+// 1) variable (robusta: acepta JSON completo, PEM con \n o con saltos, o Base64)
 if (process.env.GOOGLE_WALLET_PRIVATE_KEY) {
   try {
-    const raw = process.env.GOOGLE_WALLET_PRIVATE_KEY.trim();
-    PRIVATE_KEY = raw.includes("BEGIN PRIVATE KEY")
-      ? raw
-      : JSON.parse(raw).private_key;
+    const raw = String(process.env.GOOGLE_WALLET_PRIVATE_KEY || "");
+    const trimmed = raw.trim();
+
+    // a) JSON completo
+    if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+      const obj = JSON.parse(trimmed);
+      const k = obj.private_key || obj.privateKey || null;
+      if (k) PRIVATE_KEY = String(k).replace(/\\n/g, "\n");
+    }
+
+    // b) PEM pegado (con o sin \n literales)
+    if (!PRIVATE_KEY && /BEGIN\s+PRIVATE\s+KEY/.test(trimmed)) {
+      PRIVATE_KEY = trimmed.replace(/\\n/g, "\n"); // normaliza \n → saltos reales
+    }
+
+    // c) Base64 del PEM (opcional)
+    if (!PRIVATE_KEY) {
+      try {
+        const asText = Buffer.from(trimmed, "base64").toString("utf8");
+        if (/BEGIN\s+PRIVATE\s+KEY/.test(asText)) {
+          PRIVATE_KEY = asText;
+        }
+      } catch {}
+    }
+
+    if (!PRIVATE_KEY) throw new Error("No se pudo derivar PRIVATE_KEY de GOOGLE_WALLET_PRIVATE_KEY");
   } catch (e) {
     console.error("❌ GOOGLE_WALLET_PRIVATE_KEY inválida:", e.message);
   }
