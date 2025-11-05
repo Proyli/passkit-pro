@@ -26,7 +26,7 @@
       "rewrite": "/index.html",
       "statusCode": 200,
       "allowedRoles": [
-        "anónimo"
+        "anonymous"
       ]
     }
   ]
