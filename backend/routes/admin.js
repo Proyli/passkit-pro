@@ -66,4 +66,50 @@ router.post("/admin/fix-members-schema", async (req, res) => {
 });
 
 module.exports = router;
+ 
+// Extra: inspeccionar el esquema de members
+router.get("/admin/inspect-members", async (req, res) => {
+  if (!assertAuth(req, res)) return;
+  try {
+    const qi = db.sequelize.getQueryInterface();
+    const desc = await qi.describeTable("members");
+    res.json({ ok: true, columns: desc });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message || String(e) });
+  }
+});
+
+// Fuerza ALTER TABLE con nombres entrecomillados (Postgres es sensible a mayúsculas en identificadores entre comillas)
+router.post("/admin/force-fix-members", async (req, res) => {
+  if (!assertAuth(req, res)) return;
+  try {
+    const q = db.sequelize.query.bind(db.sequelize);
+    const stmts = [
+      'CREATE TABLE IF NOT EXISTS "members" (id SERIAL PRIMARY KEY);',
+      'ALTER TABLE "members" ADD COLUMN IF NOT EXISTS "external_id" VARCHAR(255);',
+      'ALTER TABLE "members" ADD COLUMN IF NOT EXISTS "nombre" VARCHAR(255);',
+      'ALTER TABLE "members" ADD COLUMN IF NOT EXISTS "apellido" VARCHAR(255);',
+      'ALTER TABLE "members" ADD COLUMN IF NOT EXISTS "fechaNacimiento" VARCHAR(255);',
+      'ALTER TABLE "members" ADD COLUMN IF NOT EXISTS "codigoCliente" VARCHAR(255);',
+      'ALTER TABLE "members" ADD COLUMN IF NOT EXISTS "codigoCampana" VARCHAR(255);',
+      'ALTER TABLE "members" ADD COLUMN IF NOT EXISTS "tipoCliente" VARCHAR(255);',
+      'ALTER TABLE "members" ADD COLUMN IF NOT EXISTS "email" VARCHAR(255);',
+      'ALTER TABLE "members" ADD COLUMN IF NOT EXISTS "telefono" VARCHAR(255);',
+      'ALTER TABLE "members" ADD COLUMN IF NOT EXISTS "puntos" INTEGER DEFAULT 0;',
+      'ALTER TABLE "members" ADD COLUMN IF NOT EXISTS "genero" VARCHAR(50);',
+      'ALTER TABLE "members" ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMPTZ DEFAULT NOW();',
+      'ALTER TABLE "members" ADD COLUMN IF NOT EXISTS "updatedAt" TIMESTAMPTZ DEFAULT NOW();',
+      'ALTER TABLE "members" ALTER COLUMN "external_id" SET NOT NULL;',
+      'DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = \"members_external_id_key\") THEN ALTER TABLE "members" ADD CONSTRAINT "members_external_id_key" UNIQUE ("external_id"); END IF; END $$;'
+    ];
+    const results = [];
+    for (const s of stmts) {
+      try { await q(s); results.push({ ok: true, stmt: s }); } catch (e) { results.push({ ok: false, stmt: s, error: e.message }); }
+    }
+    res.json({ ok: true, results });
+  } catch (e) {
+    console.error("[admin] force-fix-members error:", e);
+    res.status(500).json({ ok: false, error: e.message || String(e) });
+  }
+});
 
