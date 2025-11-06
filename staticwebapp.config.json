@@ -24,7 +24,6 @@
         "get"
       ],
       "rewrite": "/index.html",
-      "statusCode": 200,
       "allowedRoles": [
         "anonymous"
       ]
