@@ -62,14 +62,6 @@ export default function PassTemplatePreview({
           </div>
         </div>
 
-        {imageUrl && (
-          <div className="px-4 pb-3">
-            <div className="h-[120px] w-full rounded-md overflow-hidden">
-              <img src={imageUrl} alt="" className="w-full h-full object-cover" />
-            </div>
-          </div>
-        )}
-
         <div className="px-4 pb-4">
           <div className="rounded-xl px-4 py-3" style={{ backgroundColor: t.barcodeBg }}>
             <div
@@ -82,6 +74,14 @@ export default function PassTemplatePreview({
             <div className="text-center text-sm mt-1 text-black/80">{pid}</div>
           </div>
         </div>
+
+        {imageUrl && (
+          <div className="px-4 pb-3">
+            <div className="h-[120px] w-full rounded-md overflow-hidden">
+              <img src={imageUrl} alt="" className="w-full h-full object-cover" />
+            </div>
+          </div>
+        )}
       </div>
 
       {isApple && (
