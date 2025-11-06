@@ -1062,3 +1062,87 @@ module.exports.normalizeTier = normalizeTier;
 module.exports.tierFromAll = tierFromAll;
 module.exports.buildGoogleSaveUrl = buildGoogleSaveUrl;
 
+
+// ===================== DEBUG: Crear objeto vía API y ver error exacto =====================
+async function getAccessToken() {
+  const now = Math.floor(Date.now() / 1000);
+  const assertion = jwt.sign(
+    {
+      iss: SA_EMAIL,
+      scope: "https://www.googleapis.com/auth/wallet_object.issuer",
+      aud: "https://oauth2.googleapis.com/token",
+      iat: now,
+      exp: now + 3600,
+    },
+    PRIVATE_KEY,
+    { algorithm: "RS256" }
+  );
+
+  const params = new URLSearchParams();
+  params.set("grant_type", "urn:ietf:params:oauth:grant-type:jwt-bearer");
+  params.set("assertion", assertion);
+
+  const resp = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: params.toString(),
+  });
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`token error ${resp.status}: ${text}`);
+  }
+  const data = await resp.json();
+  return data.access_token;
+}
+
+router.post("/wallet/debug/create", async (req, res) => {
+  try {
+    const access = await getAccessToken();
+    const inObj = req.body || {};
+
+    const obj = {
+      kind: "walletobjects#loyaltyObject",
+      id:
+        inObj.id ||
+        `${process.env.GOOGLE_WALLET_ISSUER_ID}.${String(
+          inObj.accountId || "DEBUG"
+        )}-debug-${Date.now()}`,
+      classId:
+        inObj.classId ||
+        (process.env.GW_CLASS_ID_BLUE
+          ? `${process.env.GOOGLE_WALLET_ISSUER_ID}.${process.env.GW_CLASS_ID_BLUE}`
+          : `${process.env.GOOGLE_WALLET_ISSUER_ID}.digital_pass_blue`),
+      state: inObj.state || "ACTIVE",
+      accountId: inObj.accountId || "DEBUG",
+      accountName: inObj.accountName || "Debug User",
+      barcode: inObj.barcode || { type: "CODE_128", value: "DEBUG-0001" },
+    };
+
+    const resp = await fetch(
+      "https://walletobjects.googleapis.com/walletobjects/v1/loyaltyObject",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${access}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(obj),
+      }
+    );
+
+    const text = await resp.text();
+    let json = null;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      json = { raw: text };
+    }
+
+    if (!resp.ok) {
+      return res.status(400).json({ ok: false, status: resp.status, error: json });
+    }
+    return res.json({ ok: true, object: json });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e.message || String(e) });
+  }
+});
