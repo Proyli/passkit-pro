@@ -232,6 +232,81 @@ Pasos:
 - En la colección, edita Authorization → Bearer Token → `{{token}}` (ya incluido). Tras login copia el token a la variable `token` del entorno.
 - Variable `BASE` apunta a producción. Para local cambia a `http://localhost:3900`.
 
+## API Endpoints y Ejemplos (curl)
+
+Base de backend (sin `/api`):
+
+- Prod: `https://passforge-backend-alcazaren.azurewebsites.net`
+- Local: `http://localhost:3900`
+
+En PowerShell: `$BASE="https://passforge-backend-alcazaren.azurewebsites.net"`
+En Bash: `BASE=https://passforge-backend-alcazaren.azurewebsites.net`
+
+Autorización
+- Login: `curl -s -X POST "$BASE/api/auth/login" -H "Content-Type: application/json" -d '{"email":"ventas1.digital@alcazaren.com.gt","password":"<tu_clave>"}'`
+- Usa el token devuelto en el header: `-H "Authorization: Bearer <TOKEN>"`
+
+Members
+- Listar: `curl -s "$BASE/api/members" -H "Authorization: Bearer $TOKEN"`
+- Buscar por cliente+campaña: `curl -s "$BASE/api/members?idClient=L00005&idCampaing=CP0161" -H "Authorization: Bearer $TOKEN"`
+- Crear:
+  ```bash
+  curl -s -X POST "$BASE/api/members" \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "nombre":"Ana","apellido":"Pérez","email":"ana@example.com",
+      "telefono":"502-5555-0000","tipoCliente":"gold",
+      "codigoCliente":"L0014","codigoCampana":"CP0001"
+    }'
+  ```
+- Actualizar: `curl -s -X PUT "$BASE/api/members/1" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"tipoCliente":"blue"}'`
+- Eliminar: `curl -s -X DELETE "$BASE/api/members/1" -H "Authorization: Bearer $TOKEN"`
+- Asignar tarjeta: `curl -s -X POST "$BASE/api/members/assign-card" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"clientCode":"L0014","campaignCode":"CP0001"}'`
+
+Passes
+- Listar: `curl -s "$BASE/api/passes" -H "Authorization: Bearer $TOKEN"`
+- Crear (mínimo):
+  ```bash
+  curl -s -X POST "$BASE/api/passes" \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "title":"Lealtad Alcazaren","description":"Tarjeta de lealtad",
+      "type":"loyalty","backgroundColor":"#2350C6","textColor":"#FFFFFF"
+    }'
+  ```
+
+Wallet
+- Smart link (redirige según dispositivo): abre en navegador `"$BASE/api/wallet/resolve?client=L0014&campaign=CP0001&tier=gold"`
+- Vista códigos (pantalla de QR/Barras): `"$BASE/api/wallet/codes?client=L0014&campaign=CP0001"`
+
+Distribution (admin)
+- Leer settings: `curl -s "$BASE/api/distribution/settings" -H "x-role: admin" -H "Authorization: Bearer $TOKEN"`
+- Guardar settings:
+  ```bash
+  curl -s -X POST "$BASE/api/distribution/settings" \
+    -H "x-role: admin" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+    -d '{"subject":"Tu tarjeta","buttonText":"Añadir a mi Wallet"}'
+  ```
+- Tiers activos: `curl -s "$BASE/api/distribution/enrollment" -H "x-role: admin" -H "Authorization: Bearer $TOKEN"`
+- Guardar tiers:
+  ```bash
+  curl -s -X POST "$BASE/api/distribution/enrollment" \
+    -H "x-role: admin" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+    -d '{"gold":true,"blue":true}'
+  ```
+
+Utilidades
+- Health: `curl -s "$BASE/api/health"`
+- Code128 (imagen para emails): `"$BASE/api/barcode/PK%7CL0014%7CCP0001.png"`
+
+Postman (resumen)
+- Importa `postman/PassForge.postman_collection.json` y `postman/PassForge.postman_environment.json`.
+- En el entorno, define `BASE` y deja `token` vacío.
+- Ejecuta “Auth / Login” y en Tests guarda el token: `pm.environment.set("token", pm.response.json().token)`.
+- El resto de requests usan automáticamente `Authorization: Bearer {{token}}`.
+
 ## Troubleshooting
 
 - 404 con `/api/api/...`
