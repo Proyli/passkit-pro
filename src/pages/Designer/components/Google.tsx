@@ -26,7 +26,7 @@ export default function Google({
   passTitle = "Lealtad Alcazarén",
   infoText,
   logoUrl = "https://raw.githubusercontent.com/Proyli/wallet-assets/main/program-logo.png",
-  bannerUrl,
+  bannerUrl = "/banner-alcazaren-2024.jpg",
   barcodeValue = "PK|L00457|blue_5",
   showPid = true,
   externalId,
@@ -53,8 +53,11 @@ export default function Google({
     : "Disfruta un 5% de ahorro en cada compra. Tu lealtad merece un beneficio exclusivo.";
   const resolvedInfo = infoText ?? fallbackInfo;
 
+  const isGold = /gold|_15|15%|\bg15\b/i.test(String(barcodeValue));
+  const bgColor = isGold ? "#b27740" : "#0b1626"; // gold vs blue
+
   return (
-    <div className="w-[360px] mx-auto rounded-[28px] bg-[#0b1626] text-white shadow-2xl overflow-hidden">
+    <div className="w-[360px] mx-auto rounded-[28px] text-white shadow-2xl overflow-hidden" style={{ backgroundColor: bgColor }}>
       <div className="px-4 pt-4 pb-2 flex items-center gap-2">
         <img src={logoUrl} className="h-8 w-8 rounded-full ring-1 ring-white/20" alt="logo" />
         <div className="text-sm opacity-90">{programName}</div>
@@ -104,4 +107,3 @@ export default function Google({
     </div>
   );
 }
-

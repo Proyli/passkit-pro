@@ -28,15 +28,23 @@ export default function Google({
   infoText,
   barcodeValue = "${pid}",
   logoUrl,
-  imageUrl,
-  tierId = "blue_5",
+  imageUrl = "/banner-alcazaren-2024.jpg",
+  tierId,
 }: Props) {
-  const resolvedInfo = infoText ?? FALLBACK_INFO[tierId];
+  // Detecta el tier si no viene explícito (busca 'gold' o 'blue' en el payload)
+  const detectedTier: TierId = (() => {
+    if (tierId) return tierId;
+    const p = String(barcodeValue).toLowerCase();
+    if (/gold|_15|15%|\bg15\b/.test(p)) return "gold_15";
+    return "blue_5";
+  })();
+
+  const resolvedInfo = infoText ?? FALLBACK_INFO[detectedTier];
 
   return (
     <PassTemplatePreview
       variant="google"
-      tierId={tierId}
+      tierId={detectedTier}
       issuerName={programName}
       programName={passTitle}
       displayName="[displayName]"

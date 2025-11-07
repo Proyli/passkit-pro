@@ -17,13 +17,19 @@ export default function Apple({
   infoText    = "Vive la experiencia premium de nuestra tarjeta.",
   barcodeValue = "${pid}",
   logoUrl,
-  imageUrl,
-  tierId = "gold_15",
+  imageUrl = "/banner-alcazaren-2024.jpg",
+  tierId,
 }: Props) {
+  const detectedTier: TierId = (() => {
+    if (tierId) return tierId;
+    const p = String(barcodeValue).toLowerCase();
+    if (/gold|_15|15%|\bg15\b/.test(p)) return "gold_15";
+    return "blue_5";
+  })();
   return (
     <PassTemplatePreview
       variant="apple"
-      tierId={tierId}
+      tierId={detectedTier}
       issuerName={programName}  // arriba pequeño
       programName={passTitle}   // título grande
       displayName="[displayName]"
