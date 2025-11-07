@@ -158,6 +158,70 @@ Todos los ejemplos usan: `import { api } from "@/lib/api";`
   - Enviar wallet por email: `await api.post('/api/wallet/email', { client, campaign, to, tier, name, externalId });`
   - Telemetría: `await api.post('/api/telemetry/install', { member_id, pass_id, platform, source: 'link' });`
 
+## Wallet: comportamiento actualizado (2025-11)
+
+- Banner/imagen
+  - Google Wallet usa `GW_HERO` (recomendado: `https://passforge-backend-alcazaren.azurewebsites.net/public/0S2A8207.png`).
+  - Apple Wallet incluye el banner como `strip.png` en el modelo `.pass` (no requiere variable).
+- Información en tarjeta
+  - Se muestra “Información” con porcentaje según el tier: GOLD → 15%, BLUE → 5%.
+  - “Nivel” muestra “GOLD 15%” o “BLUE 5%”.
+  - El texto visible del “Código” se oculta; el código de barras permanece sólo para escaneo.
+- Detección de color/tier
+  - Por parámetro `tier` en los endpoints o por `tipoCliente` del miembro (gold/blue). Si no hay valor, asume blue.
+
+Endpoints clave para pruebas rápidas (GET):
+- `GET /api/wallet/resolve?client={C}&campaign={CP}&tier=gold` → redirige a Google/Apple según el dispositivo.
+- `GET /api/wallet/google/:token` y `GET /api/wallet/ios/:token` (compat) → aceptan token firmado del smart link.
+
+Variables en Azure App Service (Backend)
+- Requeridas para Google Wallet:
+  - `GOOGLE_WALLET_ISSUER_ID`, `GOOGLE_SA_EMAIL`, `GOOGLE_WALLET_PRIVATE_KEY` (o `GOOGLE_WALLET_KEY_PATH`).
+  - `GOOGLE_WALLET_CLASS_ID_BLUE`, `GOOGLE_WALLET_CLASS_ID_GOLD`.
+- Banner Google:
+  - `GW_HERO` → URL pública del banner (usar `…/public/0S2A8207.png`).
+- Base pública del backend (para smart links):
+  - `PUBLIC_BASE_URL=https://passforge-backend-alcazaren.azurewebsites.net`.
+- Seguridad de tokens:
+  - `WALLET_TOKEN_SECRET` (y opcional `AUTH_JWT_SECRET`).
+- Apple (banner):
+  - No necesitas variable para el banner; está empacado como `strip.png` en `backend/passes/alcazaren.pass`.
+  - Certificados Apple (si generas .pkpass real): `APPLE_PASS_TYPE_ID`, `APPLE_TEAM_ID`, `APPLE_ORG_NAME`, `CERT_DIR`, `MODEL_DIR`, `APPLE_CERT_PASSWORD`, `APPLE_WS_TOKEN`.
+
+### Cómo generar el strip de Apple con el tamaño exacto
+
+1) Instalar dependencia (una vez):
+   - `cd backend && npm i sharp`
+2) Generar a partir de tu imagen fuente (se ajusta y recorta al centro en 624x168 y 1248x336):
+   - `npm run strip:gen`  (usa por defecto `backend/public/0S2A8207.png`)
+   - o especifica otra imagen: `npm run strip:gen -- C:/Users/tu_usuario/Downloads/mi_banner.png`
+3) Los archivos se guardan en el modelo del pass:
+   - `backend/passes/alcazaren.pass/strip.png` (1x)
+   - `backend/passes/alcazaren.pass/strip@2x.png` (2x)
+
+Recomendaciones de composición
+- Evita texto pegado a los bordes; deja ~24 px de margen visual (la tarjeta tiene esquinas redondeadas).
+- Mantén peso < 1 MB por archivo para evitar commits pesados.
+
+Login y pruebas en Postman
+1) Autenticación
+   - `POST {{BASE}}/api/auth/login`
+   - Body JSON: `{ "email": "ventas1.digital@alcazaren.com.gt", "password": "<tu_clave>" }`
+   - Guarda `token` de la respuesta en variable Postman `token`.
+   - Añade header global: `Authorization: Bearer {{token}}`.
+2) Miembros
+   - Crear: `POST /api/members` → `{ nombre, apellido, email, tipoCliente: "gold"|"blue", codigoCliente, codigoCampana }`.
+   - Actualizar: `PUT /api/members/:id` (puedes cambiar `tipoCliente` para probar el color por tier).
+3) Guardar en Wallet
+   - Smart link (redirige): `GET /api/wallet/resolve?client={{codigoCliente}}&campaign={{codigoCampana}}&tier=gold`.
+   - Email con link: `POST /api/wallet/email` → `{ client, campaign, to, tier, name, externalId }`.
+4) Códigos (vista auxiliar):
+   - `GET /api/wallet/codes?client={{C}}&campaign={{CP}}`.
+
+Notas
+- Si `GW_HERO` cambia, reinicia el App Service para que tome efecto.
+- Apple no requiere variable para el banner; para actualizarlo reemplaza `strip.png` / `strip@2x.png` dentro de `backend/passes/alcazaren.pass`.
+
 ## Troubleshooting
 
 - 404 con `/api/api/...`

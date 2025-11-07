@@ -26,7 +26,7 @@ export default function Google({
   passTitle = "Lealtad Alcazarén",
   infoText,
   logoUrl = "https://raw.githubusercontent.com/Proyli/wallet-assets/main/program-logo.png",
-  bannerUrl = "/banner-alcazaren-2024.jpg",
+  bannerUrl = "/0S2A8207.png",
   barcodeValue = "PK|L00457|blue_5",
   showPid = true,
   externalId,

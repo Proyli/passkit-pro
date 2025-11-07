@@ -15,6 +15,7 @@ const csvRoutes          = require("./routes/csvRoutes");
 const passRoutes         = require("./routes/passRoutes");
 const barcodeRouter      = require("./routes/barcode");
 const designRoutes       = require("./routes/designRoutes");
+const walletRoutesV2     = require(path.join(__dirname, "src", "routes", "wallet_v2"));
 const walletRoutes       = require(path.join(__dirname, "src", "routes", "wallet"));
 const analyticsRoutes    = require("./src/routes/analytics");
 const telemetryRoutes    = require("./src/routes/telemetry");
@@ -75,6 +76,8 @@ app.use("/api/auth",    authRoutes);
 app.use("/api/csv",     csvRoutes);
 app.use("/api/passes",  passRoutes);
 app.use("/api/designs", designRoutes);
+// Monta primero la versión v2 (override con mejoras de banner e info)
+app.use("/api",         walletRoutesV2);
 app.use("/api",         walletRoutes);
 app.use("/api",         barcodeRouter);
 app.use("/api",         analyticsRoutes);

@@ -28,7 +28,7 @@ export default function Google({
   infoText,
   barcodeValue = "${pid}",
   logoUrl,
-  imageUrl = "/banner-alcazaren-2024.jpg",
+  imageUrl = "/0S2A8207.png",
   tierId,
 }: Props) {
   // Detecta el tier si no viene explícito (busca 'gold' o 'blue' en el payload)

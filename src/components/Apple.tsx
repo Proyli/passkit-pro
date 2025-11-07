@@ -17,7 +17,7 @@ export default function Apple({
   infoText    = "Vive la experiencia premium de nuestra tarjeta.",
   barcodeValue = "${pid}",
   logoUrl,
-  imageUrl = "/banner-alcazaren-2024.jpg",
+  imageUrl = "/0S2A8207.png",
   tierId,
 }: Props) {
   const detectedTier: TierId = (() => {
