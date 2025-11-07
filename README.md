@@ -307,6 +307,118 @@ Postman (resumen)
 - Ejecuta “Auth / Login” y en Tests guarda el token: `pm.environment.set("token", pm.response.json().token)`.
 - El resto de requests usan automáticamente `Authorization: Bearer {{token}}`.
 
+## Postman: Ejemplos con URL completa (copiar/pegar)
+
+Usa el token de Login en el header: Authorization: Bearer {{token}}
+
+- Auth / Login
+  - POST https://passforge-backend-alcazaren.azurewebsites.net/api/auth/login
+  - Headers: Content-Type: application/json
+  - Body:
+    {
+      "email": "ventas1.digital@alcazaren.com.gt",
+      "password": "<tu_clave>"
+    }
+
+- Members / List
+  - GET https://passforge-backend-alcazaren.azurewebsites.net/api/members
+  - Headers: Authorization: Bearer {{token}}
+
+- Members / Find by client+campaign
+  - GET https://passforge-backend-alcazaren.azurewebsites.net/api/members?idClient=L00005&idCampaing=CP0161
+  - Headers: Authorization: Bearer {{token}}
+
+- Members / Create
+  - POST https://passforge-backend-alcazaren.azurewebsites.net/api/members
+  - Headers: Authorization: Bearer {{token}}, Content-Type: application/json
+  - Body:
+    {
+      "nombre": "Estuardo",
+      "apellido": "León",
+      "fechaNacimiento": "1980-03-05",
+      "codigoCliente": "L00005",
+      "codigoCampana": "CP0160",
+      "tipoCliente": "gold",
+      "email": "estuardo.leon@alcazaren.com.gt",
+      "telefono": "",
+      "genero": "Masculino",
+      "puntos": 0
+    }
+
+- Members / Update (by id)
+  - PUT https://passforge-backend-alcazaren.azurewebsites.net/api/members/1
+  - Headers: Authorization: Bearer {{token}}, Content-Type: application/json
+  - Body:
+    { "tipoCliente": "blue" }
+
+- Members / Delete (by id)
+  - DELETE https://passforge-backend-alcazaren.azurewebsites.net/api/members/1
+  - Headers: Authorization: Bearer {{token}}
+
+- Members / Assign card
+  - POST https://passforge-backend-alcazaren.azurewebsites.net/api/members/assign-card
+  - Headers: Authorization: Bearer {{token}}, Content-Type: application/json
+  - Body:
+    { "clientCode": "L00005", "campaignCode": "CP0160" }
+
+- Passes / List
+  - GET https://passforge-backend-alcazaren.azurewebsites.net/api/passes
+  - Headers: Authorization: Bearer {{token}}
+
+- Passes / Create
+  - POST https://passforge-backend-alcazaren.azurewebsites.net/api/passes
+  - Headers: Authorization: Bearer {{token}}, Content-Type: application/json
+  - Body:
+    {
+      "title":"Lealtad Alcazaren",
+      "description":"Tarjeta de lealtad",
+      "type":"loyalty",
+      "backgroundColor":"#2350C6",
+      "textColor":"#FFFFFF"
+    }
+
+- Wallet / Send email (opcional)
+  - POST https://passforge-backend-alcazaren.azurewebsites.net/api/wallet/email
+  - Headers: Authorization: Bearer {{token}}, Content-Type: application/json
+  - Body (ejemplo con el miembro creado):
+    {
+      "client": "L00005",
+      "campaign": "CP0160",
+      "to": "estuardo.leon@alcazaren.com.gt",
+      "tier": "gold",
+      "name": "Estuardo León",
+      "externalId": "<externalIdDeLaRespuesta>"
+    }
+
+- Wallet / Smart link (guardar en la billetera)
+  - GET https://passforge-backend-alcazaren.azurewebsites.net/api/wallet/resolve?client=L00005&campaign=CP0160&tier=gold
+  - Abrir en navegador (Postman solo muestra la redirección)
+
+- Wallet / Codes (pantalla QR/Bar)
+  - GET https://passforge-backend-alcazaren.azurewebsites.net/api/wallet/codes?client=L00005&campaign=CP0160
+  - Abrir en navegador para la vista completa
+
+- Distribution / Settings (admin)
+  - GET https://passforge-backend-alcazaren.azurewebsites.net/api/distribution/settings
+  - Headers: Authorization: Bearer {{token}}, x-role: admin
+  - POST https://passforge-backend-alcazaren.azurewebsites.net/api/distribution/settings
+  - Headers: Authorization: Bearer {{token}}, x-role: admin, Content-Type: application/json
+  - Body:
+    { "subject": "Tu tarjeta", "buttonText": "Añadir a mi Wallet" }
+
+- Distribution / Enrollment (admin)
+  - GET https://passforge-backend-alcazaren.azurewebsites.net/api/distribution/enrollment
+  - Headers: Authorization: Bearer {{token}}, x-role: admin
+  - POST https://passforge-backend-alcazaren.azurewebsites.net/api/distribution/enrollment
+  - Headers: Authorization: Bearer {{token}}, x-role: admin, Content-Type: application/json
+  - Body:
+    { "gold": true, "blue": true }
+
+- Utilidades
+  - Health: GET https://passforge-backend-alcazaren.azurewebsites.net/api/health
+  - Code128 (PNG): GET https://passforge-backend-alcazaren.azurewebsites.net/api/barcode/PK%7CL00005%7CCP0160.png
+
+
 ## Troubleshooting
 
 - 404 con `/api/api/...`
