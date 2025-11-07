@@ -5,6 +5,8 @@ const Member = db.Member;
 // importa el servicio de correo
 const { sendWelcomeEmail } = require("../routes/distribution");
 
+// Memoria temporal cuando no hay DB
+const _mem = { seq: 1, list: [] };
 
 // Obtener todos los miembros o uno por codigoCliente+codigoCampana
 exports.getAllMembers = async (req, res) => {
@@ -25,12 +27,16 @@ exports.getAllMembers = async (req, res) => {
     updatedAt: m.updatedAt,
   });
 
-  // Modo resiliente: si se define SKIP_DB o el modelo no está disponible → responde vacío
+  // Modo resiliente: si se define SKIP_DB o el modelo no está disponible → usa memoria
   if (process.env.SKIP_DB === "true" || !Member || typeof Member.findAll !== "function") {
     const idClient = req.query.idClient || req.query.clientCode;
     const idCampaing = req.query.idCampaing || req.query.idCampaign || req.query.campaignCode;
-    if (idClient && idCampaing) return res.status(404).json({ ok: false, error: "Miembro no encontrado" });
-    return res.json([]);
+    if (idClient && idCampaing) {
+      const m = _mem.list.find((x) => String(x.codigoCliente||"") === String(idClient) && String(x.codigoCampana||"") === String(idCampaing));
+      if (!m) return res.status(404).json({ ok: false, error: "Miembro no encontrado" });
+      return res.json(mapOne(m));
+    }
+    return res.json(_mem.list.map(mapOne));
   }
 
   try {
@@ -60,7 +66,7 @@ exports.createMember = async (req, res) => {
     if (process.env.SKIP_DB === "true" || !Member || typeof Member.create !== "function") {
       const externalId = nanoid(10);
       const memberData = {
-        id: 0,
+        id: _mem.seq++,
         external_id: externalId,
         nombre: req.body.nombre || null,
         apellido: req.body.apellido || null,
@@ -72,8 +78,11 @@ exports.createMember = async (req, res) => {
         telefono: req.body.telefono || null,
         puntos: req.body.puntos || 0,
         genero: req.body.genero || null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       };
-      console.warn("[members] SKIP_DB=true o modelo no disponible → devolviendo stub", memberData);
+      _mem.list.push(memberData);
+      console.warn("[members] SKIP_DB=true → creado en memoria", memberData);
       return res.status(201).json({ message: "Miembro creado (stub)", member: memberData, externalId });
     }
     console.log("[member] Datos recibidos desde el frontend:", req.body);

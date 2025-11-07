@@ -71,7 +71,7 @@ export default function PassTemplatePreview({
                   "repeating-linear-gradient(90deg,#000 0,#000 2px,transparent 2px,transparent 4px,#000 4px,#000 5px,transparent 5px,transparent 7px)",
               }}
             />
-            <div className="text-center text-sm mt-1 text-black/80">{pid}</div>
+            {/* Ocultar texto del código debajo del código de barras */}
           </div>
         </div>
 

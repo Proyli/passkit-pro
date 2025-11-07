@@ -235,17 +235,7 @@ const PassCard = ({ pass, onDuplicate, onDelete, compact = false }: PassCardProp
                 googleLabel="Guardar"
               />
 
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleSendByEmail}
-                className="h-9 px-3 rounded-xl shrink-0"
-                title="Enviar por email"
-              >
-                <Mail className="w-4 h-4 mr-2" />
-                <span className="hidden sm:inline">Enviar por email</span>
-                <span className="sm:hidden">Email</span>
-              </Button>
+              {/* Botón de compartir por email deshabilitado por privacidad */}
             </div>
 
             {/* Nota en línea completa si falta info */}

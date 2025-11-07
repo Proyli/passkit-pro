@@ -28,7 +28,7 @@ export default function Google({
   logoUrl = "https://raw.githubusercontent.com/Proyli/wallet-assets/main/program-logo.png",
   bannerUrl = "/0S2A8207.png",
   barcodeValue = "PK|L00457|blue_5",
-  showPid = true,
+  showPid = false,
   externalId,
 }: Props) {
   const svgRef = useRef<SVGSVGElement | null>(null);

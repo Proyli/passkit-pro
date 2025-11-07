@@ -329,9 +329,7 @@ const PassList: React.FC = () => {
                 <Button size="sm" className="h-9 rounded-xl font-semibold" onClick={(e) => handleSaveWallet(pass, e)}>
                   Guardar en la billetera
                 </Button>
-                <Button size="sm" variant="outline" className="h-9 rounded-xl" onClick={(e) => handleSendEmail(pass, e)}>
-                  Enviar por email
-                </Button>
+                {/* Compartir por email deshabilitado por privacidad */}
               </div>
             </div>
           </div>

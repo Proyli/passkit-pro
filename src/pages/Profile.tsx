@@ -98,7 +98,7 @@ const Profile: React.FC = () => {
     setProfileData(next);
   };
 
-  // Guardar + enviar email Wallet
+  // Guardar (sin compartir por email) y mostrar external_id generado
   const handleGuardar = async () => {
     const nuevoCliente = {
       ...formData,
@@ -109,13 +109,17 @@ const Profile: React.FC = () => {
       const { data } = await api.post(`/api/members`, nuevoCliente);
       console.log("✅ Cliente guardado:", data);
 
-      // Fire-and-forget the wallet email: don't block the UI if the external service fails
-      void enviarWalletEmailDesdePerfil(nuevoCliente).catch((err) => {
-        // log error but don't stop the user flow
-        console.error("Error enviando email de Wallet (no bloqueante):", err?.message || err);
-      });
+      // Mostrar external_id devuelto por el backend
+      const ext = (data as any)?.externalId || (data as any)?.member?.external_id || "";
+      if (ext) {
+        try { await navigator.clipboard.writeText(String(ext)); } catch {}
+        alert(`Cliente guardado. External ID generado: ${ext} (copiado al portapapeles)`);
+      } else {
+        alert("Cliente guardado.");
+      }
 
-      alert("Cliente guardado en MySQL con éxito. Se intentó enviar el correo de la Wallet.");
+      // No compartir por email (petición del cliente)
+
       clearProfileData();
       setFormData(EMPTY_FORM);
       navigate("/members");

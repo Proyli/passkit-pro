@@ -317,9 +317,15 @@ const handleAddMember = async () => {
 
   try {
     // ⬇️ usa la misma base que funcionó en el GET
-    await api.post(`/api/members`, memberToSend);
+    const { data: created } = await api.post(`/api/members`, memberToSend);
 
-    toast({ title: "Miembro agregado", description: "Guardado exitosamente." });
+    const ext = (created as any)?.externalId || (created as any)?.member?.external_id || "";
+    if (ext) {
+      try { await navigator.clipboard.writeText(String(ext)); } catch {}
+      toast({ title: "Miembro agregado", description: `External ID copiado: ${ext}` });
+    } else {
+      toast({ title: "Miembro agregado", description: "Guardado exitosamente." });
+    }
     setIsAddModalOpen(false);
 
     // Resetea el form
