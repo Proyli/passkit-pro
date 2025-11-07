@@ -167,8 +167,8 @@ const Login = () => {
                 <p><strong>Standard Users:</strong></p>
                 <ul className="text-xs ml-2 space-y-0.5">
                   <li>• andrea@alcazaren.com.gt</li>
+                  <li>• ventas1.digital@alcazaren.com.gt</li>
                   <li>• julio@alcazaren.com.gt</li>
-                  <li>• linda.perez@alcazaren.com.gt</li>
                 </ul>
               </div>
             </div>

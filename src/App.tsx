@@ -35,10 +35,14 @@ import PassesCreate from "@/pages/PassesCreate";
 import PassDetail from "@/pages/PassDetail";
 
 
-// Ruta protegida
+// Ruta protegida: requiere token válido en localStorage
 const PrivateRoute = ({ children }: { children: JSX.Element }) => {
-  const isLoggedIn = !!localStorage.getItem("passkit_session");
-  return isLoggedIn ? children : <Navigate to="/login" replace />;
+  const hasToken = !!localStorage.getItem("token");
+  // Limpia sesión antigua si quedó sin token
+  if (!hasToken && localStorage.getItem("passkit_session")) {
+    try { localStorage.removeItem("passkit_session"); } catch {}
+  }
+  return hasToken ? children : <Navigate to="/login" replace />;
 };
 
 const queryClient = new QueryClient();
@@ -52,7 +56,7 @@ if (import.meta.env.DEV) {
 }
 
 const App = () => {
-  const isLoggedIn = !!localStorage.getItem("passkit_session");
+  const isLoggedIn = !!localStorage.getItem("token");
 
   return (
     <div className="min-h-screen">
