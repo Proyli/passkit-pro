@@ -1,0 +1,139 @@
+{
+  "info": {
+    "name": "PassForge API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "6f1a5d1b-4b36-4b1a-8b7b-6f5c1d3cd111"
+  },
+  "item": [
+    {
+      "name": "Auth / Login",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": { "raw": "{{BASE}}/api/auth/login", "host": ["{{BASE}}"], "path": ["api","auth","login"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"ventas1.digital@alcazaren.com.gt\",\n  \"password\": \"Temporal#2024\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Health",
+      "request": { "method": "GET", "url": { "raw": "{{BASE}}/api/health", "host": ["{{BASE}}"], "path": ["api","health"] } }
+    },
+    {
+      "name": "Members",
+      "item": [
+        {
+          "name": "List",
+          "request": { "method": "GET", "url": { "raw": "{{BASE}}/api/members", "host": ["{{BASE}}"], "path": ["api","members"] } }
+        },
+        {
+          "name": "Create",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{BASE}}/api/members", "host": ["{{BASE}}"], "path": ["api","members"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Nombre\",\n  \"apellido\": \"Apellido\",\n  \"email\": \"user@example.com\",\n  \"telefono\": \"502-5555-0000\",\n  \"tipoCliente\": \"gold\",\n  \"codigoCliente\": \"L0014\",\n  \"codigoCampana\": \"CP0001\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Update (by id)",
+          "request": {
+            "method": "PUT",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{BASE}}/api/members/1", "host": ["{{BASE}}"], "path": ["api","members","1"] },
+            "body": { "mode": "raw", "raw": "{\n  \"tipoCliente\": \"blue\"\n}" }
+          }
+        },
+        {
+          "name": "Delete (by id)",
+          "request": { "method": "DELETE", "url": { "raw": "{{BASE}}/api/members/1", "host": ["{{BASE}}"], "path": ["api","members","1"] } }
+        }
+      ]
+    },
+    {
+      "name": "Passes",
+      "item": [
+        {
+          "name": "List",
+          "request": { "method": "GET", "url": { "raw": "{{BASE}}/api/passes", "host": ["{{BASE}}"], "path": ["api","passes"] } }
+        },
+        {
+          "name": "Create",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{BASE}}/api/passes", "host": ["{{BASE}}"], "path": ["api","passes"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Lealtad Alcazaren\",\n  \"description\": \"Tarjeta de lealtad\",\n  \"type\": \"loyalty\",\n  \"backgroundColor\": \"#2350C6\",\n  \"textColor\": \"#FFFFFF\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Wallet",
+      "item": [
+        {
+          "name": "Resolve (smart link)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{BASE}}/api/wallet/resolve?client=L0014&campaign=CP0001&tier=gold",
+              "host": ["{{BASE}}"],
+              "path": ["api","wallet","resolve"],
+              "query": [
+                {"key":"client","value":"L0014"},
+                {"key":"campaign","value":"CP0001"},
+                {"key":"tier","value":"gold"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Send Wallet Email",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{BASE}}/api/wallet/email", "host": ["{{BASE}}"], "path": ["api","wallet","email"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"client\": \"L0014\",\n  \"campaign\": \"CP0001\",\n  \"to\": \"user@example.com\",\n  \"tier\": \"gold\",\n  \"name\": \"Cliente Demo\",\n  \"externalId\": \"L0014\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Codes (QR/Bar)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{BASE}}/api/wallet/codes?client=L0014&campaign=CP0001",
+              "host": ["{{BASE}}"],
+              "path": ["api","wallet","codes"],
+              "query": [
+                {"key":"client","value":"L0014"},
+                {"key":"campaign","value":"CP0001"}
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [ { "key": "token", "value": "{{token}}", "type": "string" } ]
+  },
+  "variable": [
+    { "key": "BASE", "value": "https://passforge-backend-alcazaren.azurewebsites.net" },
+    { "key": "token", "value": "" }
+  ]
+}
+

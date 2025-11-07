@@ -57,6 +57,25 @@ exports.getAllMembers = async (req, res) => {
 // Crear un nuevo miembro
 exports.createMember = async (req, res) => {
   try {
+    if (process.env.SKIP_DB === "true" || !Member || typeof Member.create !== "function") {
+      const externalId = nanoid(10);
+      const memberData = {
+        id: 0,
+        external_id: externalId,
+        nombre: req.body.nombre || null,
+        apellido: req.body.apellido || null,
+        fechaNacimiento: req.body.fechaNacimiento || null,
+        codigoCliente: req.body.codigoCliente || null,
+        codigoCampana: req.body.codigoCampana || null,
+        tipoCliente: req.body.tipoCliente || null,
+        email: req.body.email || null,
+        telefono: req.body.telefono || null,
+        puntos: req.body.puntos || 0,
+        genero: req.body.genero || null,
+      };
+      console.warn("[members] SKIP_DB=true o modelo no disponible → devolviendo stub", memberData);
+      return res.status(201).json({ message: "Miembro creado (stub)", member: memberData, externalId });
+    }
     console.log("[member] Datos recibidos desde el frontend:", req.body);
 
     const externalId = nanoid(10);
@@ -104,8 +123,8 @@ exports.createMember = async (req, res) => {
       );
     }
   } catch (error) {
-    console.error("❌ Error al crear el miembro:", error);
-    res.status(500).json({ error: "Error al crear el miembro" });
+    console.error("❌ Error al crear el miembro:", error?.original?.sqlMessage || error?.message || error);
+    res.status(500).json({ error: error?.original?.sqlMessage || error?.message || "Error al crear el miembro" });
   }
 };
 

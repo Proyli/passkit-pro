@@ -222,6 +222,16 @@ Notas
 - Si `GW_HERO` cambia, reinicia el App Service para que tome efecto.
 - Apple no requiere variable para el banner; para actualizarlo reemplaza `strip.png` / `strip@2x.png` dentro de `backend/passes/alcazaren.pass`.
 
+## Postman
+
+- Colección: `postman/PassForge.postman_collection.json`
+- Entorno: `postman/PassForge.postman_environment.json`
+
+Pasos:
+- Importa ambos archivos en Postman.
+- En la colección, edita Authorization → Bearer Token → `{{token}}` (ya incluido). Tras login copia el token a la variable `token` del entorno.
+- Variable `BASE` apunta a producción. Para local cambia a `http://localhost:3900`.
+
 ## Troubleshooting
 
 - 404 con `/api/api/...`
