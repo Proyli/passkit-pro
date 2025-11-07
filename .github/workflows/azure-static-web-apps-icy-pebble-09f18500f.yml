@@ -18,26 +18,7 @@ jobs:
           submodules: true
           lfs: false
 
-      - name: Use Node 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      # 1) Build con Vite inyectando la URL del backend
-      - name: Install & Build
-        env:
-          VITE_API_URL: ${{ secrets.VITE_API_URL }}
-        run: |
-          npm ci
-          echo "VITE_API_URL length: ${#VITE_API_URL}"
-          npm run build
-
-      # 2) Copiar la config de SWA a dist/ (porque subimos dist ya hecho)
-      - name: Copy SWA config into dist
-        run: cp staticwebapp.config.json dist/
-
-      # 3) Subir la carpeta dist construida
+      # Deja que la acción de SWA construya el proyecto (Oryx)
       - name: Build And Deploy
         id: builddeploy
         uses: Azure/static-web-apps-deploy@v1
@@ -45,10 +26,11 @@ jobs:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_ICY_PEBBLE_09F18500F }}
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           action: upload
-          app_location: dist          # carpeta a publicar (ya construida)
-          output_location: ""         # sin subcarpeta adicional
-          skip_app_build: true        # no reconstruir en la acción
+          app_location: "/"          # raíz del repo (donde está package.json)
+          output_location: "dist"     # carpeta de salida del build de Vite
           api_location: ""            # no usamos Functions
+        env:
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
 
   close_pull_request_job:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'

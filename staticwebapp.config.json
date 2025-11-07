@@ -17,16 +17,6 @@
     {
       "route": "/favicon.ico",
       "rewrite": "/alcazaren-favicon.jpg"
-    },
-    {
-      "route": "/*",
-      "methods": [
-        "get"
-      ],
-      "rewrite": "/index.html",
-      "allowedRoles": [
-        "anonymous"
-      ]
     }
   ]
 }
