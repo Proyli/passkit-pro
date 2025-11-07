@@ -1,5 +1,6 @@
 // backend/controllers/authController.js
 const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
 const nodemailer = require("nodemailer");
 const crypto = require("crypto");
 const db = require("../models");
@@ -156,12 +157,18 @@ exports.login = async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(401).json({ error: "Contraseña incorrecta" });
 
+    const AUTH_SECRET = process.env.AUTH_JWT_SECRET || process.env.WALLET_TOKEN_SECRET || "dev-auth";
+    const token = jwt.sign(
+      { sub: user.id, email: user.email, role: user.role || "user" },
+      AUTH_SECRET,
+      { expiresIn: "7d" }
+    );
+
     res.json({
-      success: true,
+      token,
       user: {
         id: user.id,
-        email: user.email,
-        nombre: user.nombre,
+        name: user.nombre || user.email,
         role: user.role || "user",
       },
     });

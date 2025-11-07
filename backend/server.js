@@ -133,6 +133,48 @@ async function start() {
     process.env.SKIP_DB = "true";
   }
 
+  // ===== Seed: crear/actualizar usuario predeterminado (solo si hay DB) =====
+  try {
+    if (process.env.SKIP_DB !== "true") {
+      const bcrypt = require("bcryptjs");
+      const { nanoid } = require("nanoid");
+      const Member = db.Member;
+      if (Member && typeof Member.findOne === "function") {
+        const email = process.env.SEED_USER_EMAIL || "ventas1.digital@alcazaren.com.gt";
+        const role  = process.env.SEED_USER_ROLE  || "user";
+        const pass  = process.env.SEED_USER_PASSWORD || "Temporal#2024"; // cámbiala luego
+        const exists = await Member.findOne({ where: { email } });
+        if (!exists) {
+          const hash = await bcrypt.hash(pass, 10);
+          await Member.create({
+            external_id: nanoid(10),
+            nombre: "Ventas",
+            apellido: "Digital",
+            email,
+            role,
+            password: hash,
+            codigoCliente: null,
+            codigoCampana: null,
+            tipoCliente: "blue",
+          });
+          console.log(`[seed] Usuario creado: ${email} (role=${role})`);
+        } else if (!exists.password) {
+          const hash = await bcrypt.hash(pass, 10);
+          await exists.update({ password: hash, role: role || exists.role || "user" });
+          console.log(`[seed] Password asignado a: ${email}`);
+        } else {
+          // opcional: asegurar role
+          if (!exists.role) {
+            await exists.update({ role });
+            console.log(`[seed] Role asignado a: ${email} (${role})`);
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("[seed] fallo al asegurar usuario por defecto:", e?.message || e);
+  }
+
   // (Opcional) chequeo de certificados Apple si los necesitas ahora
   console.log("ENV CHECK → CERT_DIR:", process.env.CERT_DIR);
   console.log("ENV CHECK → MODEL_DIR:", process.env.MODEL_DIR);
