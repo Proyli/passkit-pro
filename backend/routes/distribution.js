@@ -8,6 +8,7 @@ const { renderWalletEmail, mergeSettings } = require("../services/renderEmail");
 const { sendMailSmart } = require("../src/mailer");
 
 const API_BASE = process.env.PUBLIC_BASE_URL || "";
+const { requireAuth, requireRole } = require('../middleware/auth');
 const SKIP_DB = process.env.SKIP_DB === "true";
 
 // ---------- Defaults ----------
@@ -199,7 +200,7 @@ async function fetchTiers() {
   return Array.from(tiers.entries()).map(([id, name]) => ({ id, name }));
 }
 
-router.get("/distribution/settings", async (_req, res) => {
+router.get("/distribution/settings", requireAuth, requireRole('admin'), async (_req, res) => {
   try {
     const settings = await fetchSettingsFromDb();
     res.json(settings);
@@ -209,7 +210,7 @@ router.get("/distribution/settings", async (_req, res) => {
   }
 });
 
-router.post("/distribution/settings", async (req, res) => {
+router.post("/distribution/settings", requireAuth, requireRole('admin'), async (req, res) => {
   try {
     const incoming = req.body || {};
     await saveSettingsToDb(incoming);
@@ -222,7 +223,7 @@ router.post("/distribution/settings", async (req, res) => {
   }
 });
 
-router.get("/distribution/enrollment", async (_req, res) => {
+router.get("/distribution/enrollment", requireAuth, requireRole('admin'), async (_req, res) => {
   try {
     const map = await fetchEnrollmentFromDb();
     res.json(map);
@@ -232,7 +233,7 @@ router.get("/distribution/enrollment", async (_req, res) => {
   }
 });
 
-router.post("/distribution/enrollment", async (req, res) => {
+router.post("/distribution/enrollment", requireAuth, requireRole('admin'), async (req, res) => {
   try {
     await saveEnrollmentToDb(req.body || {});
     res.json({ ok: true });
@@ -242,7 +243,7 @@ router.post("/distribution/enrollment", async (req, res) => {
   }
 });
 
-router.get("/distribution/tiers", async (_req, res) => {
+router.get("/distribution/tiers", requireAuth, async (_req, res) => {
   try {
     const tiers = await fetchTiers();
     res.json(tiers);
@@ -345,7 +346,7 @@ async function sendWelcomeEmail(memberObj, provider = "outlook") {
 }
 
 // ========== TEST EMAIL ==========
-router.post("/distribution/send-test-email", async (req, res) => {
+router.post("/distribution/send-test-email", requireAuth, requireRole('admin'), async (req, res) => {
   try {
     const {
       email,

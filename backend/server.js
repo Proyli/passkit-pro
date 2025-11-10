@@ -21,6 +21,7 @@ const analyticsRoutes    = require("./src/routes/analytics");
 const telemetryRoutes    = require("./src/routes/telemetry");
 const { router: distributionRouter } = require("./routes/distribution");
 const adminRoutes        = require("./routes/admin");
+const { rateLimit }      = require("./middleware/auth");
 // Load applePass routes conditionally: missing Apple certs should not crash the server in dev
 let applePassRoutes = null;
 try {
@@ -83,7 +84,8 @@ app.use("/api",         barcodeRouter);
 app.use("/api",         analyticsRoutes);
 app.use("/api",         telemetryRoutes);
 app.use("/api",         distributionRouter);
-app.use("/api",         adminRoutes);
+// Rate limit admin endpoints to reduce abuse
+app.use("/api",         rateLimit({ windowMs: 15*60*1000, max: 200 }), adminRoutes);
 if (applePassRoutes) {
   app.use("/api", applePassRoutes);
 } else {
