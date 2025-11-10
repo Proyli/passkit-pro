@@ -111,11 +111,8 @@ const PassList: React.FC = () => {
 
   const handleSendEmail = (pass: UIPass, e: React.MouseEvent) => {
     e.stopPropagation();
-    toast({
-      title: "Próximamente",
-      description: "El envío por email se gestiona desde el detalle del pase.",
-    });
-    nav(`/passes/${pass.id}`);
+    // Ir directo a la sección de miembros para enviar el correo
+    nav('/members');
   };
 
   /* ================== Render ================== */
