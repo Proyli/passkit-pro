@@ -149,6 +149,26 @@ exports.sendPassEmail = async (req, res) => {
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
+    // Modo resiliente: si no hay DB disponible, permite login con usuarios de entorno
+    if (process.env.SKIP_DB === "true") {
+      const defaultPass = process.env.SEED_ADMIN_PASSWORD || process.env.SEED_USER_PASSWORD || "Temporal#2024";
+      const ALLOWED = new Map([
+        ["admin@alcazaren.com.gt", "admin"],
+        ["ventas1.digital@alcazaren.com.gt", "user"],
+        ["andrea@alcazaren.com.gt", "user"],
+        ["julio@alcazaren.com.gt", "user"],
+        ["linda.perez@alcazaren.com.gt", "user"],
+      ]);
+
+      const role = ALLOWED.get(String(email || "").toLowerCase());
+      if (!role || password !== defaultPass) {
+        return res.status(401).json({ error: "Credenciales inválidas" });
+      }
+      const AUTH_SECRET = process.env.AUTH_JWT_SECRET || process.env.WALLET_TOKEN_SECRET || "dev-auth";
+      const token = jwt.sign({ sub: email, email, role }, AUTH_SECRET, { expiresIn: "7d" });
+      return res.json({ token, user: { id: 0, name: email, role } });
+    }
+
     const user = await Member.findOne({ where: { email } });
 
     if (!user) return res.status(401).json({ error: "Usuario no encontrado" });
