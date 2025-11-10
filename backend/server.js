@@ -136,46 +136,74 @@ async function start() {
     process.env.SKIP_DB = "true";
   }
 
-  // ===== Seed: crear/actualizar usuario predeterminado (solo si hay DB) =====
+  // ===== Seed: crear/actualizar usuarios predeterminados (solo si hay DB) =====
   try {
     if (process.env.SKIP_DB !== "true") {
       const bcrypt = require("bcryptjs");
       const { nanoid } = require("nanoid");
       const Member = db.Member;
       if (Member && typeof Member.findOne === "function") {
-        const email = process.env.SEED_USER_EMAIL || "ventas1.digital@alcazaren.com.gt";
-        const role  = process.env.SEED_USER_ROLE  || "user";
-        const pass  = process.env.SEED_USER_PASSWORD || "Temporal#2024"; // cámbiala luego
-        const exists = await Member.findOne({ where: { email } });
-        if (!exists) {
-          const hash = await bcrypt.hash(pass, 10);
-          await Member.create({
-            external_id: nanoid(10),
-            nombre: "Ventas",
-            apellido: "Digital",
-            email,
-            role,
-            password: hash,
-            codigoCliente: null,
-            codigoCampana: null,
-            tipoCliente: "blue",
-          });
-          console.log(`[seed] Usuario creado: ${email} (role=${role})`);
-        } else if (!exists.password) {
-          const hash = await bcrypt.hash(pass, 10);
-          await exists.update({ password: hash, role: role || exists.role || "user" });
-          console.log(`[seed] Password asignado a: ${email}`);
-        } else {
-          // opcional: asegurar role
-          if (!exists.role) {
-            await exists.update({ role });
-            console.log(`[seed] Role asignado a: ${email} (${role})`);
+        // Helper para crear/actualizar un usuario
+        const ensureUser = async ({ email, role = "user", password, nombre, apellido }) => {
+          if (!email) return;
+          const exists = await Member.findOne({ where: { email } });
+          const pass = password || process.env.SEED_USER_PASSWORD || "Temporal#2024"; // valor por defecto
+          if (!exists) {
+            const hash = await bcrypt.hash(pass, 10);
+            await Member.create({
+              external_id: nanoid(10),
+              nombre: nombre || (role === "admin" ? "Admin" : "Usuario"),
+              apellido: apellido || "",
+              email,
+              role,
+              password: hash,
+              codigoCliente: null,
+              codigoCampana: null,
+              tipoCliente: "blue",
+            });
+            console.log(`[seed] Usuario creado: ${email} (role=${role})`);
+          } else {
+            const updates = {};
+            if (!exists.password) {
+              updates.password = await bcrypt.hash(pass, 10);
+            }
+            if (!exists.role && role) updates.role = role;
+            if (Object.keys(updates).length) {
+              await exists.update(updates);
+              console.log(`[seed] Usuario actualizado: ${email} (${Object.keys(updates).join(', ')})`);
+            }
           }
+        };
+
+        // 1) Admin principal (puede configurarse por variables de entorno)
+        await ensureUser({
+          email: process.env.SEED_ADMIN_EMAIL || "admin@alcazaren.com.gt",
+          role: "admin",
+          password: process.env.SEED_ADMIN_PASSWORD || process.env.SEED_USER_PASSWORD || "Temporal#2024",
+          nombre: "Admin",
+        });
+
+        // 2) Usuario estándar por defecto (como antes)
+        await ensureUser({
+          email: process.env.SEED_USER_EMAIL || "ventas1.digital@alcazaren.com.gt",
+          role: process.env.SEED_USER_ROLE || "user",
+          password: process.env.SEED_USER_PASSWORD || "Temporal#2024",
+          nombre: "Ventas",
+          apellido: "Digital",
+        });
+
+        // 3) Otros usuarios de ejemplo (opcionales)
+        const extra = (process.env.SEED_EXTRA_USERS || "andrea@alcazaren.com.gt,julio@alcazaren.com.gt,linda.perez@alcazaren.com.gt")
+          .split(",")
+          .map(s => s.trim())
+          .filter(Boolean);
+        for (const mail of extra) {
+          await ensureUser({ email: mail, role: "user" });
         }
       }
     }
   } catch (e) {
-    console.warn("[seed] fallo al asegurar usuario por defecto:", e?.message || e);
+    console.warn("[seed] fallo al asegurar usuarios:", e?.message || e);
   }
 
   // (Opcional) chequeo de certificados Apple si los necesitas ahora
