@@ -118,6 +118,35 @@ router.post("/admin/force-fix-members", async (req, res) => {
   }
 });
 
+// Crea la tabla de telemetría si no existe (para analytics)
+router.post("/admin/fix-telemetry", async (req, res) => {
+  if (!assertAuth(req, res)) return;
+  try {
+    const q = db.sequelize.query.bind(db.sequelize);
+    const stmts = [
+      `CREATE TABLE IF NOT EXISTS telemetry_events (
+        id SERIAL PRIMARY KEY,
+        member_id INTEGER NULL,
+        pass_id VARCHAR(255) NULL,
+        platform VARCHAR(20) NULL,
+        source VARCHAR(50) NULL,
+        event_type VARCHAR(20) NOT NULL,
+        user_agent TEXT NULL,
+        ip_address VARCHAR(64) NULL,
+        createdAt TIMESTAMPTZ DEFAULT NOW()
+      );`,
+      `CREATE INDEX IF NOT EXISTS idx_te_created ON telemetry_events (createdAt);`
+    ];
+    const results = [];
+    for (const s of stmts) {
+      try { await q(s); results.push({ ok: true, stmt: s }); } catch (e) { results.push({ ok: false, stmt: s, error: e.message }); }
+    }
+    res.json({ ok: true, results });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message || String(e) });
+  }
+});
+
 // Crea/actualiza un usuario admin manualmente
 router.post("/admin/create-admin", async (req, res) => {
   if (!assertAuth(req, res)) return;

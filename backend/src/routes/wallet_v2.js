@@ -5,6 +5,7 @@
 // - Keep tier-based color and info
 
 const express = require("express");
+const { pool } = require("../db");
 const jwt = require("jsonwebtoken");
 const fs = require("fs");
 const path = require("path");
@@ -125,6 +126,16 @@ router.get("/wallet/resolve", async (req, res) => {
     const ua = String(req.get("user-agent") || "").toLowerCase();
     const isiOS = /iphone|ipad|ipod|macintosh/.test(ua);
     const tier = normalizeTier(req.query.tier);
+
+    // Telemetría: registra SCAN (no bloquea si falla)
+    try {
+      const platform = isiOS ? 'apple' : /android|google/.test(ua) ? 'google' : 'unknown';
+      await pool.query(
+        `INSERT INTO telemetry_events (platform, source, event_type, user_agent, ip_address, createdAt)
+         VALUES (?, 'link', 'scan', ?, ?, NOW())`,
+        [platform, ua, req.headers["x-forwarded-for"] || req.ip || null]
+      );
+    } catch (_) {}
 
     if (forced === "apple" || isiOS) {
       // delegate to ios token route with our token (also hides code)
