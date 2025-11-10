@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 
 const db = require("../models");
+const bcrypt = require("bcryptjs");
 
 function assertAuth(req, res) {
   const token = req.query.token || req.headers["x-admin-token"];
@@ -68,7 +69,7 @@ router.post("/admin/fix-members-schema", async (req, res) => {
 });
 
 module.exports = router;
- 
+
 // Extra: inspeccionar el esquema de members
 router.get("/admin/inspect-members", async (req, res) => {
   if (!assertAuth(req, res)) return;
@@ -113,6 +114,38 @@ router.post("/admin/force-fix-members", async (req, res) => {
     res.json({ ok: true, results });
   } catch (e) {
     console.error("[admin] force-fix-members error:", e);
+    res.status(500).json({ ok: false, error: e.message || String(e) });
+  }
+});
+
+// Crea/actualiza un usuario admin manualmente
+router.post("/admin/create-admin", async (req, res) => {
+  if (!assertAuth(req, res)) return;
+  try {
+    const { email, password, role = "admin", nombre = "Admin", apellido = "" } = req.body || {};
+    if (!email || !password) return res.status(400).json({ ok: false, error: "email y password son requeridos" });
+
+    await db.sequelize.authenticate();
+
+    const Member = db.Member;
+    const exists = await Member.findOne({ where: { email } });
+    const hash = await bcrypt.hash(password, 10);
+    if (!exists) {
+      await Member.create({
+        external_id: require("nanoid").nanoid(10),
+        email,
+        role,
+        password: hash,
+        nombre,
+        apellido,
+        tipoCliente: "blue",
+      });
+      return res.json({ ok: true, created: true });
+    } else {
+      await exists.update({ password: hash, role: role || exists.role || "admin" });
+      return res.json({ ok: true, updated: true });
+    }
+  } catch (e) {
     res.status(500).json({ ok: false, error: e.message || String(e) });
   }
 });
