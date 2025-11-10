@@ -17,7 +17,20 @@
           "mode": "raw",
           "raw": "{\n  \"email\": \"ventas1.digital@alcazaren.com.gt\",\n  \"password\": \"Temporal#2024\"\n}"
         }
-      }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const data = pm.response.json();",
+              "if (data && data.token) { pm.environment.set('token', data.token); }",
+              "pm.test('token present', function () { pm.expect(!!data.token).to.eql(true); });"
+            ]
+          }
+        }
+      ]
     },
     {
       "name": "Health",
@@ -40,7 +53,23 @@
               "mode": "raw",
               "raw": "{\n  \"nombre\": \"Nombre\",\n  \"apellido\": \"Apellido\",\n  \"email\": \"user@example.com\",\n  \"telefono\": \"502-5555-0000\",\n  \"tipoCliente\": \"gold\",\n  \"codigoCliente\": \"L0014\",\n  \"codigoCampana\": \"CP0001\"\n}"
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "const ext = json.externalId || json.member?.external_id || json.member?.externalId;",
+                  "const id  = json.member?.id;",
+                  "if (ext) { pm.environment.set('externalId', ext); }",
+                  "if (id)  { pm.environment.set('memberId', String(id)); }",
+                  "pm.test('externalId present', function () { pm.expect(!!ext).to.eql(true); });"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Update (by id)",
@@ -105,7 +134,7 @@
             "url": { "raw": "{{BASE}}/api/wallet/email", "host": ["{{BASE}}"], "path": ["api","wallet","email"] },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"client\": \"L0014\",\n  \"campaign\": \"CP0001\",\n  \"to\": \"user@example.com\",\n  \"tier\": \"gold\",\n  \"name\": \"Cliente Demo\",\n  \"externalId\": \"L0014\"\n}"
+              "raw": "{\n  \"client\": \"L0014\",\n  \"campaign\": \"CP0001\",\n  \"to\": \"user@example.com\",\n  \"tier\": \"gold\",\n  \"name\": \"Cliente Demo\",\n  \"externalId\": \"{{externalId}}\"\n}"
             }
           }
         },
@@ -136,4 +165,3 @@
     { "key": "token", "value": "" }
   ]
 }
-
