@@ -76,8 +76,16 @@ function buildGoogleSaveUrl({ client, campaign, externalId, displayName, tierInp
   const ver = process.env.WALLET_OBJECT_REV || "1";
   const objectId = `${ISSUER_ID}.${sanitize(`${displayId}-${(campaign||"").toLowerCase()}-${tier}-r${ver}`)}`;
 
-  const classBlue = process.env.GW_CLASS_ID_BLUE || process.env.GOOGLE_WALLET_CLASS_ID_BLUE;
-  const classGold = process.env.GW_CLASS_ID_GOLD || process.env.GOOGLE_WALLET_CLASS_ID_GOLD;
+  const rawBlue = process.env.GW_CLASS_ID_BLUE || process.env.GOOGLE_WALLET_CLASS_ID_BLUE;
+  const rawGold = process.env.GW_CLASS_ID_GOLD || process.env.GOOGLE_WALLET_CLASS_ID_GOLD;
+  const normalizeClassId = (cid) => {
+    const id = String(cid || '').trim();
+    if (!id) return '';
+    // Google requiere issuerId.identifier (e.g., 3388... . digital_pass_blue)
+    return id.includes('.') ? id : `${ISSUER_ID}.${id}`;
+  };
+  const classBlue = normalizeClassId(rawBlue);
+  const classGold = normalizeClassId(rawGold);
   const classId = gold ? (classGold || classBlue) : (classBlue || classGold);
 
   const loyaltyObject = {
