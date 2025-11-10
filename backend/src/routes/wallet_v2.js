@@ -106,7 +106,7 @@ function buildGoogleSaveUrl({ client, campaign, externalId, displayName, tierInp
     imageModulesData: [
       { id: "alcazaren_hero", mainImage: { sourceUri: { uri: hero }, contentDescription: { defaultValue: { language: "es", value: "Celebremos juntos" } } } }
     ],
-    barcode: { type: "CODE_128", value: barcodeValue }, // sin alternateText para no mostrar el código
+    barcode: { type: "CODE_128", value: barcodeValue, alternateText: displayName },
   };
 
   const payload = { loyaltyObjects: [loyaltyObject] };
@@ -128,7 +128,7 @@ router.get("/wallet/resolve", async (req, res) => {
     const client = String(req.query.client || "").trim();
     const campaign = String(req.query.campaign || "").trim();
     const externalId = String(req.query.externalId || client || "").trim();
-    const displayName = String(req.query.name || externalId || client || "").trim();
+    let displayName = String(req.query.name || "").trim();
     const forced = String(req.query.platform || "").toLowerCase();
 
     const ua = String(req.get("user-agent") || "").toLowerCase();
@@ -144,6 +144,19 @@ router.get("/wallet/resolve", async (req, res) => {
         [platform, ua, req.headers["x-forwarded-for"] || req.ip || null]
       );
     } catch (_) {}
+
+    // Si no viene nombre en el query, intenta obtenerlo desde la BD usando client/campaign
+    if (!displayName && client && campaign) {
+      try {
+        const { rows } = await pool.query(
+          'SELECT "nombre", "apellido" FROM members WHERE "codigoCliente"=$1 AND "codigoCampana"=$2 LIMIT 1',
+          [client, campaign]
+        );
+        const r = rows && rows[0];
+        if (r) displayName = [r.nombre, r.apellido].filter(Boolean).join(" ").trim();
+      } catch (_) {}
+    }
+    if (!displayName) displayName = externalId || client;
 
     if (forced === "apple" || isiOS) {
       // delegate to ios token route with our token (also hides code)
@@ -212,7 +225,12 @@ router.get("/wallet/ios/:token", async (req, res) => {
         foregroundColor: "rgb(255,255,255)",
         labelColor:      "rgb(255,255,255)",
         backgroundColor: themeBg,
-        barcodes: [{ format: "PKBarcodeFormatCode128", message: String(barcodeValue || "").normalize("NFKD").replace(/[^\x00-\x7F]/g, ""), messageEncoding: "iso-8859-1" }],
+        barcodes: [{
+          format: "PKBarcodeFormatCode128",
+          message: String(barcodeValue || "").normalize("NFKD").replace(/[^\x00-\x7F]/g, ""),
+          messageEncoding: "iso-8859-1",
+          altText: String(name || displayId)
+        }],
         storeCard: {
           headerFields:    [{ key: "tier", label: "Nivel", value: labelTier }],
           primaryFields:   [{ key: "name", label: "Nombre", value: String(name || displayId) }],
