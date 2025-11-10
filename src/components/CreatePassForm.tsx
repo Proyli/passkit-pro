@@ -50,7 +50,7 @@ const CreatePassForm: React.FC<CreatePassFormProps> = ({
     fields:
       initialValues?.fields ?? {
         "Valid Until": "2024-12-31",
-        Code: "SAVE20",
+        Code: "EXTERNAL_ID",
       },
   });
 
@@ -60,7 +60,7 @@ const CreatePassForm: React.FC<CreatePassFormProps> = ({
   >(
     Object.entries(passData.fields).map(([key, value]) => ({ key, value })) || [
       { key: "Valid Until", value: "2024-12-31" },
-      { key: "Code", value: "SAVE20" },
+      { key: "Code", value: "EXTERNAL_ID" },
     ]
   );
 

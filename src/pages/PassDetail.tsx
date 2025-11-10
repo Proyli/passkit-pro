@@ -97,6 +97,9 @@ export default function PassDetail() {
       <div className="flex items-center justify-between">
         <Button variant="outline" onClick={() => nav("/passes")}>← Back</Button>
         <div className="flex gap-2">
+          {!editMode && (
+            <Button variant="secondary" onClick={() => nav("/members")}>Send Email</Button>
+          )}
           <Button onClick={() => setEditMode((v) => !v)}>{editMode ? "Cancel" : "Edit"}</Button>
         </div>
       </div>
