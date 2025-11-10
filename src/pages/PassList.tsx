@@ -111,8 +111,16 @@ const PassList: React.FC = () => {
 
   const handleSendEmail = (pass: UIPass, e: React.MouseEvent) => {
     e.stopPropagation();
-    // Ir directo a la sección de miembros para enviar el correo
-    nav('/members');
+    const m: any = (pass as any).member || null;
+    const qs = new URLSearchParams();
+    if (m && m.id) qs.set('memberId', String(m.id));
+    if (!qs.has('memberId')) {
+      if (m && m.codigoCliente) qs.set('client', String(m.codigoCliente));
+      if (m && m.codigoCampana) qs.set('campaign', String(m.codigoCampana));
+    }
+    qs.set('sendEmail', '1');
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    nav(`/members${suffix}`);
   };
 
   /* ================== Render ================== */

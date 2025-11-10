@@ -236,6 +236,52 @@ useEffect(() => {
   })();
 }, [location.key, toast]);
 
+// Si viene un memberId/client/campaign por query, preseleccionar y abrir detalles
+useEffect(() => {
+  const params = new URLSearchParams(location.search || '');
+  const qMemberId = params.get('memberId');
+  const qClient = params.get('client');
+  const qCampaign = params.get('campaign');
+  if (!membersFromBackend || membersFromBackend.length === 0) return;
+  let target: any = null;
+  if (qMemberId) {
+    target = membersFromBackend.find(m => String(m.id) === String(qMemberId));
+  }
+  if (!target && (qClient || qCampaign)) {
+    target = membersFromBackend.find(m =>
+      (!qClient || String(m.clientCode||'') === String(qClient)) &&
+      (!qCampaign || String(m.campaignCode||'') === String(qCampaign))
+    );
+  }
+  if (target) {
+    setSelectedMember(target);
+    setIsDetailsModalOpen(true);
+  }
+  // no dependencies on selected* to avoid loop; only on search and list
+// eslint-disable-next-line react-hooks/exhaustive-deps
+}, [location.search, membersFromBackend]);
+
+// Al abrir los detalles por navegación, copia el External ID y, si se pidió, abre envío de email
+const [autoEmailed, setAutoEmailed] = useState(false);
+useEffect(() => {
+  if (!isDetailsModalOpen || !selectedMember) return;
+  (async () => {
+    try {
+      if (selectedMember.externalId) {
+        await navigator.clipboard.writeText(String(selectedMember.externalId));
+        toast({ title: 'External ID copiado', description: String(selectedMember.externalId) });
+      }
+    } catch {}
+  })();
+  // Si query incluye sendEmail=1 y hay email, dispara el envío una sola vez
+  const params = new URLSearchParams(location.search || '');
+  const wantsEmail = params.get('sendEmail') === '1';
+  if (wantsEmail && selectedMember.email && !autoEmailed) {
+    setAutoEmailed(true);
+    handleResendWelcome();
+  }
+}, [isDetailsModalOpen, selectedMember, toast, location.search, autoEmailed]);
+
 // Cargar lista de passes (para desplegable en editar)
 useEffect(() => {
   (async () => {
