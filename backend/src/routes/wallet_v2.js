@@ -71,7 +71,8 @@ function buildGoogleSaveUrl({ client, campaign, externalId, displayName, tierInp
   const labelTier = gold ? "GOLD 15%" : "BLUE 5%";
   const hero = heroUrl();
   const origin = baseUrl();
-  const info = infoText(tier);
+  const infoRaw = infoText(tier);
+  const info = String(infoRaw || '').replace(/\r?\n+/g, ' ').replace(/\s+/g, ' ').trim();
 
   const ver = process.env.WALLET_OBJECT_REV || "1";
   const objectId = `${ISSUER_ID}.${sanitize(`${displayId}-${(campaign||"").toLowerCase()}-${tier}-r${ver}`)}`;
@@ -95,6 +96,7 @@ function buildGoogleSaveUrl({ client, campaign, externalId, displayName, tierInp
     hexBackgroundColor: gold ? "#DAA520" : "#2350C6",
     accountId:   displayId,
     accountName: displayName || displayId,
+    multipleDevicesAndHoldersAllowedStatus: "ONE_USER_ONE_DEVICE",
     infoModuleData: {
       labelValueRows: [
         { columns: [{ label: "Información", value: info }] },
@@ -219,6 +221,7 @@ router.get("/wallet/ios/:token", async (req, res) => {
         organizationName:   process.env.APPLE_ORG_NAME || "Distribuidora Alcazaren",
         description:        "Tarjeta de Lealtad Alcazaren",
         serialNumber:       serial,
+        sharingProhibited: true,
         webServiceURL: `${baseUrl()}/applews`,
         authenticationToken: process.env.APPLE_WS_TOKEN,
         foregroundColor: "rgb(255,255,255)",
@@ -234,7 +237,7 @@ router.get("/wallet/ios/:token", async (req, res) => {
           headerFields:    [{ key: "tier", label: "Nivel", value: labelTier }],
           primaryFields:   [{ key: "name", label: "Nombre", value: String(name || displayId) }],
           secondaryFields: [], // sin “Código” visible
-          auxiliaryFields: [{ key: "info", label: "Información", value: infoText(tier) }],
+          auxiliaryFields: [{ key: "info", label: "Información", value: String(infoText(tier) || '').replace(/\r?\n+/g, ' ').replace(/\s+/g, ' ').trim() }],
         }
       }
     );
