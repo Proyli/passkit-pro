@@ -45,6 +45,8 @@ router.post("/admin/fix-members-schema", async (req, res) => {
     await db.sequelize.authenticate();
 
     await addIfMissing("members", "external_id", { type: Sequelize.STRING, allowNull: false, unique: true });
+    await addIfMissing("members", "password", { type: Sequelize.STRING });
+    await addIfMissing("members", "role", { type: Sequelize.STRING });
     await addIfMissing("members", "nombre", { type: Sequelize.STRING });
     await addIfMissing("members", "apellido", { type: Sequelize.STRING });
     await addIfMissing("members", "fechaNacimiento", { type: Sequelize.STRING });
@@ -87,6 +89,8 @@ router.post("/admin/force-fix-members", async (req, res) => {
     const stmts = [
       'CREATE TABLE IF NOT EXISTS "members" (id SERIAL PRIMARY KEY);',
       'ALTER TABLE "members" ADD COLUMN IF NOT EXISTS "external_id" VARCHAR(255);',
+      'ALTER TABLE "members" ADD COLUMN IF NOT EXISTS "password" VARCHAR(255);',
+      'ALTER TABLE "members" ADD COLUMN IF NOT EXISTS "role" VARCHAR(50);',
       'ALTER TABLE "members" ADD COLUMN IF NOT EXISTS "nombre" VARCHAR(255);',
       'ALTER TABLE "members" ADD COLUMN IF NOT EXISTS "apellido" VARCHAR(255);',
       'ALTER TABLE "members" ADD COLUMN IF NOT EXISTS "fechaNacimiento" VARCHAR(255);',

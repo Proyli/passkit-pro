@@ -124,8 +124,19 @@ async function start() {
       console.warn("⏭️  SKIP_DB=true → no se conectará a la base por ahora.");
     } else if (process.env.DB_HOST && process.env.DB_HOST !== "127.0.0.1") {
       await db.sequelize.authenticate();
-      await db.sequelize.sync({ alter: true });
-      console.log("🗄️  DB conectada y sincronizada.");
+      console.log("🗄️  DB autenticada (conexión OK).");
+      // Permite desactivar el sync alter si está dando problemas en producción
+      const doSync = String(process.env.DB_SYNC_ALTER || 'true').toLowerCase() !== 'false';
+      if (doSync) {
+        try {
+          await db.sequelize.sync({ alter: true });
+          console.log("🗄️  DB sincronizada (alter=true).");
+        } catch (syncErr) {
+          console.warn("⚠️  DB sync (alter) falló, pero se continúa con la conexión:", syncErr.message);
+        }
+      } else {
+        console.log("⏭️  DB_SYNC_ALTER=false → se omite sync(alter)");
+      }
     } else {
       console.warn("⏭️  DB_HOST no definido o es 127.0.0.1 → se omite la conexión.");
       process.env.SKIP_DB = "true";
