@@ -97,7 +97,6 @@ function buildGoogleSaveUrl({ client, campaign, externalId, displayName, tierInp
     accountName: displayName || displayId,
     infoModuleData: {
       labelValueRows: [
-        { columns: [{ label: "Nombre", value: displayName || displayId }] },
         { columns: [{ label: "Información", value: info }] },
         { columns: [{ label: "Nivel", value: labelTier }] },
       ],
