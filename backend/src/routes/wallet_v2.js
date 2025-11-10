@@ -132,7 +132,7 @@ router.get("/wallet/resolve", async (req, res) => {
       const platform = isiOS ? 'apple' : /android|google/.test(ua) ? 'google' : 'unknown';
       await pool.query(
         `INSERT INTO telemetry_events (platform, source, event_type, user_agent, ip_address, createdAt)
-         VALUES (?, 'link', 'scan', ?, ?, NOW())`,
+         VALUES ($1, 'link', 'scan', $2, $3, NOW())`,
         [platform, ua, req.headers["x-forwarded-for"] || req.ip || null]
       );
     } catch (_) {}

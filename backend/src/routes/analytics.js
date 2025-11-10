@@ -76,43 +76,43 @@ router.get("/analytics/overview", async (req, res) => {
     // --- CONSULTAS (OJO: createdAt, no created_at) ---
     const totalsSql = `
       SELECT
-        SUM(event_type='scan')      AS scans,
-        SUM(event_type='install')   AS installs,
-        SUM(event_type='uninstall') AS uninstalls,
-        SUM(event_type='delete')    AS deleted
+        SUM(CASE WHEN event_type='scan'      THEN 1 ELSE 0 END) AS scans,
+        SUM(CASE WHEN event_type='install'   THEN 1 ELSE 0 END) AS installs,
+        SUM(CASE WHEN event_type='uninstall' THEN 1 ELSE 0 END) AS uninstalls,
+        SUM(CASE WHEN event_type='delete'    THEN 1 ELSE 0 END) AS deleted
       FROM telemetry_events
-      WHERE createdAt BETWEEN ? AND ?;
+      WHERE createdAt BETWEEN $1 AND $2;
     `;
 
     const pieSql = `
       SELECT platform, COUNT(*) AS c
       FROM telemetry_events
       WHERE event_type='install'
-        AND createdAt BETWEEN ? AND ?
+        AND createdAt BETWEEN $1 AND $2
       GROUP BY platform;
     `;
 
     const seriesSql = `
-      SELECT DATE(createdAt) AS d,
-             SUM(event_type='scan')      AS scans,
-             SUM(event_type='install')   AS installs,
-             SUM(event_type='uninstall') AS uninstalls,
-             SUM(event_type='delete')    AS deleted
+      SELECT CAST(createdAt AS DATE) AS d,
+             SUM(CASE WHEN event_type='scan'      THEN 1 ELSE 0 END) AS scans,
+             SUM(CASE WHEN event_type='install'   THEN 1 ELSE 0 END) AS installs,
+             SUM(CASE WHEN event_type='uninstall' THEN 1 ELSE 0 END) AS uninstalls,
+             SUM(CASE WHEN event_type='delete'    THEN 1 ELSE 0 END) AS deleted
       FROM telemetry_events
-      WHERE createdAt BETWEEN ? AND ?
-      GROUP BY DATE(createdAt)
+      WHERE createdAt BETWEEN $1 AND $2
+      GROUP BY CAST(createdAt AS DATE)
       ORDER BY d ASC;
     `;
 
     // ejecuta SIEMPRE con parámetros (evita errores de comillas / sintaxis)
-    const [totalsRows] = await pool.query(totalsSql, [fromSQL, toSQL]);
+    const { rows: totalsRows } = await pool.query(totalsSql, [fromSQL, toSQL]);
     const totals = totalsRows?.[0] || { scans: 0, installs: 0, uninstalls: 0, deleted: 0 };
 
-    const [platRows] = await pool.query(pieSql, [fromSQL, toSQL]);
+    const { rows: platRows } = await pool.query(pieSql, [fromSQL, toSQL]);
     const wallets = { apple: 0, google: 0, unknown: 0 };
     for (const r of platRows || []) wallets[r.platform || "unknown"] = Number(r.c) || 0;
 
-    const [seriesRows] = await pool.query(seriesSql, [fromSQL, toSQL]);
+    const { rows: seriesRows } = await pool.query(seriesSql, [fromSQL, toSQL]);
     const series = (seriesRows || []).map((r) => ({
       d: r.d,
       scans: Number(r.scans) || 0,

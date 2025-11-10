@@ -52,7 +52,7 @@ router.post("/v1/devices/:dev/registrations/:ptid/:serial", async (req, res) => 
     await pool.query(
       `INSERT INTO telemetry_events
          (member_id, pass_id, platform, source, event_type, user_agent, ip_address, createdAt)
-       VALUES (?, ?, 'apple', 'link', 'install', ?, ?, NOW())`,
+       VALUES ($1, $2, 'apple', 'link', 'install', $3, $4, NOW())`,
       [memberId, serial, userAgent, ip]
     );
 
@@ -80,7 +80,7 @@ router.delete("/v1/devices/:dev/registrations/:ptid/:serial", async (req, res) =
     await pool.query(
       `INSERT INTO telemetry_events
          (member_id, pass_id, platform, source, event_type, user_agent, ip_address, createdAt)
-       VALUES (?, ?, 'apple', 'link', 'uninstall', ?, ?, NOW())`,
+       VALUES ($1, $2, 'apple', 'link', 'uninstall', $3, $4, NOW())`,
       [memberId, serial, userAgent, ip]
     );
     return res.status(200).json({ ok: true });
