@@ -147,6 +147,18 @@ router.post("/admin/fix-telemetry", async (req, res) => {
   }
 });
 
+// Telemetría: últimos eventos (diagnóstico)
+router.get("/admin/telemetry/recent", async (req, res) => {
+  if (!assertAuth(req, res)) return;
+  try {
+    const q = db.sequelize.query.bind(db.sequelize);
+    const [rows] = await q('SELECT id, platform, source, event_type, createdAt, member_id, pass_id, ip_address FROM telemetry_events ORDER BY createdAt DESC LIMIT 50');
+    res.json({ ok: true, rows });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message || String(e) });
+  }
+});
+
 // Crea/actualiza un usuario admin manualmente
 router.post("/admin/create-admin", async (req, res) => {
   if (!assertAuth(req, res)) return;
