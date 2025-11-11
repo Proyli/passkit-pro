@@ -149,6 +149,13 @@ exports.sendPassEmail = async (req, res) => {
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
+    // Simple lockout (in-memory)
+    if (!global.__LOGIN_FAILS__) global.__LOGIN_FAILS__ = new Map();
+    const key = `${(req.headers['x-forwarded-for']||req.ip||'ip')}|${String(email||'').toLowerCase()}`;
+    const rec = global.__LOGIN_FAILS__.get(key) || { n: 0, ts: Date.now() };
+    const windowMs = 15 * 60 * 1000; // 15m
+    if (Date.now() - rec.ts > windowMs) { rec.n = 0; rec.ts = Date.now(); }
+    if (rec.n >= 10) return res.status(429).json({ error: 'Demasiados intentos. Intente más tarde.' });
     // Modo resiliente: si no hay DB disponible, permite login con usuarios de entorno
     if (process.env.SKIP_DB === "true") {
       const defaultPass = process.env.SEED_ADMIN_PASSWORD || process.env.SEED_USER_PASSWORD || "Temporal#2024";
@@ -171,11 +178,11 @@ exports.login = async (req, res) => {
 
     const user = await Member.findOne({ where: { email } });
 
-    if (!user) return res.status(401).json({ error: "Usuario no encontrado" });
+    if (!user) { rec.n++; global.__LOGIN_FAILS__.set(key, rec); return res.status(401).json({ error: "Usuario no encontrado" }); }
     if (!user.password) return res.status(400).json({ error: "Este usuario aún no tiene contraseña" });
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(401).json({ error: "Contraseña incorrecta" });
+    if (!isMatch) { rec.n++; global.__LOGIN_FAILS__.set(key, rec); return res.status(401).json({ error: "Contraseña incorrecta" }); }
 
     const AUTH_SECRET = process.env.AUTH_JWT_SECRET || process.env.WALLET_TOKEN_SECRET || "dev-auth";
     const token = jwt.sign(
@@ -184,6 +191,8 @@ exports.login = async (req, res) => {
       { expiresIn: "7d" }
     );
 
+    // reset fail counter
+    global.__LOGIN_FAILS__.delete(key);
     res.json({
       token,
       user: {

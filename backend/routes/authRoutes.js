@@ -4,9 +4,15 @@ const router = express.Router();
 // usa SIEMPRE el mismo controlador
 const controller = require("../controllers/authController");
 const { requireAuth, rateLimit } = require('../middleware/auth');
+const { enforceLoginSecurity } = require('../middleware/loginSecurity');
 
 // Rate limit login to mitigate brute-force
-router.post("/login", rateLimit({ windowMs: 15*60*1000, max: 50 }), controller.login);
+router.post(
+  "/login",
+  rateLimit({ windowMs: 15*60*1000, max: 50 }),
+  enforceLoginSecurity,
+  controller.login
+);
 router.post("/change-password", requireAuth, controller.changePassword);
 router.post("/reset-password", controller.resetPassword);     // opcional, pero útil
 router.post("/email/send-pass", controller.sendPassEmail);
