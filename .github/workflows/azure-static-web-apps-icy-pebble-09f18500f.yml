@@ -27,9 +27,9 @@ jobs:
       - name: Install & Build
         env:
           VITE_API_URL: ${{ secrets.VITE_API_URL }}
-          NODE_ENV: production
         run: |
-          npm ci
+          # Instala también devDependencies (vite) – NUNCA exportar NODE_ENV=production aquí
+          npm ci --include=dev
           echo "Using VITE_API_URL=$VITE_API_URL"
           npm run build
           cp staticwebapp.config.json dist/
