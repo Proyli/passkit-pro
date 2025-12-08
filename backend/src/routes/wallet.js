@@ -342,6 +342,8 @@ function buildGoogleSaveUrl({ client, campaign, externalId, displayName, tier })
 
     accountId:   displayId,
     accountName: displayName || displayId,
+    // Deshabilitar compartir en Google Wallet pero permitir que el titular use varios dispositivos
+    multipleDevicesAndHoldersAllowedStatus: "ONE_USER_ALL_DEVICES",
 
     infoModuleData: {
       labelValueRows: [

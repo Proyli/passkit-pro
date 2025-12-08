@@ -96,7 +96,8 @@ function buildGoogleSaveUrl({ client, campaign, externalId, displayName, tierInp
     hexBackgroundColor: gold ? "#DAA520" : "#2350C6",
     accountId:   displayId,
     accountName: displayName || displayId,
-    multipleDevicesAndHoldersAllowedStatus: "ONE_USER_ONE_DEVICE",
+    // Deshabilita compartir tarjetas en Google Wallet manteniendo el uso por el titular en varios dispositivos
+    multipleDevicesAndHoldersAllowedStatus: "ONE_USER_ALL_DEVICES",
     infoModuleData: {
       labelValueRows: [
         { columns: [{ label: "Información", value: info }] },

@@ -34,6 +34,16 @@ Orden de resolución de la base (dominio, sin `/api`):
 
 La ruta del recurso va siempre con el prefijo `/api/...` en cada llamada.
 
+### Solución de problemas cuando “no se pueden cargar los pases”
+
+Si el frontend muestra errores de carga aunque el backend esté levantado, revisa lo siguiente:
+
+1. **Ruta del archivo de entorno**: guarda `VITE_API_URL=...` en `.env.development` (para `npm run dev`) o `.env.production` (para `npm run build/preview`). Un `.env` en otro directorio no será leído.
+2. **Reinicio del dev server**: tras editar el `.env`, detén y vuelve a iniciar `npm run dev` para que Vite reinyecte la variable.
+3. **Coincidencia exacta de la URL**: la variable debe apuntar al dominio/puerto real del backend (p. ej. `https://passforge-backend-alcazaren.azurewebsites.net`). Si usas un túnel o IP distinta, actualiza el valor.
+4. **Inspector de red**: en el navegador verifica la respuesta de `/api/passes`. Un 401/403 indica token ausente o inválido; un error de CORS o DNS implica que la base URL no coincide.
+5. **Override en runtime**: como alternativa rápida, define `window.__API_BASE__ = "https://tu-backend";` en `index.html` antes del bundle para forzar la base sin rebuild.
+
 ## Variables de entorno (Vite)
 
 - `.env.development:1`
