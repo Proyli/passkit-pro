@@ -2,6 +2,10 @@
 
 Este frontend usa React + Vite + TypeScript y ahora todas las llamadas HTTP pasan por un cliente Axios centralizado. Esta guía explica cómo consumir la API, cómo configurar entornos y cómo migrar (o crear) código siguiendo las nuevas reglas.
 
+### Introducción al manual técnico
+
+Este manual técnico resume la arquitectura del frontend, las dependencias clave y el flujo recomendado para consumir la API mediante el cliente Axios central. Incluye reglas de migración, configuración de variables de entorno y ejemplos por endpoint, de modo que cualquier técnico pueda instalar, operar y depurar el proyecto sin referencias externas.
+
 ## TL;DR (uso de la API)
 
 - Importa siempre el cliente:
@@ -180,6 +184,35 @@ Todos los ejemplos usan: `import { api } from "@/lib/api";`
 - Detección de color/tier
   - Por parámetro `tier` en los endpoints o por `tipoCliente` del miembro (gold/blue). Si no hay valor, asume blue.
 
+### Cómo agregar nuevas tarjetas por color/porcentaje
+
+Si en el futuro quieres añadir más colores (p. ej. `silver 10%` o `black 20%`), sigue estos pasos para que la tarjeta muestre el color y el porcentaje correctos en Google/Apple Wallet:
+
+1. **Crear la clase en Google Wallet**
+   - Genera una nueva *class* en Google Wallet y guarda su ID (similar a `GOOGLE_WALLET_CLASS_ID_BLUE`).
+   - Asigna los colores y assets en el template de la *class* para que coincidan con el color deseado.
+
+2. **Configurar variables de entorno en el backend**
+   - Define una variable por cada nuevo color, siguiendo el patrón existente. Ejemplos:
+     - `GOOGLE_WALLET_CLASS_ID_SILVER="pase/<issuer>/silver"`
+     - `GOOGLE_WALLET_CLASS_ID_BLACK="pase/<issuer>/black"`
+   - Si el porcentaje depende del color, guarda también ese mapping en el backend (p. ej. en la lógica que calcula `tier` → porcentaje).
+
+3. **Actualizar el backend para reconocer el nuevo tier**
+   - En el código que decide la clase de Wallet, agrega el nuevo case: `silver`, `black`, etc., devolviendo el ID de clase y el porcentaje correspondiente.
+   - Asegúrate de que los endpoints acepten el nuevo valor de `tier` (por querystring o por `tipoCliente`).
+
+4. **Actualizar el frontend (opcional si solo es backend-driven)**
+   - Si el frontend muestra el color/porcentaje (por ejemplo en UI previa), agrega el nuevo tier al listado o mapping local.
+   - No necesitas cambios en el frontend para Apple/Google Wallet si todo el enrutamiento se basa en el `tier` que llega desde la API.
+
+5. **Probar el smart link con el nuevo color**
+   - GET `/api/wallet/resolve?client={C}&campaign={CP}&tier=silver` (o `black`).
+   - Verifica que el pass generado muestre el color y porcentaje configurados en el paso 1 y 3.
+
+6. **Documentar el porcentaje visible**
+   - Asegúrate de que en la sección “Nivel/Información” del pass el texto siga el formato `COLOR XX%` (ej.: `SILVER 10%`).
+
 Endpoints clave para pruebas rápidas (GET):
 - `GET /api/wallet/resolve?client={C}&campaign={CP}&tier=gold` → redirige a Google/Apple según el dispositivo.
 - `GET /api/wallet/google/:token` y `GET /api/wallet/ios/:token` (compat) → aceptan token firmado del smart link.
@@ -197,6 +230,10 @@ Variables en Azure App Service (Backend)
 - Apple (banner):
   - No necesitas variable para el banner; está empacado como `strip.png` en `backend/passes/alcazaren.pass`.
   - Certificados Apple (si generas .pkpass real): `APPLE_PASS_TYPE_ID`, `APPLE_TEAM_ID`, `APPLE_ORG_NAME`, `CERT_DIR`, `MODEL_DIR`, `APPLE_CERT_PASSWORD`, `APPLE_WS_TOKEN`.
+
+### Conclusión del manual técnico
+
+Con la configuración centralizada de Axios, las variables de entorno documentadas y los ejemplos de endpoints, este manual proporciona todo lo necesario para operar y mantener el frontend de Digital Pass Forge. Si surgen nuevas integraciones o requisitos de seguridad, extiende estas secciones siguiendo la misma estructura para conservar un punto único de verdad para el equipo técnico.
 
 ### Cómo generar el strip de Apple con el tamaño exacto
 
