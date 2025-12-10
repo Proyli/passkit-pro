@@ -64,7 +64,7 @@ Puedes definir `VITE_API_URL` en otros entornos (p. ej. staging). Vite inyecta e
 - Esto permite cambiar el dominio del backend sin reconstruir, colocando un script antes del bundle.
 
 ## Reglas y reemplazos de migración
-
+ 
 El código debe cumplir estas reglas:
 
 - Elimina cualquier constante tipo `API_BASE = ...` o URLs con `:3900`, `/api` embebidos, etc.
@@ -183,35 +183,6 @@ Todos los ejemplos usan: `import { api } from "@/lib/api";`
   - El texto visible del “Código” se oculta; el código de barras permanece sólo para escaneo.
 - Detección de color/tier
   - Por parámetro `tier` en los endpoints o por `tipoCliente` del miembro (gold/blue). Si no hay valor, asume blue.
-
-### Cómo agregar nuevas tarjetas por color/porcentaje
-
-Si en el futuro quieres añadir más colores (p. ej. `silver 10%` o `black 20%`), sigue estos pasos para que la tarjeta muestre el color y el porcentaje correctos en Google/Apple Wallet:
-
-1. **Crear la clase en Google Wallet**
-   - Genera una nueva *class* en Google Wallet y guarda su ID (similar a `GOOGLE_WALLET_CLASS_ID_BLUE`).
-   - Asigna los colores y assets en el template de la *class* para que coincidan con el color deseado.
-
-2. **Configurar variables de entorno en el backend**
-   - Define una variable por cada nuevo color, siguiendo el patrón existente. Ejemplos:
-     - `GOOGLE_WALLET_CLASS_ID_SILVER="pase/<issuer>/silver"`
-     - `GOOGLE_WALLET_CLASS_ID_BLACK="pase/<issuer>/black"`
-   - Si el porcentaje depende del color, guarda también ese mapping en el backend (p. ej. en la lógica que calcula `tier` → porcentaje).
-
-3. **Actualizar el backend para reconocer el nuevo tier**
-   - En el código que decide la clase de Wallet, agrega el nuevo case: `silver`, `black`, etc., devolviendo el ID de clase y el porcentaje correspondiente.
-   - Asegúrate de que los endpoints acepten el nuevo valor de `tier` (por querystring o por `tipoCliente`).
-
-4. **Actualizar el frontend (opcional si solo es backend-driven)**
-   - Si el frontend muestra el color/porcentaje (por ejemplo en UI previa), agrega el nuevo tier al listado o mapping local.
-   - No necesitas cambios en el frontend para Apple/Google Wallet si todo el enrutamiento se basa en el `tier` que llega desde la API.
-
-5. **Probar el smart link con el nuevo color**
-   - GET `/api/wallet/resolve?client={C}&campaign={CP}&tier=silver` (o `black`).
-   - Verifica que el pass generado muestre el color y porcentaje configurados en el paso 1 y 3.
-
-6. **Documentar el porcentaje visible**
-   - Asegúrate de que en la sección “Nivel/Información” del pass el texto siga el formato `COLOR XX%` (ej.: `SILVER 10%`).
 
 Endpoints clave para pruebas rápidas (GET):
 - `GET /api/wallet/resolve?client={C}&campaign={CP}&tier=gold` → redirige a Google/Apple según el dispositivo.
