@@ -213,7 +213,11 @@ exports.updatePass = async (req, res) => {
     if (!n) return res.status(404).json({ ok: false, error: "Pass no encontrado" });
 
     const fresh = await Pass.findByPk(id, { include: [{ model: Member, as: "member" }] });
-    return res.json(fresh);
+    const out = fresh ? fresh.toJSON() : null;
+    if (out && typeof out.fields === "string") {
+      try { out.fields = JSON.parse(out.fields); } catch { out.fields = {}; }
+    }
+    return res.json(out);
   } catch (e) {
     console.error("updatePass error:", e);
     return res.status(500).json({ ok: false, error: "Error al actualizar pass" });

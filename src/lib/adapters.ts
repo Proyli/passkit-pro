@@ -10,7 +10,11 @@ export const adaptPass = (p: any): UIPass => ({
   createdAt: p.createdAt ?? p.creadoEn ?? p.fechaCreacion ?? undefined,
   scans: typeof p.scans === "number" ? p.scans : undefined,
   status: p.status ?? p.estado ?? "active",
-  fields: p.fields ?? undefined,
+  fields: (() => {
+    if (typeof p.fields === "string") {
+      try { return JSON.parse(p.fields); } catch { return {}; }
+    }
+    return p.fields ?? undefined;
+  })(),
   member: p.member ?? p.miembro ?? null,
 });
-
