@@ -485,11 +485,18 @@ const handleSelectAll = () => {
     }
   };
 
-  const handleCopyLink = (externalId: string) => {
-    navigator.clipboard.writeText(`https://pass.example.com/${externalId}`);
+  const handleCopyLink = (externalId: string, clientCode?: string, campaignCode?: string) => {
+    // Usa la misma base que el API para construir la URL real del pass
+    const base = (api.defaults.baseURL || "").replace(/\/$/, "");
+    const url = new URL(`${base}/api/wallet/resolve`);
+    if (clientCode) url.searchParams.set("client", clientCode);
+    if (campaignCode) url.searchParams.set("campaign", campaignCode);
+    if (externalId) url.searchParams.set("externalId", externalId);
+
+    navigator.clipboard.writeText(url.toString());
     toast({
       title: "Link copiado",
-      description: "La URL del pass se copió al portapapeles.",
+      description: "La URL real del pass se copió al portapapeles.",
     });
   };
 
@@ -962,7 +969,7 @@ const handleAssignCard = async (member: any) => {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleCopyLink(member.externalId)}
+                        onClick={() => handleCopyLink(member.externalId, member.clientCode, member.campaignCode)}
                         className="h-8 w-8 p-0 hover:bg-muted"
                       >
                         <Link className="w-4 h-4 text-muted-foreground" />
